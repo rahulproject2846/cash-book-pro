@@ -6,14 +6,11 @@ const EntrySchema = new Schema({
   amount: { type: Number, required: true },
   type: { type: String, enum: ['income', 'expense'], required: true },
   category: { type: String, default: 'General' },
-  // নতুন ফিল্ডসমূহ:
-  paymentMethod: { 
-    type: String, 
-    enum: ['Cash', 'Bank', 'bKash', 'Nagad', 'Rocket', 'Card'], 
-    default: 'Cash' 
-  },
+  paymentMethod: { type: String, default: 'Cash' },
   note: { type: String, default: '' },
-  date: { type: Date, default: Date.now },
+  date: { type: Date, required: true }, 
+  time: { type: String, default: "" }, // নতুন ফিল্ড: সময়
+  status: { type: String, enum: ['Completed', 'Pending'], default: 'Completed' }
 }, { timestamps: true });
 
 export default models.Entry || model('Entry', EntrySchema);

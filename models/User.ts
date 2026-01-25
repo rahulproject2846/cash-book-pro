@@ -1,11 +1,25 @@
-// src/models/User.ts
+// src/models/User.ts (Full Code: HASHING HOOK REMOVED)
 import mongoose, { Schema, model, models } from 'mongoose';
+import bcrypt from 'bcryptjs';
 
-const UserSchema = new Schema({
+interface IUser extends mongoose.Document {
+  username: string;
+  email: string;
+  password: string;
+  matchPassword: (enteredPassword: string) => Promise<boolean>;
+}
+
+const UserSchema = new Schema<IUser>({
   username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  profilePic: { type: String, default: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }
+  email: { type: String, required: true, unique: true },
+  // পাসওয়ার্ড এখন সরাসরি সেভ হবে, হ্যাশিং হবে API তে
+  password: { type: String, required: true }, 
+  createdAt: { type: Date, default: Date.now }
 });
 
-const User = models.User || model('User', UserSchema);
-export default User;
+// Method to compare password
+UserSchema.methods.matchPassword = async function (this: IUser, enteredPassword: string) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
+export default (models.User || model<IUser>('User', UserSchema)) as mongoose.Model<IUser>;

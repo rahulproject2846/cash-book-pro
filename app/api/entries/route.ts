@@ -11,10 +11,18 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const data = await req.json();
-  await connectDB();
-  const newEntry = await Entry.create(data);
-  return NextResponse.json(newEntry);
+  try {
+    const data = await req.json();
+    await connectDB();
+    // তারিখটিকে স্ট্রিং থেকে ডেট অবজেক্টে রূপান্তর করা
+    const entryData = {
+      ...data,
+      date: new Date(data.date),
+      amount: Number(data.amount)
+    };
+    const newEntry = await Entry.create(entryData);
+    return NextResponse.json(newEntry);
+  } catch (err) {
+    return NextResponse.json({ error: "Failed to save" }, { status: 500 });
+  }
 }
-
-// DELETE এবং PUT (Edit) আমরা পরের ধাপে যোগ করছি
