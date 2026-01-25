@@ -1,19 +1,20 @@
-// src/models/User.ts (Full Code: HASHING HOOK REMOVED)
+// src/models/User.ts (Full Code: Final Type Fix)
 import mongoose, { Schema, model, models } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+// Interface Update: createdAt field added
 interface IUser extends mongoose.Document {
   username: string;
   email: string;
   password: string;
+  createdAt: Date; // <--- FIX: Added the missing field
   matchPassword: (enteredPassword: string) => Promise<boolean>;
 }
 
 const UserSchema = new Schema<IUser>({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
-  // পাসওয়ার্ড এখন সরাসরি সেভ হবে, হ্যাশিং হবে API তে
-  password: { type: String, required: true }, 
+  password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
 
