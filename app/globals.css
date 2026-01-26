@@ -1,93 +1,152 @@
 @import "tailwindcss";
-/* src/app/globals.css (Full Code) */
 
-
+/* ---------------------------------------------------------
+   1. IMPROVED RESPONSIVE VARIABLES
+   --------------------------------------------------------- */
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  --bg-app: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --border-color: #E2E8F0;
+  --accent: #F97316; 
+  --accent-soft: rgba(249, 115, 22, 0.05);
 }
 
-/* Global Security Lock and Font Sharpening */
+.dark {
+  --bg-app: #05070A;
+  --bg-card: #0D1117;
+  --text-main: #F1F5F9;
+  --text-muted: #8B949E;
+  --border-color: #21262D;
+  --accent: #FB923C;
+  --accent-soft: rgba(251, 146, 60, 0.1);
+}
+
+/* ---------------------------------------------------------
+   2. MOBILE OPTIMIZATION UTILITIES
+   --------------------------------------------------------- */
 * {
+  box-sizing: border-box;
   user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  -webkit-touch-callout: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
 body {
-  background-color: var(--background);
-  color: var(--foreground);
-  min-height: 100vh;
-  margin: 0;
+  background-color: var(--bg-app);
+  color: var(--text-main);
   font-family: var(--font-jakarta), sans-serif;
-  /* Premium Mesh Background with Subtle Gradient */
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(147, 51, 234, 0.08) 0px, transparent 50%);
 }
 
-/* Glassmorphism Refinement */
-.glass-card {
-  background: rgba(255, 255, 255, 0.015); /* Less opaque */
-  backdrop-filter: blur(20px); /* More blur */
-  border: 1px solid rgba(255, 255, 255, 0.05); /* Lighter border */
-  border-radius: 20px;
-  transition: border 0.3s ease, background 0.3s ease;
+/* টাকার হিসাবের জন্য ফন্ট */
+.font-mono-finance {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, monospace;
 }
 
-.glass-card:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(59, 130, 246, 0.4);
+/* --- Responsive Layout Helpers --- */
+.app-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  transition: all 0.2s ease;
 }
 
-.glass-input {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 12px 16px;
-  outline: none;
-  color: white;
-  transition: all 0.2s;
-  font-size: 15px;
-}
-
-.glass-input:focus {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: #3b82f6;
-}
-
-/* Custom Scrollbar Styling */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: #0f172a;
-}
-
-/* Input Type Date Custom Styling (The Fix) */
-input[type="date"] {
-  -webkit-appearance: none;
-  appearance: none;
-  /* Hides default browser calendar icon */
-}
-
-input[type="date"]::-webkit-calendar-picker-indicator {
-  opacity: 0;
+/* মোবাইলে ইনপুট এবং বাটনের সাইজ একটু বড় রাখা (Tap Friendly) */
+.app-input {
   width: 100%;
-  height: 100%;
-  cursor: pointer;
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 16px; /* 16px prevents iOS auto-zoom */
+  color: var(--text-main);
+  outline: none;
+}
+
+.app-btn-primary {
+  background-color: var(--accent);
+  color: white;
+  font-weight: 800;
+  padding: 12px 20px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* টেবিল শুধু ডেস্কটপে কাজ করবে */
+.finance-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.finance-table th {
+  padding: 14px 20px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+}
+.finance-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* প্যাগিনেশন কাস্টম ডিজাইন */
+.pagination-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 800;
+  transition: all 0.2s;
+}
+.pagination-active {
+  background-color: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* --- FIXED BORDER COLOR GLOBAL ISSUE --- */
+
+/* ১. রুট ভ্যারিয়েবল নিশ্চিত করা (যদি আগে না থাকে) */
+:root {
+  --border: #e2e8f0; /* Light Mode: সফট গ্রে */
+}
+
+.dark {
+  --border: #1e293b; /* Dark Mode: সফট স্লেট */
+}
+
+/* ২. সব ধরণের বর্ডার কালারকে ভ্যারিয়েবল দিয়ে কন্ট্রোল করা */
+.app-card, 
+.border, 
+.border-b, 
+.border-t, 
+.border-l, 
+.border-r,
+table,
+th,
+td,
+hr {
+  border-color: var(--border) !important;
+}
+
+/* ৩. ইনপুট এবং ফোকাস অবস্থার বর্ডারও সিঙ্ক করা */
+.app-input {
+  border-color: var(--border);
+}
+
+/* ৪. মোবাইল কার্ড বা গ্রিড আইটেমের বর্ডার ফিক্স */
+div[class*="border"] {
+  border-color: var(--border) !important;
 }

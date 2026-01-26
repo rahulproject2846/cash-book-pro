@@ -1,37 +1,109 @@
 "use client";
-import { X, Loader2 } from 'lucide-react';
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, AlertTriangle } from 'lucide-react';
 
-export const ModalLayout = ({ title, children, onClose }: any) => (
-  <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-    <div className="glass-card w-full max-w-md p-8 border border-white/10 relative animate-in zoom-in duration-200">
-      <X className="absolute right-6 top-6 cursor-pointer text-slate-500 hover:text-white" onClick={onClose} />
-      <h2 className="text-2xl font-black text-white mb-8 tracking-tighter uppercase">{title}</h2>
-      {children}
-    </div>
-  </div>
-);
-
-export const DeleteConfirmModal = ({ targetName, confirmName, setConfirmName, onConfirm, onClose }: any) => (
-  <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
-    <div className="glass-card w-full max-w-sm p-8 border border-red-500/20">
-      <h2 className="text-xl font-black text-red-500 mb-4 uppercase tracking-tighter">Security Check</h2>
-      <p className="text-slate-400 text-xs mb-6 leading-relaxed">
-        To confirm, type exactly: <br/><span className="text-white font-black text-sm uppercase">"{targetName}"</span>
-      </p>
-      <input 
-        placeholder="Type here..." 
-        className="glass-input w-full mb-6 border-red-500/10 focus:border-red-500" 
-        value={confirmName} 
-        onChange={e => setConfirmName(e.target.value)} 
+// --- ১. গ্লোবাল মডাল লেআউট (Modal Base Frame) ---
+export const ModalLayout = ({ title, children, onClose }: any) => {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* Background Overlay with Blur */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
       />
-      <div className="flex gap-3">
-        <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-white/5 font-bold text-slate-400">Cancel</button>
-        <button 
-          onClick={onConfirm} 
-          disabled={confirmName !== targetName} 
-          className={`flex-1 py-3 rounded-xl font-bold transition-all ${confirmName === targetName ? 'bg-red-600 text-white' : 'bg-red-900/10 text-red-900/40 cursor-not-allowed'}`}
-        >Confirm</button>
-      </div>
+
+      {/* Modal Content Card */}
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="app-card w-full max-w-md relative z-10 overflow-hidden"
+      >
+        {/* Modal Header */}
+        <div className="px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-app)]">
+          <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-[2px] italic">
+            {title}
+          </h2>
+          <button 
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-500 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6">
+          {children}
+        </div>
+      </motion.div>
     </div>
-  </div>
-);
+  );
+};
+
+// --- ২. ডিলিট কনফার্মেশন মডাল (Security Logic Built-in) ---
+export const DeleteConfirmModal = ({ targetName, confirmName, setConfirmName, onConfirm, onClose }: any) => {
+  // কনফার্মেশন বাটন একটিভ হওয়ার লজিক
+  const isMatch = confirmName.toLowerCase() === targetName.toLowerCase();
+
+  return (
+    <ModalLayout title="Security Check" onClose={onClose}>
+      <div className="space-y-6">
+        {/* Danger Alert Box */}
+        <div className="flex gap-4 p-4 rounded-xl bg-red-500/5 border border-red-500/20 text-red-500">
+          <div className="shrink-0 mt-0.5">
+            <AlertTriangle size={20} />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-bold leading-tight uppercase">Permanent Action</p>
+            <p className="text-xs opacity-80 font-medium leading-relaxed">
+                You are about to delete <span className="font-bold underline">"{targetName}"</span>. This data cannot be recovered from the vault.
+            </p>
+          </div>
+        </div>
+
+        {/* Input Field */}
+        <div>
+          <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-2 block italic">
+            Please type the name to confirm
+          </label>
+          <input 
+            type="text" 
+            placeholder={targetName}
+            className="app-input font-bold uppercase tracking-wider border-red-500/20 focus:border-red-500"
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-3">
+          <button 
+            onClick={onClose}
+            className="flex-1 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-[2px] text-[var(--text-muted)] bg-[var(--bg-app)] border border-[var(--border-color)] hover:bg-[var(--bg-card)] transition-all"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={onConfirm}
+            disabled={!isMatch}
+            className={`flex-1 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-[2px] transition-all shadow-lg
+                ${isMatch 
+                  ? 'bg-red-600 text-white shadow-red-600/20 hover:bg-red-700 active:scale-95' 
+                  : 'bg-gray-200 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed opacity-50 shadow-none'
+                }
+            `}
+          >
+            Delete Forever
+          </button>
+        </div>
+      </div>
+    </ModalLayout>
+  );
+};
