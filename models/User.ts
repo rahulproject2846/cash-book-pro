@@ -1,26 +1,21 @@
-// src/models/User.ts (Full Code: Final Type Fix)
 import mongoose, { Schema, model, models } from 'mongoose';
-import bcrypt from 'bcryptjs';
 
-// Interface Update: createdAt field added
-interface IUser extends mongoose.Document {
-  username: string;
-  email: string;
-  password: string;
-  createdAt: Date; // <--- FIX: Added the missing field
-  matchPassword: (enteredPassword: string) => Promise<boolean>;
-}
-
-const UserSchema = new Schema<IUser>({
-  username: { type: String, required: true, unique: true },
+const UserSchema = new Schema({
+  username: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  // সেটিংসের জন্য নিচের ফিল্ডগুলো অবশ্যই থাকতে হবে
+  categories: { 
+    type: [String], 
+    default: ['General', 'Salary', 'Food', 'Rent', 'Shopping', 'Loan'] 
+  },
+  currency: { type: String, default: 'BDT (৳)' },
+  preferences: {
+    dailyReminder: { type: Boolean, default: false },
+    weeklyReports: { type: Boolean, default: false },
+    highExpenseAlert: { type: Boolean, default: false }
+  },
   createdAt: { type: Date, default: Date.now }
 });
 
-// Method to compare password
-UserSchema.methods.matchPassword = async function (this: IUser, enteredPassword: string) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
-
-export default (models.User || model<IUser>('User', UserSchema)) as mongoose.Model<IUser>;
+export default models.User || model('User', UserSchema);

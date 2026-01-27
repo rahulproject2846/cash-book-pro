@@ -1,152 +1,256 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------
-   1. IMPROVED RESPONSIVE VARIABLES
+   1. BULLETPROOF STUDIO VARIABLES (Based on Screenshot)
    --------------------------------------------------------- */
-:root {
-  --bg-app: #F8FAFC;
-  --bg-card: #FFFFFF;
-  --text-main: #0F172A;
-  --text-muted: #64748B;
-  --border-color: #E2E8F0;
-  --accent: #F97316; 
-  --accent-soft: rgba(249, 115, 22, 0.05);
-}
+@layer base {
+  :root {
+    /* Light Mode - Crisp & Clean */
+    --bg-app: #F9FAFB;
+    --bg-card: #FFFFFF;
+    --text-main: #0F172A;
+    --text-muted: #64748B;
+    --border: #E2E8F0;
+    --border-color: #E2E8F0;
+    --accent: #F97316;
+    --accent-soft: rgba(249, 115, 22, 0.05);
+    --ring: rgba(249, 115, 22, 0.15);
+  }
 
-.dark {
-  --bg-app: #05070A;
-  --bg-card: #0D1117;
-  --text-main: #F1F5F9;
-  --text-muted: #8B949E;
-  --border-color: #21262D;
-  --accent: #FB923C;
-  --accent-soft: rgba(251, 146, 60, 0.1);
+  .dark {
+    /* Dark Mode - Professional Studio Grey (Exact Match) */
+    --bg-app: #0F0F0F;      /* Deep Matte Black/Grey */
+    --bg-card: #1A1A1B;     /* Studio Foreground Grey */
+    --text-main: #F0F0F0;   /* Clean Off-white */
+    --text-muted: #888888;  /* Dimmed secondary text */
+    --border: #2D2D2D;      /* Subtle border for separation */
+    --border-color: #2D2D2D;
+    --accent: #F97316;      /* Signature Orange */
+    --accent-soft: rgba(249, 115, 22, 0.1);
+    --ring: rgba(249, 115, 22, 0.3);
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    font-family: var(--font-jakarta), 'Inter', sans-serif;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
 }
 
 /* ---------------------------------------------------------
-   2. MOBILE OPTIMIZATION UTILITIES
+   2. SMOOTH ANIMATIONS & MICRO-INTERACTIONS
    --------------------------------------------------------- */
-* {
-  box-sizing: border-box;
-  user-select: none;
-  -webkit-font-smoothing: antialiased;
+@layer components {
+  /* কার্ড স্লাইড ইন অ্যানিমেশন */
+  .anim-fade-up {
+    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* প্রিমিয়াম কার্ড ডিজাইন */
+  .app-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .app-card:hover {
+    border-color: rgba(249, 115, 22, 0.3);
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.3);
+  }
+
+  /* ফোকাসড ইনপুট ফিক্স */
+  .app-input {
+    width: 100%;
+    background-color: var(--bg-app);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 18px;
+    color: var(--text-main);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+  }
+
+  .app-input:focus {
+    border-color: var(--accent);
+    background-color: var(--bg-card);
+    box-shadow: 0 0 0 4px var(--ring);
+  }
+
+  /* ইন্ডাস্ট্রি স্ট্যান্ডার্ড টেবিল */
+  .finance-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .finance-table th {
+    background-color: var(--bg-app);
+    padding: 20px 24px;
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    border-bottom: 1.5px solid var(--border);
+  }
+
+  .finance-table td {
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .finance-table tr:hover td {
+    background-color: var(--accent-soft);
+  }
+
+  /* স্মার্ট বাটন */
+  .app-btn-primary {
+    background-color: var(--accent);
+    color: white;
+    font-weight: 800;
+    padding: 16px 28px;
+    border-radius: 16px;
+    letter-spacing: 0.05em;
+    @apply flex items-center justify-center gap-3 transition-all duration-300 active:scale-95;
+  }
+
+  .app-btn-primary:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 10px 25px -5px var(--ring);
+  }
 }
 
-body {
-  background-color: var(--bg-app);
-  color: var(--text-main);
-  font-family: var(--font-jakarta), sans-serif;
+/* ---------------------------------------------------------
+   3. SYSTEM LOGIC FIXES (Bulletproof)
+   --------------------------------------------------------- */
+
+/* ১. সব বর্ডার সিঙ্ক - যাতে লেআউট না ভাঙে */
+.border, .border-t, .border-b, .border-l, .border-r, hr {
+  border-color: var(--border) !important;
 }
 
-/* টাকার হিসাবের জন্য ফন্ট */
+/* ২. ফিন্যান্স ফন্ট */
 .font-mono-finance {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, monospace;
+  letter-spacing: -0.02em;
 }
 
-/* --- Responsive Layout Helpers --- */
-.app-card {
+/* ৩. গ্লোবাল কাস্টম স্ক্রলবার */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 20px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ৪. মোবাইল এক্সপেরিয়েন্স */
+@media (max-width: 768px) {
+  .app-card { border-radius: 18px; }
+  
+  /* মোবাইল বটম নেভ ফিক্স */
+  .fixed.bottom-0 {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* মডাল ওভারফ্লো ফিক্স */
+  .max-h-\[80vh\] {
+    max-height: 85vh !important;
+    scrollbar-width: thin;
+  }
+}
+
+/* ৫. ডার্ক মোড সিলেক্ট অপশন ফিক্স */
+.dark select option {
   background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  transition: all 0.2s ease;
-}
-
-/* মোবাইলে ইনপুট এবং বাটনের সাইজ একটু বড় রাখা (Tap Friendly) */
-.app-input {
-  width: 100%;
-  background-color: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 16px; /* 16px prevents iOS auto-zoom */
   color: var(--text-main);
-  outline: none;
 }
 
-.app-btn-primary {
-  background-color: var(--accent);
-  color: white;
-  font-weight: 800;
-  padding: 12px 20px;
-  border-radius: 12px;
-  text-transform: uppercase;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+/* ৬. ইমেজ/আইকন গ্লো ইফেক্ট */
+.icon-glow {
+  filter: drop-shadow(0 0 8px var(--ring));
 }
 
-/* টেবিল শুধু ডেস্কটপে কাজ করবে */
-.finance-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.finance-table th {
-  padding: 14px 20px;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
-  text-align: left;
-}
-.finance-table td {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+/* মডাল ফিক্স - এটি মডালকে সবসময় স্ক্রিনের মাঝখানে রাখবে */
+div[class*="fixed"].inset-0 {
+    display: flex !important;
+    align-items: center !important; /* মাঝখানে আনবে */
+    justify-content: center !important;
+    padding: 1rem;
+    z-index: 9999;
 }
 
-/* প্যাগিনেশন কাস্টম ডিজাইন */
-.pagination-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  font-size: 12px;
-  font-weight: 800;
-  transition: all 0.2s;
-}
-.pagination-active {
-  background-color: var(--accent);
-  color: white;
-  border-color: var(--accent);
+/* মডাল কার্ড ডিজাইন */
+.app-card-modal {
+    width: 100%;
+    max-width: 500px;
+    position: relative;
+    margin: auto; /* ফিক্সড সেন্টারিং */
+    background: var(--bg-card);
+    border-radius: 28px;
+    box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.5);
 }
 
-/* --- FIXED BORDER COLOR GLOBAL ISSUE --- */
-
-/* ১. রুট ভ্যারিয়েবল নিশ্চিত করা (যদি আগে না থাকে) */
-:root {
-  --border: #e2e8f0; /* Light Mode: সফট গ্রে */
+/* --- 1. MODAL SYSTEM OVERHAUL --- */
+.modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important; /* সব কিছুর উপরে থাকবে */
+    padding: 1rem;
 }
 
-.dark {
-  --border: #1e293b; /* Dark Mode: সফট স্লেট */
+.modal-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    z-index: -1 !important; /* মডাল কার্ডের পেছনে থাকবে */
 }
 
-/* ২. সব ধরণের বর্ডার কালারকে ভ্যারিয়েবল দিয়ে কন্ট্রোল করা */
-.app-card, 
-.border, 
-.border-b, 
-.border-t, 
-.border-l, 
-.border-r,
-table,
-th,
-td,
-hr {
-  border-color: var(--border) !important;
+/* --- 2. DROPDOWN MASTER FIX (Dark Mode Ready) --- */
+select.app-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238B949E'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 1rem center !important;
+    background-size: 1.2em !important;
+    appearance: none !important;
+    cursor: pointer !important;
 }
 
-/* ৩. ইনপুট এবং ফোকাস অবস্থার বর্ডারও সিঙ্ক করা */
-.app-input {
-  border-color: var(--border);
+.dark select option {
+    background-color: #1A1A1B !important;
+    color: #F0F0F0 !important;
+    padding: 12px !important;
 }
 
-/* ৪. মোবাইল কার্ড বা গ্রিড আইটেমের বর্ডার ফিক্স */
-div[class*="border"] {
-  border-color: var(--border) !important;
+/* --- 3. FIX FOR MYSTERIOUS LINES --- */
+body:has(.modal-overlay) {
+    overflow: hidden !important; /* মডাল ওপেন থাকলে নিচের টেবিল বা স্ক্রল সব লক */
 }

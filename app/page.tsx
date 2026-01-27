@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+// 🔥 1. Book & Plus added to imports
+import { Loader2, Book, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // Layout & Sections
@@ -9,12 +10,16 @@ import { DashboardLayout } from '@/components/Layout/DashboardLayout';
 import { BooksSection } from '@/components/Sections/BooksSection';
 import { ReportsSection } from '@/components/Sections/ReportsSection';
 import { SettingsSection } from '@/components/Sections/SettingsSection';
+import { ProfileSection } from '@/components/Sections/ProfileSection';
 import { ModalLayout } from '@/components/Modals';
 
 interface UserState {
   _id: string;
   username: string;
   email: string;
+  categories?: string[];
+  currency?: string;
+  preferences?: any;
 }
 
 export default function CashBookApp() {
@@ -25,6 +30,12 @@ export default function CashBookApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('books');
   const [modalType, setModalType] = useState<'none' | 'register'>('none');
+
+  // New State for FAB (Floating Action Button)
+  const [triggerFab, setTriggerFab] = useState(false);
+  
+  // 🔥 2. New State for FAB Modal
+  const [showFabModal, setShowFabModal] = useState(false);
 
   // Form States
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -83,20 +94,63 @@ export default function CashBookApp() {
     }
   };
 
+  // 🔥 3. Smart FAB Handler
+  const handleFabClick = () => {
+    if (activeSection === 'books') {
+        // If already in Dashboard/Books, trigger internal action
+        setTriggerFab(true);
+    } else {
+        // If in other tabs, show options
+        setShowFabModal(true);
+    }
+  };
+
   // --- 4. Dashboard Configuration ---
   const dashboardSections = [
     { 
       id: 'books', 
       name: currentBook ? currentBook.name : 'Ledgers', 
-      component: <BooksSection currentUser={currentUser} currentBook={currentBook} setCurrentBook={setCurrentBook} /> 
+      component: (
+        <BooksSection 
+            currentUser={currentUser} 
+            currentBook={currentBook} 
+            setCurrentBook={setCurrentBook} 
+            triggerFab={triggerFab} 
+            setTriggerFab={setTriggerFab} 
+        />
+      ) 
     },
-    { id: 'reports', name: 'Analytics', component: <ReportsSection currentUser={currentUser} /> },
-    { id: 'settings', name: 'Account', component: <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} /> },
+    { 
+      id: 'reports', 
+      name: 'Analytics', 
+      component: <ReportsSection currentUser={currentUser} /> 
+    },
+    { 
+      id: 'settings', 
+      name: 'System', 
+      component: (
+        <SettingsSection 
+            currentUser={currentUser} 
+            setCurrentUser={setCurrentUser} 
+        />
+      ) 
+    },
+    { 
+      id: 'profile', 
+      name: 'Profile', 
+      component: (
+        <ProfileSection 
+            currentUser={currentUser} 
+            setCurrentUser={setCurrentUser} 
+            onLogout={handleLogout} 
+        />
+      ) 
+    },
   ];
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg-app)]"><Loader2 className="animate-spin text-orange-500" size={40} /></div>;
 
-  // --- 5. AUTH UI (Login & Register) ---
+  // --- 5. AUTH UI ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-app)] p-4 anim-fade-up">
@@ -133,7 +187,6 @@ export default function CashBookApp() {
           </p>
         </div>
 
-        {/* --- REGISTER MODAL (Fixed CSS) --- */}
         <AnimatePresence>
           {modalType === 'register' && (
             <ModalLayout title="Create Account" onClose={() => setModalType('none')}>
@@ -161,14 +214,49 @@ export default function CashBookApp() {
     );
   }
 
-  // --- 6. MAIN DASHBOARD ---
+  // --- 6. MAIN DASHBOARD (UPDATED RETURN) ---
   return (
-    <DashboardLayout 
-        sections={dashboardSections} 
-        onLogout={handleLogout}
-        activeSection={activeSection}
-        setActiveSection={setActiveSection}
-        currentUser={currentUser}
-    />
+    <>
+        <DashboardLayout 
+            sections={dashboardSections} 
+            onLogout={handleLogout}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+            currentUser={currentUser}
+            // 🔥 Updated Handler
+            onFabClick={handleFabClick}
+        />
+
+        {/* 🔥 Smart FAB Modal */}
+        <AnimatePresence>
+            {showFabModal && (
+                <ModalLayout title="Quick Action Vault" onClose={() => setShowFabModal(false)}>
+                    <div className="space-y-3">
+                        <button 
+                            onClick={() => { setActiveSection('books'); setCurrentBook(null); setTriggerFab(true); setShowFabModal(false); }}
+                            className="w-full p-5 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center gap-4 text-orange-500 hover:bg-orange-500 hover:text-white transition-all group"
+                        >
+                            <div className="p-3 bg-orange-500 rounded-xl text-white group-hover:bg-white group-hover:text-orange-500"><Book size={20}/></div>
+                            <div className="text-left">
+                                <p className="font-black uppercase text-xs tracking-widest">New Ledger</p>
+                                <p className="text-[10px] font-bold opacity-60">Initialize a new financial vault</p>
+                            </div>
+                        </button>
+
+                        <button 
+                            onClick={() => { setActiveSection('books'); setShowFabModal(false); }}
+                            className="w-full p-5 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center gap-4 text-blue-500 hover:bg-blue-500 hover:text-white transition-all group"
+                        >
+                            <div className="p-3 bg-blue-500 rounded-xl text-white group-hover:bg-white group-hover:text-blue-500"><Plus size={20}/></div>
+                            <div className="text-left">
+                                <p className="font-black uppercase text-xs tracking-widest">New Entry</p>
+                                <p className="text-[10px] font-bold opacity-60">Log record in last active book</p>
+                            </div>
+                        </button>
+                    </div>
+                </ModalLayout>
+            )}
+        </AnimatePresence>
+    </>
   );
 }

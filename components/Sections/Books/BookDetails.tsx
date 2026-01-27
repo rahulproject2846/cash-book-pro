@@ -1,252 +1,226 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-    Search, BarChart3, Edit2, Trash2, ChevronLeft, ChevronRight, 
-    ArrowLeft, Plus, LayoutGrid, ListFilter, CheckCircle, Clock, 
-    Calendar, Download, SlidersHorizontal, ArrowUpDown, FileText
+    Search, BarChart3, Edit2, Trash2, ArrowLeft, Plus, 
+    MoreVertical, Share2, Filter, CheckCircle, Clock, 
+    Download, ArrowUpDown, Copy, Loader2, Calendar, LayoutGrid,
+    ChevronLeft, ChevronRight, Wallet
 } from 'lucide-react';
-import { ExportTools } from '@/components/ExportTools';
-import { AnalyticsChart } from '@/components/AnalyticsChart';
 
 export const BookDetails = ({ 
     currentBook, items, onBack, onAdd, onEdit, onDelete, onToggleStatus, 
-    onEditBook, // <--- এটি আছে কিনা চেক করুন
-    onDeleteBook, searchQuery, setSearchQuery, pagination, showChart, setShowChart 
+    onEditBook, onDeleteBook, searchQuery, setSearchQuery, pagination,
+    currentUser, onOpenAnalytics, onOpenExport, onOpenShare 
 }: any) => {
     
-    // ১. Persistent States
-    const [viewMode, setViewMode] = useState('table'); 
+    if (!currentBook) return null;
+
+    // --- STATES ---
     const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
-    const [activeTool, setActiveTool] = useState<'none' | 'sort' | 'export'>('none');
+    const [categoryFilter, setCategoryFilter] = useState('All');
+    const [showMenu, setShowMenu] = useState(false);
+    const [showSortMenu, setShowSortMenu] = useState(false);
 
-    useEffect(() => {
-        const savedView = localStorage.getItem(`viewMode_${currentBook._id}`);
-        if (savedView) setViewMode(savedView);
-    }, [currentBook._id]);
+    // --- DYNAMIC DATA ---
+    const userCategories = ['All', ...(currentUser?.categories || [])];
+    const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
-    const handleViewToggle = () => {
-        const newMode = viewMode === 'table' ? 'list' : 'table';
-        setViewMode(newMode);
-        localStorage.setItem(`viewMode_${currentBook._id}`, newMode);
-    };
+    // --- LOGIC ENGINE ---
+    let processedItems = [...items].filter(i => 
+        i.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-    // ২. Sorting & Filtering Logic
-    const sortedItems = [...items].sort((a, b) => {
+    if (categoryFilter !== 'All') {
+        processedItems = processedItems.filter(item => item.category === categoryFilter);
+    }
+
+    processedItems.sort((a, b) => {
         if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
         if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
     });
 
-    const currentItems = sortedItems.slice((pagination.currentPage - 1) * 10, pagination.currentPage * 10);
-
-    const totalIn = items.filter((e: any) => e.type === 'income' && e.status === 'Completed').reduce((a: any, b: any) => a + b.amount, 0);
-    const totalOut = items.filter((e: any) => e.type === 'expense' && e.status === 'Completed').reduce((a: any, b: any) => a + b.amount, 0);
+    const currentItems = processedItems.slice((pagination.currentPage - 1) * 10, pagination.currentPage * 10);
+    const totalIn = processedItems.filter((e: any) => e.type === 'income' && e.status === 'Completed').reduce((a: any, b: any) => a + b.amount, 0);
+    const totalOut = processedItems.filter((e: any) => e.type === 'expense' && e.status === 'Completed').reduce((a: any, b: any) => a + b.amount, 0);
+    const netBalance = totalIn - totalOut;
 
     return (
-        <div className="space-y-6 anim-fade-up pb-10">
+        <div className="space-y-8 anim-fade-up pb-10 w-full" onClick={() => { setShowMenu(false); setShowSortMenu(false); }}>
             
-            {/* --- ১. IDENTITY HEADER --- */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 px-1">
-                <div className="flex items-center gap-5">
-                    <button 
-                        onClick={onBack} 
-                        className="p-4 app-card rounded-2xl text-[var(--text-muted)] hover:text-orange-500 hover:border-orange-500/30 transition-all shadow-sm active:scale-90"
-                    >
-                        <ArrowLeft size={24} strokeWidth={3}/>
+            {/* 1. HEADER (Phone Optimized) */}
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <button onClick={onBack} className="p-3.5 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl text-[var(--text-muted)] hover:text-orange-500 transition-all active:scale-90">
+                        <ArrowLeft size={22} strokeWidth={3}/>
                     </button>
+                    <div className="min-w-0">
+                        <h1 className="text-2xl md:text-4xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none truncate">{currentBook.name}</h1>
+                        <p className="text-[9px] md:text-[10px] font-bold text-orange-500 uppercase tracking-[3px] mt-1.5 opacity-80 truncate">Report Protocol Active</p>
+                    </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    {/* Add Entry Button - Hidden on Mobile, move to menu */}
+                    <button onClick={onAdd} className="hidden md:flex items-center gap-2 bg-orange-500 text-white px-6 py-3.5 rounded-xl shadow-lg shadow-orange-500/20 text-xs font-black tracking-widest hover:bg-orange-600 active:scale-95 transition-all">
+                        <Plus size={16} strokeWidth={3} /> NEW ENTRY
+                    </button>
+
+                    <div className="relative" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => setShowMenu(!showMenu)} className="p-3.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-orange-500 active:bg-orange-500 active:text-white transition-all">
+                            <MoreVertical size={22} />
+                        </button>
+                        <AnimatePresence>
+                            {showMenu && (
+                                <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute right-0 top-14 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl z-[200] overflow-hidden py-1">
+                                    <button onClick={onAdd} className="md:hidden w-full text-left px-5 py-4 text-xs font-black uppercase hover:bg-[var(--bg-app)] flex gap-3 text-orange-500"><Plus size={18}/> New Entry</button>
+                                    <button onClick={() => {onEditBook(); setShowMenu(false);}} className="w-full text-left px-5 py-4 text-xs font-black uppercase hover:bg-[var(--bg-app)] flex gap-3 text-[var(--text-muted)] border-t md:border-none border-[var(--border-color)]"><Edit2 size={18}/> Edit Ledger</button>
+                                    <button onClick={() => {onOpenShare(); setShowMenu(false);}} className="w-full text-left px-5 py-4 text-xs font-black uppercase hover:bg-[var(--bg-app)] flex gap-3 text-[var(--text-muted)] border-t border-[var(--border-color)]"><Share2 size={18}/> Share Access</button>
+                                    <button onClick={() => {onDeleteBook(); setShowMenu(false);}} className="w-full text-left px-5 py-4 text-xs font-black uppercase hover:bg-red-500/5 text-red-500 flex gap-3 border-t border-[var(--border-color)]"><Trash2 size={18}/> Terminate</button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </div>
+            </div>
+
+            {/* 2. STATS BAR (Single card focus on Mobile) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="bg-[var(--bg-card)] p-7 rounded-[28px] border border-[var(--border-color)] border-l-4 border-l-blue-500 flex justify-between items-center shadow-sm">
                     <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-4xl md:text-5xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none">
-                                {currentBook.name}
-                            </h1>
-                            <div className="flex gap-1 translate-y-1">
-                                {/* FIX: Updated Edit Button logic */}
-                                <button 
-    onClick={(e) => { 
-        e.preventDefault();
-        e.stopPropagation(); 
-        onEditBook(); // এই ফাংশনটি এখন কাজ করবে
-    }} 
-    className="p-2 text-[var(--text-muted)] hover:text-orange-500 transition-colors"
->
-    <Edit2 size={18}/>
-</button>
-                                <button onClick={onDeleteBook} className="p-2 text-[var(--text-muted)] hover:text-red-500 transition-colors">
-                                    <Trash2 size={18}/>
-                                </button>
-                            </div>
-                        </div>
-                        <p className="text-[10px] font-bold text-orange-500 uppercase tracking-[4px] mt-2 italic flex items-center gap-2">
-                             <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
-                             {currentBook.description || "Digital Financial Ledger"}
-                        </p>
+                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-[3px]">Vault Balance</p>
+                        <h3 className={`text-3xl md:text-4xl font-mono-finance font-bold mt-2 ${netBalance >= 0 ? 'text-[var(--text-main)]' : 'text-red-500'}`}>
+                            {netBalance < 0 ? '-' : '+'}{currencySymbol}{Math.abs(netBalance).toLocaleString()}
+                        </h3>
                     </div>
+                    <div className="p-4 bg-blue-500/10 rounded-3xl text-blue-500 md:hidden"><Wallet size={32} /></div>
                 </div>
-                <button onClick={onAdd} className="app-btn app-btn-primary px-10 py-5 shadow-orange-500/20 w-full md:w-auto">
-                    <Plus size={20} strokeWidth={3} /> <span className="tracking-[2px]">New Entry</span>
-                </button>
-            </div>
 
-            {/* --- ২. STATS CARDS --- */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="app-card p-6 border-l-4 border-green-500 bg-green-500/[0.02]">
-                    <p className="text-[10px] font-black text-green-500 uppercase tracking-widest italic font-bold">Book Inflow</p>
-                    <h3 className="text-3xl font-mono-finance font-bold mt-1 text-[var(--text-main)]">+{totalIn.toLocaleString()}</h3>
+                <div className="hidden md:block bg-[var(--bg-card)] p-7 rounded-[28px] border border-[var(--border-color)] border-l-4 border-l-green-500 shadow-sm">
+                    <p className="text-[10px] font-black text-green-500 uppercase tracking-[3px]">Total Inflow</p>
+                    <h3 className="text-3xl font-mono-finance font-bold mt-2 text-[var(--text-main)]">+{currencySymbol}{totalIn.toLocaleString()}</h3>
                 </div>
-                <div className="app-card p-6 border-l-4 border-red-500 bg-red-500/[0.02]">
-                    <p className="text-[10px] font-black text-red-500 uppercase tracking-widest italic font-bold">Book Outflow</p>
-                    <h3 className="text-3xl font-mono-finance font-bold mt-1 text-[var(--text-main)]">-{totalOut.toLocaleString()}</h3>
-                </div>
-                <div className="app-card p-6 border-l-4 border-blue-500 bg-blue-500/[0.02]">
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest italic font-bold">Net Balance</p>
-                    <h3 className={`text-3xl font-mono-finance font-bold mt-1 ${totalIn - totalOut >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
-                        {(totalIn - totalOut).toLocaleString()}
-                    </h3>
+                <div className="hidden md:block bg-[var(--bg-card)] p-7 rounded-[28px] border border-[var(--border-color)] border-l-4 border-l-red-500 shadow-sm">
+                    <p className="text-[10px] font-black text-red-500 uppercase tracking-[3px]">Total Outflow</p>
+                    <h3 className="text-3xl font-mono-finance font-bold mt-2 text-[var(--text-main)]">-{currencySymbol}{totalOut.toLocaleString()}</h3>
                 </div>
             </div>
 
-            {/* --- ৩. COMPACT TOOLBAR --- */}
-            <div className="app-card p-4 flex flex-col xl:flex-row gap-4 items-center justify-between bg-[var(--bg-app)]/40 shadow-sm border-[var(--border)]">
-                {/* Search Bar */}
-                <div className="relative w-full xl:max-w-lg">
+            {/* --- ৩. সার্চ বার ও বাটন এক লাইন --- */}
+            <div className="flex flex-col xl:flex-row gap-4 items-center w-full">
+                
+                {/* ১. সার্চ বার - এটি বাম পাশে থাকবে এবং খালি জায়গা দখল করবে */}
+                <div className="relative flex-1 w-full group">
+                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-orange-500 transition-colors pointer-events-none">
+                        <Search size={20} />
+                    </div>
                     <input 
-                        value={searchQuery} 
-                        placeholder="FILTER BY TITLE..." 
-                        className="app-input pr-12 pl-5 py-4 text-[11px] font-black tracking-widest uppercase" 
-                        onChange={e => {setSearchQuery(e.target.value); pagination.setPage(1);}} 
+                        value={searchQuery}
+                        onChange={e => {setSearchQuery(e.target.value); pagination.setPage(1);}}
+                        placeholder="FILTER BY TRANSACTION TITLE..." 
+                        className="w-full pl-14 pr-6 py-5 bg-[var(--bg-card)] border-2 border-[var(--border-color)] rounded-[20px] text-xs font-black uppercase tracking-widest focus:outline-none focus:border-orange-500 text-[var(--text-main)] placeholder:text-[var(--text-muted)]/40 shadow-sm transition-all outline-none"
                     />
-                    <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={18} />
                 </div>
-                
-                {/* Control Buttons Group */}
-                <div className="flex items-center gap-3 w-full xl:w-auto justify-end">
+
+                {/* ২. ৪টি বাটন গ্রুপ - ডেক্সটপে ডান পাশে ২ নম্বর পজিশনে থাকবে */}
+                <div className="grid grid-cols-2 md:flex md:flex-row gap-3 w-full md:w-auto">
                     
-                    {/* Sort Button */}
-                    <div className="flex items-center bg-[var(--bg-app)] p-1 rounded-2xl border border-[var(--border)]">
+                    {/* সর্ট বাটন */}
+                    <div className="relative flex-1 md:flex-none">
                         <button 
-                            onClick={() => setActiveTool(activeTool === 'sort' ? 'none' : 'sort')}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${activeTool === 'sort' ? 'bg-orange-500 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-orange-500'}`}
+                            onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }} 
+                            className="w-full flex cursor-pointer items-center justify-center gap-3 px-6 py-4 rounded-[20px] border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest hover:border-orange-500 hover:text-orange-500 hover:shadow-lg transition-all active:scale-95 whitespace-nowrap"
                         >
-                            <SlidersHorizontal size={16}/>
-                            <span className="text-[9px] font-black uppercase tracking-wider hidden sm:inline">Sort</span>
+                            <ArrowUpDown size={18} className="shrink-0" />
+                            <span>SORT</span>
                         </button>
+                        <AnimatePresence>
+                            {showSortMenu && (
+                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute right-0 top-16 w-44 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl z-[100] p-2">
+                                    {['date', 'amount', 'title'].map(key => (
+                                        <button key={key} onClick={() => setSortConfig({ key, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase rounded-xl mb-1 transition-colors ${sortConfig.key === key ? 'bg-orange-50 text-orange-600' : 'hover:bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
+                                            {key} {sortConfig.key === key ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
-                    {/* View Toggle Button */}
-                    <div className="flex items-center bg-[var(--bg-app)] p-1 rounded-2xl border border-[var(--border)]">
-                        <button 
-                            onClick={handleViewToggle}
-                            className="flex items-center gap-2 px-3 py-2 text-[var(--text-muted)] hover:text-orange-500 transition-all"
-                        >
-                            {viewMode === 'table' ? <LayoutGrid size={16}/> : <ListFilter size={16}/>}
-                            <span className="text-[9px] font-black uppercase tracking-wider hidden sm:inline">View</span>
-                        </button>
+                    {/* ভিউ/ক্যাটাগরি বাটন */}
+                    <div className="relative flex-1 md:flex-none">
+                        <div className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-[20px] border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest hover:border-orange-500 hover:text-orange-500 hover:shadow-lg transition-all relative">
+                            <LayoutGrid size={18} className="shrink-0" />
+                            <span className="whitespace-nowrap truncate">{categoryFilter === 'All' ? 'VIEW' : categoryFilter.toUpperCase()}</span>
+                            <select 
+                                value={categoryFilter}
+                                onChange={(e) => setCategoryFilter(e.target.value)}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            >
+                                {userCategories.map((c: string) => (
+                                    <option key={c} value={c}>{c.toUpperCase()}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
-                    {/* Analytics Button */}
-                    <div className="flex items-center bg-[var(--bg-app)] p-1 rounded-2xl border border-[var(--border)]">
-                        <button 
-                            onClick={() => setShowChart(!showChart)}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${showChart ? 'bg-blue-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-blue-500'}`}
-                        >
-                            <BarChart3 size={16}/>
-                            <span className="text-[9px] font-black uppercase tracking-wider hidden sm:inline">Analytics</span>
-                        </button>
-                    </div>
-
-                    {/* Export Button */}
-                    <div className="flex items-center bg-[var(--bg-app)] p-1 rounded-2xl border border-[var(--border)]">
-                        <button 
-                            onClick={() => setActiveTool(activeTool === 'export' ? 'none' : 'export')}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${activeTool === 'export' ? 'bg-red-500 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-red-500'}`}
-                        >
-                            <Download size={16}/>
-                            <span className="text-[9px] font-black uppercase tracking-wider hidden sm:inline">Export</span>
-                        </button>
-                    </div>
+                    {/* স্ট্যাটস বাটন */}
+                    <button 
+                        onClick={() => onOpenAnalytics()} 
+                        className="flex-1 cursor-pointer md:flex-none flex items-center justify-center gap-3 px-6 py-4 rounded-[20px] border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest hover:border-orange-500 hover:text-orange-500 hover:shadow-lg transition-all active:scale-95 whitespace-nowrap"
+                    >
+                        <BarChart3 size={18} className="shrink-0" />
+                        <span>STATS</span>
+                    </button>
+                    
+                    {/* এক্সপোর্ট বাটন */}
+                    <button 
+                        onClick={() => onOpenExport()} 
+                        className="flex-1 cursor-pointer md:flex-none flex items-center justify-center gap-3 px-6 py-4 rounded-[20px] border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest hover:border-green-500 hover:text-green-500 hover:shadow-lg transition-all active:scale-95 whitespace-nowrap"
+                    >
+                        <Download size={18} className="shrink-0" />
+                        <span>EXPORT</span>
+                    </button>
                 </div>
             </div>
 
-            {/* --- ৪. TOOLBAR SUB-MENUS --- */}
-            <AnimatePresence>
-                {activeTool === 'sort' && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                        <div className="app-card p-4 flex gap-2 bg-[var(--bg-card)]/50 border-orange-500/20">
-                            {['date', 'title', 'amount'].map((key) => (
-                                <button 
-                                    key={key}
-                                    onClick={() => setSortConfig({ key, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
-                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${sortConfig.key === key ? 'bg-orange-500 text-white border-orange-500' : 'border-[var(--border)] text-slate-400'}`}
-                                >
-                                    {key} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                                </button>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
-
-                {activeTool === 'export' && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                        <div className="app-card p-4 flex gap-4 bg-[var(--bg-card)]/50 border-red-500/20">
-                            <ExportTools entries={items} bookName={currentBook.name} />
-                        </div>
-                    </motion.div>
-                )}
-
-                {showChart && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                        <div className="app-card p-8 border-blue-500/20 bg-blue-500/[0.02]">
-                             <AnalyticsChart entries={items} />
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* --- ৫. MAIN DATA AREA (FIXED RESPONSIVE LOGIC) --- */}
-            <div className="app-card overflow-hidden min-h-[400px]">
-                
-                {/* A. TABLE VIEW: Hidden on Mobile, Visible on Desktop if viewMode is 'table' */}
-                <div className={`hidden ${viewMode === 'table' ? 'md:block' : ''} overflow-x-auto no-scrollbar`}>
-                    <table className="finance-table w-full text-left">
-                        <thead>
+            {/* 4. DATA TABLE (Restore Spacious Design) */}
+            <div className="bg-[var(--bg-card)] rounded-[28px] border border-[var(--border-color)] overflow-hidden shadow-sm min-h-[500px]">
+                <div className="hidden md:block overflow-x-auto no-scrollbar">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="border-b border-[var(--border-color)] bg-[var(--bg-app)]/30">
                             <tr>
-                                <th className="w-16 text-center">#</th>
-                                <th className="w-32">Date</th>
-                                <th>Transaction Detail</th>
-                                <th>Category</th>
-                                <th>Method</th>
-                                <th className="text-right pr-4">Amount</th>
-                                <th className="text-center">Status</th>
-                                <th className="text-right pr-10">Actions</th>
+                                <th className="py-6 px-8 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] w-16 text-center">#</th>
+                                <th className="py-6 px-6 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] w-36">Timestamp</th>
+                                <th className="py-6 px-6 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px]">Transaction Detail</th>
+                                <th className="py-6 px-6 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] w-36">Category</th>
+                                <th className="py-6 px-6 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] text-right w-40">Amount</th>
+                                <th className="py-6 px-6 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] text-center w-32">Status</th>
+                                <th className="py-6 px-8 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] text-right w-32">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-[var(--border)]">
+                        <tbody className="divide-y divide-[var(--border-color)]">
                             {currentItems.map((e: any, i: number) => (
-                                <tr key={e._id} className="hover:bg-[var(--accent-soft)] group transition-all">
-                                    <td className="p-5 text-center text-[10px] font-black text-[var(--text-muted)] opacity-30">
-                                        {(pagination.currentPage-1)*10 + i + 1}
+                                <tr key={e._id} className="hover:bg-[var(--accent-soft)] transition-all group">
+                                    <td className="py-7 px-8 text-center text-xs font-bold text-[var(--text-muted)] opacity-30">{(pagination.currentPage-1)*10 + i + 1}</td>
+                                    <td className="py-7 px-6 text-xs font-bold text-[var(--text-muted)] font-mono uppercase tracking-tighter">{new Date(e.date).toLocaleDateString('en-GB')}</td>
+                                    <td className="py-7 px-6">
+                                        <div className="text-base font-black text-[var(--text-main)] uppercase tracking-tight leading-none">{e.title}</div>
+                                        {e.note && <div className="text-[11px] text-[var(--text-muted)] italic mt-2 font-bold opacity-50 truncate max-w-xs">"{e.note}"</div>}
                                     </td>
-                                    <td className="p-5 text-xs font-bold text-slate-400 uppercase tracking-tighter">
-                                        {new Date(e.date).toLocaleDateString('en-GB')}
+                                    <td className="py-7 px-6"><span className="px-4 py-1.5 rounded-xl bg-orange-500/5 text-orange-500 text-[10px] font-black uppercase border border-orange-500/10 tracking-widest">{e.category}</span></td>
+                                    <td className={`py-7 px-6 text-right font-mono-finance font-bold text-lg ${e.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                                        {e.type === 'income' ? '+' : '-'}{currencySymbol}{e.amount.toLocaleString()}
                                     </td>
-                                    <td className="p-5">
-                                        <div className="font-black text-sm uppercase italic text-[var(--text-main)] tracking-tight group-hover:text-orange-500 transition-colors">{e.title}</div>
-                                        {e.note && <div className="text-[10px] text-[var(--text-muted)] font-bold italic line-clamp-1 mt-1 opacity-60">“{e.note}”</div>}
+                                    <td className="py-7 px-6 text-center">
+                                        <button onClick={() => onToggleStatus(e)} className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase border transition-all ${e.status === 'Completed' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}`}>
+                                            {e.status}
+                                        </button>
                                     </td>
-                                    <td className="p-5"><span className="px-2.5 py-1 bg-orange-500/5 text-orange-500 rounded-md text-[9px] font-black uppercase tracking-widest border border-orange-500/10">{e.category}</span></td>
-                                    <td className="p-5 text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest opacity-80">{e.paymentMethod}</td>
-                                    <td className={`p-5 text-right font-mono-finance font-bold text-base ${e.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                                        {e.type === 'income' ? '+' : '-'}{e.amount.toLocaleString()}
-                                    </td>
-                                    <td className="p-5 text-center">
-                                        <button onClick={() => onToggleStatus(e)} className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all ${e.status === 'Completed' ? 'bg-green-500/10 text-green-500 border-green-500/20 shadow-sm shadow-green-500/10' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-sm shadow-yellow-500/10'}`}>{e.status}</button>
-                                    </td>
-                                    <td className="p-5 text-right pr-10">
-                                        <div className="flex justify-end gap-2.5">
-                                            <button onClick={() => onEdit(e)} className="p-2.5 text-blue-500 bg-blue-500/5 hover:bg-blue-500 hover:text-white rounded-xl transition-all shadow-sm"><Edit2 size={14}/></button>
-                                            <button onClick={() => onDelete(e)} className="p-2.5 text-red-500 bg-red-500/5 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm"><Trash2 size={14}/></button>
-                                        </div>
+                                    <td className="py-7 px-8 text-right flex justify-end gap-3 mt-1">
+                                        <button onClick={() => onEdit(e)} className="p-2.5 text-blue-500 bg-blue-500/5 rounded-2xl hover:bg-blue-500 hover:text-white transition-all shadow-sm"><Edit2 size={16}/></button>
+                                        <button onClick={() => onDelete(e)} className="p-2.5 text-red-500 bg-red-500/5 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-sm"><Trash2 size={16}/></button>
                                     </td>
                                 </tr>
                             ))}
@@ -254,53 +228,65 @@ export const BookDetails = ({
                     </table>
                 </div>
 
-                {/* B. GRID/LIST VIEW: Visible on Mobile always, Visible on Desktop if viewMode is 'list' */}
-                <div className={`${viewMode === 'list' ? 'grid' : 'grid md:hidden'} grid-cols-1 md:grid-cols-2 p-5 gap-4`}>
-                    {currentItems.map((e: any, i: number) => (
-                        <div key={e._id} className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)]/50 space-y-4 hover:border-orange-500/30 transition-all">
+                {/* Mobile View Cards */}
+                <div className="md:hidden p-5 space-y-5">
+                    {currentItems.map((e: any) => (
+                         <div key={e._id} className="app-card p-6 flex flex-col gap-5">
                             <div className="flex justify-between items-start">
-                                <div className="flex gap-3">
-                                    <span className="text-[10px] font-black text-slate-300 mt-1">#{(pagination.currentPage-1)*10 + i + 1}</span>
-                                    <div>
-                                        <h4 className="font-black text-sm uppercase italic text-[var(--text-main)] leading-none">{e.title}</h4>
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-2">{new Date(e.date).toLocaleDateString()} • {e.paymentMethod}</p>
-                                    </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-base font-black uppercase text-[var(--text-main)] tracking-tight leading-none">{e.title}</h4>
+                                    <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest">{new Date(e.date).toLocaleDateString()} • {e.category}</p>
                                 </div>
-                                <div className={`text-right font-mono-finance font-bold text-lg ${e.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                                    {e.type === 'income' ? '+' : '-'}{e.amount.toLocaleString()}
+                                <span className={`text-xl font-mono-finance font-bold ${e.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                                    {e.type === 'income' ? '+' : '-'}{currencySymbol}{e.amount.toLocaleString()}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center pt-5 border-t border-[var(--border-color)]">
+                                <button onClick={() => onToggleStatus(e)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase border tracking-widest ${e.status === 'Completed' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}`}>
+                                    {e.status}
+                                </button>
+                                <div className="flex gap-4">
+                                    <button onClick={() => onEdit(e)} className="text-blue-500 active:scale-90 transition-transform"><Edit2 size={20}/></button>
+                                    <button onClick={() => onDelete(e)} className="text-red-500 active:scale-90 transition-transform"><Trash2 size={20}/></button>
                                 </div>
                             </div>
-                            <div className="flex justify-between items-center pt-3 border-t border-[var(--border)]">
-                                <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-900/20 text-orange-600 text-[9px] font-black rounded uppercase">{e.category}</span>
-                                <div className="flex gap-1.5 border-l border-[var(--border)] pl-3">
-                                    <button onClick={() => onEdit(e)} className="p-2 text-blue-500 bg-white dark:bg-slate-800 rounded-lg shadow-sm"><Edit2 size={14}/></button>
-                                    <button onClick={() => onDelete(e)} className="p-2 text-red-500 bg-white dark:bg-slate-800 rounded-lg shadow-sm"><Trash2 size={14}/></button>
-                                </div>
-                            </div>
-                        </div>
+                         </div>
                     ))}
+                    {currentItems.length === 0 && <div className="p-10 text-center text-slate-400 font-bold uppercase text-xs">No records found protocol.</div>}
                 </div>
             </div>
 
-            {/* --- ৬. FLOATING PLUS (Mobile FAB) --- */}
-            <motion.button 
-                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                onClick={onAdd} 
-                className="fixed bottom-24 md:bottom-10 right-8 w-16 h-16 bg-orange-500 rounded-[22px] flex items-center justify-center text-white shadow-2xl shadow-orange-500/40 z-50 border-4 border-white/10"
-            >
-                <Plus size={32} strokeWidth={3} />
-            </motion.button>
+            {/* 5. SMART PAGINATION */}
+            <div className="flex justify-between items-center py-4 px-2">
+                <p className="text-[11px] font-black text-[var(--text-muted)] uppercase hidden md:block tracking-widest">Protocol Archive</p>
+                <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end items-center">
+                    <button 
+                        disabled={pagination.currentPage === 1} 
+                        onClick={() => pagination.setPage(pagination.currentPage - 1)} 
+                        className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 hover:border-orange-500 transition-all"
+                    >
+                        <ChevronLeft size={20}/>
+                    </button>
+                    
+                    <div className="px-5 py-3.5 bg-orange-500 text-white rounded-2xl text-[11px] font-black uppercase tracking-[2px] shadow-lg shadow-orange-500/20">
+                        {pagination.currentPage} / {pagination.totalPages}
+                    </div>
 
-            {/* --- ৭. PAGINATION BAR --- */}
-            {pagination.totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 pt-4">
-                    <button disabled={pagination.currentPage === 1} onClick={() => pagination.setPage(pagination.currentPage - 1)} className="p-3 app-card rounded-xl disabled:opacity-20 text-[var(--text-dim)]"><ChevronLeft size={18}/></button>
-                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(num => (
-                        <button key={num} onClick={() => pagination.setPage(num)} className={`w-11 h-11 rounded-xl font-black text-[11px] transition-all border ${pagination.currentPage === num ? 'bg-orange-500 text-white border-orange-500 shadow-lg' : 'bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-muted)] hover:border-orange-500/50'}`}>{num}</button>
-                    ))}
-                    <button disabled={pagination.currentPage === pagination.totalPages} onClick={() => pagination.setPage(pagination.currentPage + 1)} className="p-3 app-card rounded-xl disabled:opacity-20 text-[var(--text-dim)]"><ChevronRight size={18}/></button>
+                    <button 
+                        disabled={pagination.currentPage === pagination.totalPages} 
+                        onClick={() => pagination.setPage(pagination.currentPage + 1)} 
+                        className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 hover:border-orange-500 transition-all"
+                    >
+                        <ChevronRight size={20}/>
+                    </button>
                 </div>
-            )}
+            </div>
+
+            <style jsx>{`
+                .bordered-icon-btn {
+                    @apply flex items-center justify-center gap-3 px-6 py-4 rounded-[22px] border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest hover:border-orange-500 hover:text-orange-500 transition-all active:scale-95 whitespace-nowrap select-none;
+                }
+            `}</style>
         </div>
     );
 };

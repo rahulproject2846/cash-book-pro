@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
     BarChart3, TrendingUp, TrendingDown, Wallet, PieChart as PieIcon, 
     Activity, Calendar, ArrowUpRight, Download, Loader2
@@ -9,24 +9,28 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
     PieChart, Pie, Cell, Legend 
 } from 'recharts';
-import { ExportTools } from '@/components/ExportTools';
+
+// New Imports
+import { AdvancedExportModal } from '@/components/Modals/AdvancedExportModal';
 
 export const ReportsSection = ({ currentUser }: any) => {
     const [allEntries, setAllEntries] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [timeRange, setTimeRange] = useState('30'); // Default 30 days
+    const [showExportModal, setShowExportModal] = useState(false);
 
-    // --- 1. DATA AGGREGATION (Fetch from all books) ---
+    // Get Dynamic Currency Symbol
+    const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
+
+    // --- 1. DATA AGGREGATION ---
     useEffect(() => {
         const fetchAllData = async () => {
             if (!currentUser) return;
             setLoading(true);
             try {
-                // Fetch all books belonging to current user
                 const booksRes = await fetch(`/api/books?userId=${currentUser._id}`);
                 const books = await booksRes.json();
                 
-                // Fetch entries for all books in parallel
                 let combinedData: any[] = [];
                 await Promise.all(books.map(async (book: any) => {
                     const res = await fetch(`/api/entries?bookId=${book._id}`);
@@ -34,7 +38,6 @@ export const ReportsSection = ({ currentUser }: any) => {
                     if(Array.isArray(data)) combinedData = [...combinedData, ...data];
                 }));
 
-                // Sort by date for chronological charts
                 combinedData.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
                 setAllEntries(combinedData);
             } catch (error) {
@@ -46,7 +49,7 @@ export const ReportsSection = ({ currentUser }: any) => {
         fetchAllData();
     }, [currentUser]);
 
-    // --- 2. DATA PROCESSING (Memoized for performance) ---
+    // --- 2. DATA PROCESSING ---
     const stats = useMemo(() => {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - parseInt(timeRange));
@@ -56,7 +59,6 @@ export const ReportsSection = ({ currentUser }: any) => {
         const totalIn = filtered.filter(e => e.type === 'income').reduce((a, b) => a + b.amount, 0);
         const totalOut = filtered.filter(e => e.type === 'expense').reduce((a, b) => a + b.amount, 0);
 
-        // Chart 1: Cash Flow Area Chart
         const flowMap = new Map();
         filtered.forEach(e => {
             const date = new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -66,7 +68,6 @@ export const ReportsSection = ({ currentUser }: any) => {
             else item.expense += e.amount;
         });
 
-        // Chart 2: Category Pie Chart
         const catMap = new Map();
         filtered.filter(e => e.type === 'expense').forEach(e => {
             if (!catMap.has(e.category)) catMap.set(e.category, { name: e.category, value: 0 });
@@ -95,18 +96,18 @@ export const ReportsSection = ({ currentUser }: any) => {
     return (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-20 max-w-7xl mx-auto">
             
-            {/* --- TOP BAR: TITLE & RANGE --- */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            {/* --- TOP BAR --- */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-2">
                 <div>
-                    <h2 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter ">Report</h2>
+                    <h2 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter italic ">Analytics Report</h2>
                     <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[3px] mt-1">Holistic view of all active ledgers</p>
                 </div>
-                <div className="flex bg-[var(--bg-card)] p-1.5 rounded-2xl border border-[var(--border)] shadow-sm">
+                <div className="flex bg-[var(--bg-card)] p-1.5 rounded-2xl border border-[var(--border-color)] shadow-sm">
                     {['7', '30', '90'].map((r) => (
                         <button 
                             key={r}
                             onClick={() => setTimeRange(r)}
-                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${timeRange === r ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                            className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${timeRange === r ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-[var(--text-muted)] hover:text-orange-500'}`}
                         >
                             {r} Days
                         </button>
@@ -114,35 +115,33 @@ export const ReportsSection = ({ currentUser }: any) => {
                 </div>
             </div>
 
-            {/* --- SUMMARY BENTO GRID --- */}
+            {/* --- SUMMARY GRID --- */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="app-card p-8 border-l-4 border-green-500 bg-green-500/5">
-                    <TrendingUp className="text-green-500 mb-4" size={24} />
+                <div className="app-card p-8 border-l-4 shadow-sm">
+                    <TrendingUp className=" mb-4" size={24} />
                     <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Aggregate Inflow</p>
-                    <h3 className="text-3xl font-finance font-bold text-[var(--text-main)] mt-1">+{stats.totalIn.toLocaleString()}</h3>
+                    <h3 className="text-3xl font-mono-finance font-bold text-[var(--text-main)] mt-1">+{currencySymbol}{stats.totalIn.toLocaleString()}</h3>
                 </div>
-                <div className="app-card p-8 border-l-4 border-red-500 bg-red-500/5">
+                <div className="app-card p-8 border-l-4 shadow-sm">
                     <TrendingDown className="text-red-500 mb-4" size={24} />
                     <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Aggregate Outflow</p>
-                    <h3 className="text-3xl font-finance font-bold text-[var(--text-main)] mt-1">-{stats.totalOut.toLocaleString()}</h3>
+                    <h3 className="text-3xl font-mono-finance font-bold text-[var(--text-main)] mt-1">-{currencySymbol}{stats.totalOut.toLocaleString()}</h3>
                 </div>
-                <div className="app-card p-8 border-l-4 border-orange-500 bg-orange-500/5">
+                <div className="app-card p-8 border-l-4 shadow-sm">
                     <Wallet className="text-orange-500 mb-4" size={24} />
                     <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Net Surplus</p>
-                    <h3 className={`text-3xl font-finance font-bold mt-1 ${stats.net >= 0 ? 'text-orange-500' : 'text-red-500'}`}>{stats.net.toLocaleString()}</h3>
+                    <h3 className={`text-3xl font-mono-finance font-bold mt-1 ${stats.net >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                        {stats.net >= 0 ? '+' : '-'}{currencySymbol}{Math.abs(stats.net).toLocaleString()}
+                    </h3>
                 </div>
             </div>
 
-            {/* --- CHARTS VISUALIZATION --- */}
+            {/* --- CHARTS --- */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Area Chart: History */}
-                <div className="lg:col-span-2 app-card p-8">
-                    <div className="flex justify-between items-center mb-8">
-                        <h4 className="text-sm font-black text-[var(--text-main)] uppercase tracking-widest flex items-center gap-2">
-                            <Activity size={18} className="text-orange-500" /> Cash Flow Trend
-                        </h4>
-                    </div>
+                <div className="lg:col-span-2 app-card p-8 shadow-sm">
+                    <h4 className="text-sm font-black text-[var(--text-main)] uppercase tracking-widest flex items-center gap-2 mb-8">
+                        <Activity size={18} className="text-orange-500" /> Cash Flow Trend
+                    </h4>
                     <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={stats.areaData}>
@@ -156,11 +155,11 @@ export const ReportsSection = ({ currentUser }: any) => {
                                         <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" opacity={0.5} />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: 'var(--text-muted)', fontWeight: 'bold'}} />
                                 <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: 'var(--text-muted)', fontWeight: 'bold'}} />
                                 <Tooltip 
-                                    contentStyle={{backgroundColor: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border)', fontSize: '12px'}}
+                                    contentStyle={{backgroundColor: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', fontSize: '12px'}}
                                     itemStyle={{fontWeight: 'bold'}}
                                 />
                                 <Area type="monotone" dataKey="income" stroke="#10B981" strokeWidth={3} fill="url(#chartIn)" />
@@ -170,8 +169,7 @@ export const ReportsSection = ({ currentUser }: any) => {
                     </div>
                 </div>
 
-                {/* Pie Chart: Categories */}
-                <div className="app-card p-8 flex flex-col">
+                <div className="app-card p-8 flex flex-col shadow-sm">
                     <h4 className="text-sm font-black text-[var(--text-main)] uppercase tracking-widest flex items-center gap-2 mb-8">
                         <PieIcon size={18} className="text-orange-500" /> Spending Distribution
                     </h4>
@@ -179,14 +177,7 @@ export const ReportsSection = ({ currentUser }: any) => {
                         {stats.pieData.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie
-                                        data={stats.pieData}
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={8}
-                                        dataKey="value"
-                                        stroke="none"
-                                    >
+                                    <Pie data={stats.pieData} innerRadius={60} outerRadius={80} paddingAngle={8} dataKey="value" stroke="none">
                                         {stats.pieData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                         ))}
@@ -205,21 +196,39 @@ export const ReportsSection = ({ currentUser }: any) => {
                 </div>
             </div>
 
-            {/* --- EXPORT FOOTER --- */}
-            <div className="app-card p-8 flex flex-col md:flex-row items-center justify-between gap-6 border-dashed bg-orange-500/5">
+            {/* --- EXPORT FOOTER (UPDATED) --- */}
+            <div className="app-card p-8 flex flex-col md:flex-row items-center justify-between gap-6 border-dashed border-2 border-orange-500/20 bg-orange-500/5 shadow-sm">
                 <div className="flex items-center gap-5">
                     <div className="w-14 h-14 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
                         <Download size={28} />
                     </div>
                     <div>
-                        <h3 className="text-lg font-black text-[var(--text-main)] uppercase tracking-tight">Generate Statements</h3>
-                        <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Download full history for last {timeRange} days</p>
+                        <h3 className="text-lg font-black text-[var(--text-main)] uppercase tracking-tight italic">Generate Data Archive</h3>
+                        <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Global report for the last {timeRange} days</p>
                     </div>
                 </div>
-                <div className="w-full md:w-auto flex gap-3">
-                    <ExportTools entries={stats.filtered} bookName={`Global_Report_${timeRange}Days`} />
+                <div className="w-full md:w-auto">
+                    <button 
+                        onClick={() => setShowExportModal(true)}
+                        className="w-full md:w-auto px-10 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-3"
+                    >
+                        <Download size={18} strokeWidth={3} />
+                        <span>Export Selection</span>
+                    </button>
                 </div>
             </div>
+
+            {/* 🔥 Advanced Export Modal Injection */}
+            <AnimatePresence>
+                {showExportModal && (
+                    <AdvancedExportModal 
+                        isOpen={showExportModal} 
+                        onClose={() => setShowExportModal(false)} 
+                        entries={stats.filtered} 
+                        bookName={`Global_Report_${timeRange}Days`}
+                    />
+                )}
+            </AnimatePresence>
 
         </motion.div>
     );
