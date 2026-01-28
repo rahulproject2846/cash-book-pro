@@ -1,57 +1,61 @@
-// src/app/api/books/share/route.ts
-
 import connectDB from "@/lib/db";
 import Book from "@/models/Book";
 import { NextResponse } from "next/server";
+import crypto from 'crypto'; // নিরাপদ টোকেন তৈরির জন্য বিল্ট-ইন মডিউল
 
 export async function POST(req: Request) {
   try {
     const { bookId, enable } = await req.json();
     
+    // ১. ভ্যালিডেশন
     if (!bookId) {
-        return NextResponse.json({ error: "Book ID is required" }, { status: 400 });
+        return NextResponse.json({ message: "Ledger ID is required" }, { status: 400 });
     }
 
     await connectDB();
 
-    // টোকেন জেনারেট করার সিম্পল ফাংশন
-    const generateToken = () => {
-        return Math.random().toString(36).substring(2, 15) + 
-               Math.random().toString(36).substring(2, 15);
+    // টোকেন জেনারেট করার নিরাপদ ফাংশন
+    const generateSecureToken = () => {
+        return crypto.randomBytes(12).toString('hex'); // যেমন: 'xdlsacgdtok1ahms9wudm'
     };
 
-    let updateData: any = { isPublic: enable };
+    let updateData: any = { isPublic: !!enable }; // নিশ্চিতভাবে বুলিয়ান ভ্যালু করা
 
     if (enable) {
         const book = await Book.findById(bookId);
         
         if (!book) {
-            return NextResponse.json({ error: "Book not found" }, { status: 404 });
+            return NextResponse.json({ message: "Ledger not found" }, { status: 404 });
         }
 
-        // যদি আগে টোকেন না থাকে, তবেই নতুন বানাবো
+        // যদি আগে থেকে টোকেন না থাকে, তবেই নতুন সিকিউর টোকেন জেনারেট হবে
         if (!book.shareToken) {
-            updateData.shareToken = generateToken();
+            updateData.shareToken = generateSecureToken();
         }
     } else {
+        // শেয়ার অফ করলে Public Access বন্ধ হয়ে যাবে
         updateData.isPublic = false;
     }
 
-    // ডাটাবেস আপডেট করা
+    // ২. ডাটাবেসে শেয়ার সেটিংস আপডেট করা
     const updatedBook = await Book.findByIdAndUpdate(
         bookId, 
-        updateData, 
+        { $set: updateData }, 
         { new: true }
     );
     
+    // ৩. রেসপন্স পাঠানো
     return NextResponse.json({ 
-        success: true, 
-        isPublic: updatedBook.isPublic, 
-        shareToken: updatedBook.shareToken 
-    });
+        success: true,
+        message: enable ? "Public access enabled" : "Public access disabled",
+        data: {
+            isPublic: updatedBook.isPublic, 
+            shareToken: updatedBook.shareToken 
+        }
+    }, { status: 200 });
 
-  } catch (error) {
-    console.error("SHARE API ERROR:", error);
-    return NextResponse.json({ error: "Failed to update share settings" }, { status: 500 });
+  } catch (error: any) {
+    console.error("SHARE_API_ERROR:", error.message);
+    return NextResponse.json({ message: "Failed to update share protocol" }, { status: 500 });
   }
 }

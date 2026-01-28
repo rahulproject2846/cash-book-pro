@@ -1,69 +1,122 @@
 "use client";
+import React from 'react';
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable"; // আপডেট করা হয়েছে
+import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
-import { FileDown, FileSpreadsheet } from "lucide-react";
+import { FileDown, FileSpreadsheet, ShieldCheck, Download } from "lucide-react";
+import toast from 'react-hot-toast';
 
 export const ExportTools = ({ entries, bookName }: { entries: any[], bookName: string }) => {
   
+  // ১. এক্সেল এক্সপোর্ট প্রোটোকল (With Signature for Import Validation)
   const exportToExcel = () => {
-    const data = entries.map((e) => ({
-      Date: new Date(e.date).toLocaleDateString(),
-      Title: e.title,
-      Category: e.category,
-      Method: e.paymentMethod,
-      Type: e.type.toUpperCase(),
-      Amount: e.amount,
-      Status: e.status,
-      Note: e.note || "-",
-    }));
+    try {
+        const worksheetData = [
+            ["SOURCE: CASHBOOK PRO DIGITAL LEDGER"], // Row 1: Security Signature
+            ["GENERATED ON: " + new Date().toLocaleString()], // Row 2: Metadata
+            ["DO NOT MODIFY THE STRUCTURE OF THIS FILE FOR IMPORT"], // Row 3: Integrity Warning
+            [], // Row 4: Padding Space
+            ["Date", "Title", "Category", "Method", "Type", "Amount", "Status", "Note"] // Row 5: Headers
+        ];
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions");
-    XLSX.writeFile(workbook, `${bookName}_Report.xlsx`);
+        entries.forEach((e) => {
+            worksheetData.push([
+                new Date(e.date).toLocaleDateString('en-GB'),
+                e.title.toUpperCase(),
+                e.category.toUpperCase(),
+                e.paymentMethod.toUpperCase(),
+                e.type.toUpperCase(),
+                e.amount,
+                e.status.toUpperCase(),
+                e.note || "-"
+            ]);
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        
+        // সিগনেচার ইনজেক্ট করা (এটি ইমপোর্টের সময় আমাদের অ্যাপ চেক করবে)
+        worksheet['!auth'] = "CBP-VAULT-PROTOCOL-V4"; 
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Financial_Archive");
+        XLSX.writeFile(workbook, `${bookName.replace(/\s+/g, '_')}_Vault_Report.xlsx`);
+        
+        toast.success("Excel Archive Secured");
+    } catch (error) {
+        toast.error("Excel Protocol Failed");
+    }
   };
 
+  // ২. পিডিএফ এক্সপোর্ট প্রোটোকল (With Studio Branding)
   const exportToPDF = () => {
-    const doc = new jsPDF();
-    
-    doc.setFontSize(18);
-    doc.text("CASHBOOK PRO REPORT", 14, 20);
-    doc.setFontSize(11);
-    doc.text(`Book Name: ${bookName}`, 14, 30);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 35);
+    try {
+        const doc = new jsPDF();
+        
+        // হেডার ব্র্যান্ডিং
+        doc.setFontSize(22);
+        doc.setTextColor(249, 115, 22); // Vault Orange
+        doc.setFont("helvetica", "bold");
+        doc.text("VAULT PRO", 14, 20);
+        
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.setFont("helvetica", "normal");
+        doc.text(`SECURE LEDGER ARCHIVE | VAULT: ${bookName.toUpperCase()}`, 14, 28);
+        doc.text(`GENERATED: ${new Date().toLocaleString()}`, 14, 33);
 
-    const tableColumn = ["Date", "Title", "Category", "Method", "Type", "Amount", "Status"];
-    const tableRows = entries.map((e) => [
-      new Date(e.date).toLocaleDateString(),
-      e.title,
-      e.category,
-      e.paymentMethod,
-      e.type.toUpperCase(),
-      e.amount.toLocaleString(),
-      e.status
-    ]);
+        const tableColumn = ["DATE", "TRANSACTION IDENTITY", "TAG", "METHOD", "TYPE", "AMOUNT", "STATUS"];
+        const tableRows = entries.map((e) => [
+            new Date(e.date).toLocaleDateString('en-GB'),
+            e.title.toUpperCase(),
+            e.category.toUpperCase(),
+            e.paymentMethod.toUpperCase(),
+            e.type.toUpperCase(),
+            e.amount.toLocaleString(),
+            e.status.toUpperCase()
+        ]);
 
-    // doc.autoTable এর বদলে সরাসরি autoTable কল করা হয়েছে
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 45,
-      theme: 'grid',
-      headStyles: { fillColor: [59, 130, 246] },
-      styles: { fontSize: 8 }
-    });
+        autoTable(doc, {
+            head: [tableColumn],
+            body: tableRows,
+            startY: 40,
+            theme: 'grid',
+            headStyles: { fillColor: [26, 26, 27], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+            styles: { fontSize: 8, cellPadding: 4 },
+            didDrawPage: (data) => {
+                // ফুটারে প্রমোশনাল ওয়াটারমার্ক
+                doc.setFontSize(7);
+                doc.setTextColor(150);
+                const footerStr = "Generated by Vault Pro - Secure Financial OS | Design & Dev by Rahul";
+                doc.text(footerStr, 14, doc.internal.pageSize.height - 10);
+                doc.text("https://cash-book-pro.vercel.app/", 160, doc.internal.pageSize.height - 10);
+            }
+        });
 
-    doc.save(`${bookName}_Report.pdf`);
+        doc.save(`${bookName.replace(/\s+/g, '_')}_Secure_Report.pdf`);
+        toast.success("PDF Protocol Finalized");
+    } catch (error) {
+        toast.error("PDF Generation Failed");
+    }
   };
 
   return (
-    <div className="flex gap-2 mb-6">
-      <button onClick={exportToPDF} className="flex-1 glass-card p-3 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-400 transition-all border-white/5">
-        <FileDown size={16} /> Export PDF
+    <div className="flex gap-3 w-full">
+      <button 
+        onClick={exportToPDF} 
+        className="flex-1 flex items-center justify-center gap-3 px-5 py-4 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[2px] hover:border-red-500/50 hover:text-red-500 transition-all active:scale-95 shadow-sm"
+      >
+        <FileDown size={18} /> 
+        <span className="hidden sm:inline">Export PDF</span>
+        <span className="sm:hidden">PDF</span>
       </button>
-      <button onClick={exportToExcel} className="flex-1 glass-card p-3 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-green-400 transition-all border-white/5">
-        <FileSpreadsheet size={16} /> Export Excel
+
+      <button 
+        onClick={exportToExcel} 
+        className="flex-1 flex items-center justify-center gap-3 px-5 py-4 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[2px] hover:border-green-500/50 hover:text-green-500 transition-all active:scale-95 shadow-sm"
+      >
+        <FileSpreadsheet size={18} /> 
+        <span className="hidden sm:inline">Export Excel</span>
+        <span className="sm:hidden">Excel</span>
       </button>
     </div>
   );

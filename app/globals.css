@@ -1,11 +1,7 @@
 @import "tailwindcss";
 
-/* ---------------------------------------------------------
-   1. BULLETPROOF STUDIO VARIABLES (Based on Screenshot)
-   --------------------------------------------------------- */
 @layer base {
   :root {
-    /* Light Mode - Crisp & Clean */
     --bg-app: #F9FAFB;
     --bg-card: #FFFFFF;
     --text-main: #0F172A;
@@ -18,14 +14,13 @@
   }
 
   .dark {
-    /* Dark Mode - Professional Studio Grey (Exact Match) */
-    --bg-app: #0F0F0F;      /* Deep Matte Black/Grey */
-    --bg-card: #1A1A1B;     /* Studio Foreground Grey */
-    --text-main: #F0F0F0;   /* Clean Off-white */
-    --text-muted: #888888;  /* Dimmed secondary text */
-    --border: #2D2D2D;      /* Subtle border for separation */
+    --bg-app: #0F0F0F;      /* Deep Matte Grey */
+    --bg-card: #1A1A1B;     /* Studio Grey Elevation */
+    --text-main: #F0F0F0;   /* Studio White */
+    --text-muted: #888888;  /* Dimmed */
+    --border: #2D2D2D;      /* Precise Border */
     --border-color: #2D2D2D;
-    --accent: #F97316;      /* Signature Orange */
+    --accent: #F97316;      
     --accent-soft: rgba(249, 115, 22, 0.1);
     --ring: rgba(249, 115, 22, 0.3);
   }
@@ -42,25 +37,18 @@
     font-family: var(--font-jakarta), 'Inter', sans-serif;
     overflow-x: hidden;
     scroll-behavior: smooth;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.3s ease;
+  }
+
+  /* মডাল ওপেন থাকলে মেইন বডি স্ক্রল হবে না */
+  body:has(.modal-overlay) {
+    overflow: hidden !important;
+    padding-right: 0px; 
   }
 }
 
-/* ---------------------------------------------------------
-   2. SMOOTH ANIMATIONS & MICRO-INTERACTIONS
-   --------------------------------------------------------- */
 @layer components {
-  /* কার্ড স্লাইড ইন অ্যানিমেশন */
-  .anim-fade-up {
-    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(15px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* প্রিমিয়াম কার্ড ডিজাইন */
+  /* কার্ড এবং কন্টেইনার */
   .app-card {
     background-color: var(--bg-card);
     border: 1px solid var(--border);
@@ -69,11 +57,10 @@
   }
 
   .app-card:hover {
-    border-color: rgba(249, 115, 22, 0.3);
-    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.3);
+    border-color: rgba(249, 115, 22, 0.2);
   }
 
-  /* ফোকাসড ইনপুট ফিক্স */
+  /* ইনপুট সিস্টেম */
   .app-input {
     width: 100%;
     background-color: var(--bg-app);
@@ -91,34 +78,7 @@
     box-shadow: 0 0 0 4px var(--ring);
   }
 
-  /* ইন্ডাস্ট্রি স্ট্যান্ডার্ড টেবিল */
-  .finance-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-
-  .finance-table th {
-    background-color: var(--bg-app);
-    padding: 20px 24px;
-    text-transform: uppercase;
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    border-bottom: 1.5px solid var(--border);
-  }
-
-  .finance-table td {
-    padding: 22px 24px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .finance-table tr:hover td {
-    background-color: var(--accent-soft);
-  }
-
-  /* স্মার্ট বাটন */
+  /* প্রিমিয়াম বাটন */
   .app-btn-primary {
     background-color: var(--accent);
     color: white;
@@ -126,34 +86,110 @@
     padding: 16px 28px;
     border-radius: 16px;
     letter-spacing: 0.05em;
-    @apply flex items-center justify-center gap-3 transition-all duration-300 active:scale-95;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
   }
 
-  .app-btn-primary:hover {
-    filter: brightness(1.1);
-    box-shadow: 0 10px 25px -5px var(--ring);
+  .app-btn-primary:active {
+    transform: scale(0.96);
+  }
+
+  /* ফিন্যান্স টেবিল */
+  .finance-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .finance-table th {
+    padding: 20px 24px;
+    text-transform: uppercase;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    border-bottom: 1.5px solid var(--border);
+    background-color: var(--bg-app);
+  }
+
+  .finance-table td {
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* মডাল ওভারলে ও ব্যাকড্রপ সিস্টেম */
+  .modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+    padding: 1rem;
+  }
+
+  .modal-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    z-index: -1 !important;
+  }
+
+  /* গ্লোয়িং স্কেলিটন লোডার */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--border) 25%,
+      var(--bg-app) 50%,
+      var(--border) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* মাইক্রো অ্যানিমেশন */
+  .anim-fade-up {
+    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }
 
 /* ---------------------------------------------------------
-   3. SYSTEM LOGIC FIXES (Bulletproof)
+   SYSTEM LEVEL OVERRIDES
    --------------------------------------------------------- */
 
-/* ১. সব বর্ডার সিঙ্ক - যাতে লেআউট না ভাঙে */
+/* বর্ডার কালার ইউনিফিকেশন */
 .border, .border-t, .border-b, .border-l, .border-r, hr {
   border-color: var(--border) !important;
 }
 
-/* ২. ফিন্যান্স ফন্ট */
+/* ফিন্যান্স ফন্ট লজিক */
 .font-mono-finance {
   font-family: ui-monospace, 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
-/* ৩. গ্লোবাল কাস্টম স্ক্রলবার */
+/* কাস্টম প্রোটোকল স্ক্রলবার */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-app);
@@ -163,94 +199,56 @@
   border-radius: 20px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--accent);
 }
 
-/* ৪. মোবাইল এক্সপেরিয়েন্স */
-@media (max-width: 768px) {
-  .app-card { border-radius: 18px; }
-  
-  /* মোবাইল বটম নেভ ফিক্স */
-  .fixed.bottom-0 {
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-
-  /* মডাল ওভারফ্লো ফিক্স */
-  .max-h-\[80vh\] {
-    max-height: 85vh !important;
-    scrollbar-width: thin;
-  }
-}
-
-/* ৫. ডার্ক মোড সিলেক্ট অপশন ফিক্স */
-.dark select option {
-  background-color: var(--bg-card);
-  color: var(--text-main);
-}
-
-/* ৬. ইমেজ/আইকন গ্লো ইফেক্ট */
-.icon-glow {
-  filter: drop-shadow(0 0 8px var(--ring));
-}
-
-/* মডাল ফিক্স - এটি মডালকে সবসময় স্ক্রিনের মাঝখানে রাখবে */
-div[class*="fixed"].inset-0 {
-    display: flex !important;
-    align-items: center !important; /* মাঝখানে আনবে */
-    justify-content: center !important;
-    padding: 1rem;
-    z-index: 9999;
-}
-
-/* মডাল কার্ড ডিজাইন */
-.app-card-modal {
-    width: 100%;
-    max-width: 500px;
-    position: relative;
-    margin: auto; /* ফিক্সড সেন্টারিং */
-    background: var(--bg-card);
-    border-radius: 28px;
-    box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.5);
-}
-
-/* --- 1. MODAL SYSTEM OVERHAUL --- */
-.modal-overlay {
-    position: fixed !important;
-    inset: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    z-index: 9999 !important; /* সব কিছুর উপরে থাকবে */
-    padding: 1rem;
-}
-
-.modal-backdrop {
-    position: fixed !important;
-    inset: 0 !important;
-    background: rgba(0, 0, 0, 0.7) !important;
-    backdrop-filter: blur(8px) !important;
-    -webkit-backdrop-filter: blur(8px) !important;
-    z-index: -1 !important; /* মডাল কার্ডের পেছনে থাকবে */
-}
-
-/* --- 2. DROPDOWN MASTER FIX (Dark Mode Ready) --- */
+/* ড্রপডাউন (Select) ডার্ক মোড ফিক্স */
 select.app-input {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238B949E'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
-    background-repeat: no-repeat !important;
-    background-position: right 1rem center !important;
-    background-size: 1.2em !important;
-    appearance: none !important;
-    cursor: pointer !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238B949E'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 1.25rem center !important;
+  background-size: 1em !important;
+  appearance: none !important;
+  cursor: pointer !important;
 }
 
 .dark select option {
-    background-color: #1A1A1B !important;
-    color: #F0F0F0 !important;
-    padding: 12px !important;
+  background-color: #1A1A1B !important;
+  color: #F0F0F0 !important;
+  padding: 12px !important;
 }
 
-/* --- 3. FIX FOR MYSTERIOUS LINES --- */
-body:has(.modal-overlay) {
-    overflow: hidden !important; /* মডাল ওপেন থাকলে নিচের টেবিল বা স্ক্রল সব লক */
+/* মোবাইল অপ্টিমাইজেশন */
+@media (max-width: 768px) {
+  .app-card { border-radius: 20px; }
+  
+  .app-input, .pill-btn, .bordered-icon-btn {
+    font-size: 14px !important;
+  }
+
+  /* বটম নেভিগেশন ব্লার ফিক্স */
+  .fixed.bottom-0 {
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+}
+
+/* --- GLOBAL STICKY HEADER FIX --- */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 50; /* সবকিছুর উপরে */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background-color: rgba(var(--bg-app-rgb), 0.85);
+  border-bottom: 1px solid var(--border-color);
+  width: 100%;
+}
+
+/* Mobile Padding Fix */
+@media (max-width: 768px) {
+  .app-container {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
 }
