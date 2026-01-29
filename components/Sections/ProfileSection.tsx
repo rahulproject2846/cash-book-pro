@@ -1,26 +1,70 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     User, Lock, Trash2, Save, ShieldCheck, Mail, 
-    AlertTriangle, Loader2, KeyRound, LogOut 
+    AlertTriangle, Loader2, KeyRound, LogOut, Camera, 
+    RefreshCcw, Image as ImageIcon, Check, Chrome, ShieldAlert
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ModalLayout } from '@/components/Modals';
 
 export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) => {
+    // --- STATES ---
     const [name, setName] = useState(currentUser?.username || '');
-    const [currentPassword, setCurrentPassword] = useState(''); // বর্তমান পাসওয়ার্ড
-    const [newPassword, setNewPassword] = useState(''); // নতুন পাসওয়ার্ড
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    
+    // Image States
+    const [previewImage, setPreviewImage] = useState(currentUser?.image || '');
+    const [isCustomImage, setIsCustomImage] = useState(currentUser?.isCustomImage || false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // ১. প্রোফাইল ও পাসওয়ার্ড আপডেট হ্যান্ডলার
+    // ডিফল্ট অ্যাভাটার কালার প্যালেট (Studio Presets)
+    const avatarPresets = [
+        'linear-gradient(135deg, #F97316 0%, #FB923C 100%)', // Orange
+        'linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)', // Blue
+        'linear-gradient(135deg, #10B981 0%, #34D399 100%)', // Green
+        'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)', // Purple
+        'linear-gradient(135deg, #EF4444 0%, #F87171 100%)', // Red
+        'linear-gradient(135deg, #1E293B 0%, #334155 100%)', // Slate
+    ];
+
+    // --- HANDLERS ---
+
+    // ১. ইমেজ আপলোড হ্যান্ডলার
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) return toast.error("Image too large (Max 2MB)");
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result as string;
+                setPreviewImage(base64String);
+                setIsCustomImage(true);
+                toast.success("Identity Image Loaded");
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    // ২. গুগল ইমেজ সিঙ্ক প্রোটোকল
+    const handleGoogleSync = () => {
+        if (currentUser?.authProvider !== 'google') {
+            return toast.error("Account not linked with Google");
+        }
+        setPreviewImage(currentUser?.image); // গুগল থেকে আসা অরিজিনাল ইউআরএল
+        setIsCustomImage(false); // সিঙ্ক অন করা হলো
+        toast.success("Synced with Google Identity");
+    };
+
+    // ৩. মেইন আপডেট হ্যান্ডলার
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!name) return toast.error("Identity name cannot be empty");
-        if (!currentPassword) return toast.error("Please enter current security key to verify");
+        if (!name) return toast.error("Name is required");
+        if (!currentPassword) return toast.error("Verify current security key");
 
         setLoading(true);
         try {
@@ -29,31 +73,32 @@ export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) =
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     userId: currentUser._id, 
-                    currentPassword, // ভেরিফিকেশনের জন্য পাঠানো হচ্ছে
+                    currentPassword,
                     newName: name, 
-                    newPassword: newPassword || undefined 
+                    newPassword: newPassword || undefined,
+                    image: previewImage,
+                    isCustomImage
                 }),
             });
             
             const data = await res.json();
-
             if (res.ok) {
                 setCurrentUser(data.user);
                 localStorage.setItem('cashbookUser', JSON.stringify(data.user));
-                toast.success('Security identity updated');
-                setCurrentPassword(''); // ফিল্ড ক্লিয়ার
-                setNewPassword(''); // ফিল্ড ক্লিয়ার
+                toast.success('Identity Protocol Synchronized');
+                setCurrentPassword('');
+                setNewPassword('');
             } else {
-                toast.error(data.message || 'Protocol update failed');
+                toast.error(data.message || 'Update failed');
             }
         } catch (error) {
-            toast.error('Network synchronization failure');
+            toast.error('Network Error');
         } finally {
             setLoading(false);
         }
     };
 
-    // ২. অ্যাকাউন্ট ডিলিট লজিক (আগের মতই)
+    // ৪. অ্যাকাউন্ট ডিলিট
     const handleDeleteAccount = async () => {
         setLoading(true);
         try {
@@ -62,109 +107,159 @@ export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) =
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: currentUser._id }),
             });
-            if (res.ok) {
-                toast.success('Vault Terminated');
-                onLogout();
-            } else {
-                toast.error('Termination Failed');
-            }
-        } catch (error) { toast.error('Server error'); } finally { setLoading(false); }
+            if (res.ok) { toast.success('Vault Destroyed'); onLogout(); }
+        } catch (error) { toast.error('Protocol Error'); } finally { setLoading(false); }
     };
 
     return (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pb-24 max-w-4xl mx-auto space-y-8 px-2">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pb-24 max-w-5xl mx-auto space-y-8 px-2">
             
             <div className="anim-fade-up">
                 <h2 className="text-3xl font-black text-[var(--text-main)] uppercase italic tracking-tighter">Identity Protocol</h2>
-                <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[3px] mt-1">Manage encryption and secure access</p>
+                <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[3px] mt-1">Configure Personal Encryption & Visuals</p>
             </div>
 
-            {/* PROFILE CARD */}
-            <div className="app-card p-8 relative overflow-hidden group border-orange-500/10">
-                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <ShieldCheck size={120} className="text-orange-500" />
-                </div>
-                <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
-                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-4xl font-black text-white shadow-2xl shadow-orange-500/30 border-4 border-white/10 uppercase italic">
-                        {currentUser?.username?.charAt(0)}
-                    </div>
-                    <div className="text-center md:text-left flex-1">
-                        <h3 className="text-2xl font-black text-[var(--text-main)] uppercase tracking-tight italic">{currentUser?.username}</h3>
-                        <div className="flex items-center justify-center md:justify-start gap-2 text-[var(--text-muted)] text-xs mt-2 font-bold tracking-wider">
-                            <Mail size={14} className="text-orange-500" /> {currentUser?.email}
+            {/* --- TOP SECTION: VISUAL IDENTITY --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                {/* Visual Identity Display */}
+                <div className="lg:col-span-1 space-y-6">
+                    <div className="app-card p-8 flex flex-col items-center text-center relative overflow-hidden group border-orange-500/10">
+                        <div className="relative z-10">
+                            <div className="relative">
+                                {/* Avatar Display */}
+                                <div 
+                                    className="w-32 h-32 rounded-[40px] flex items-center justify-center text-5xl font-black text-white shadow-2xl border-4 border-white/10 uppercase italic overflow-hidden"
+                                    style={{ 
+                                        background: !previewImage ? avatarPresets[0] : 'transparent',
+                                    }}
+                                >
+                                    {previewImage ? (
+                                        <img src={previewImage} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        currentUser?.username?.charAt(0)
+                                    )}
+                                </div>
+                                {/* Change Overlay */}
+                                <button 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="absolute -right-2 -bottom-2 p-3 bg-orange-500 text-white rounded-2xl shadow-xl hover:scale-110 transition-all active:scale-95"
+                                >
+                                    <Camera size={18} strokeWidth={3} />
+                                </button>
+                                <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                            </div>
+                            
+                            <h3 className="text-xl font-black text-[var(--text-main)] mt-6 uppercase tracking-tight italic">{currentUser?.username}</h3>
+                            <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mt-1 opacity-60">{currentUser?.email}</p>
+                            
+                            {/* Google Sync Badge */}
+                            {currentUser?.authProvider === 'google' && !isCustomImage && (
+                                <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] font-black uppercase tracking-widest">
+                                    <Chrome size={10} /> Synced with Google
+                                </div>
+                            )}
                         </div>
                     </div>
+
+                    {/* Quick Presets & Sync */}
+                    <div className="app-card p-6 space-y-4">
+                        <h4 className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1">Identity Presets</h4>
+                        <div className="grid grid-cols-6 gap-2">
+                            {avatarPresets.map((bg, i) => (
+                                <button 
+                                    key={i} 
+                                    onClick={() => { setPreviewImage(''); setIsCustomImage(true); }}
+                                    className="h-8 rounded-lg border-2 border-transparent hover:border-orange-500 transition-all"
+                                    style={{ background: bg }}
+                                />
+                            ))}
+                        </div>
+                        {currentUser?.authProvider === 'google' && isCustomImage && (
+                            <button 
+                                onClick={handleGoogleSync}
+                                className="w-full py-3 mt-2 rounded-xl border border-blue-500/20 bg-blue-500/5 text-blue-400 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-500 hover:text-white transition-all"
+                            >
+                                <RefreshCcw size={12} /> Sync with Google
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* UPDATE FORM */}
-                <div className="app-card p-8 space-y-6">
-                    <h4 className="text-xs font-black text-[var(--text-main)] uppercase tracking-[3px] flex items-center gap-3 italic">
-                        <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500"><User size={16}/></div>
-                        Personal Data
-                    </h4>
-                    <form onSubmit={handleUpdateProfile} className="space-y-5">
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">Full Identity Name</label>
-                            <input type="text" className="app-input font-bold uppercase" value={name} onChange={(e) => setName(e.target.value)} />
+                {/* --- UPDATE FORM --- */}
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="app-card p-8 space-y-8">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-orange-500/10 rounded-xl text-orange-500"><User size={20}/></div>
+                            <h4 className="text-sm font-black text-[var(--text-main)] uppercase tracking-[2px] italic">Access Configuration</h4>
                         </div>
+                        
+                        <form onSubmit={handleUpdateProfile} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">Identity Name</label>
+                                    <input type="text" className="app-input font-bold uppercase h-14" value={name} onChange={(e) => setName(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">New Security Key (Optional)</label>
+                                    <input type="password" placeholder="••••••••" className="app-input font-mono h-14" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                                </div>
+                            </div>
 
-                        <div className="space-y-2 pt-2 border-t border-[var(--border-color)]">
-                            <label className="text-[9px] font-black text-orange-500 uppercase tracking-widest ml-1">Current Security Key (Verify)</label>
-                            <input 
-                                type="password" 
-                                placeholder="REQUIRED FOR CHANGES" 
-                                className="app-input font-mono border-orange-500/20 focus:border-orange-500" 
-                                value={currentPassword} 
-                                onChange={(e) => setCurrentPassword(e.target.value)} 
-                                required
-                            />
+                            <div className="p-6 bg-orange-500/[0.03] border-2 border-dashed border-orange-500/10 rounded-3xl space-y-4">
+                                <div className="flex items-center gap-2 text-orange-500">
+                                    <KeyRound size={16} />
+                                    <label className="text-[10px] font-black uppercase tracking-widest">Verification Required</label>
+                                </div>
+                                <input 
+                                    type="password" 
+                                    placeholder="ENTER CURRENT SECURITY KEY TO EXECUTE SYNC" 
+                                    className="app-input font-mono h-14 border-orange-500/20 focus:border-orange-500 bg-[var(--bg-card)]" 
+                                    value={currentPassword} 
+                                    onChange={(e) => setCurrentPassword(e.target.value)} 
+                                    required
+                                />
+                            </div>
+
+                            <button 
+                                disabled={loading} 
+                                className="app-btn-primary w-full py-5 shadow-2xl shadow-orange-500/30 text-xs font-black tracking-[4px] hover:scale-[1.01] active:scale-[0.98] transition-all"
+                            >
+                                {loading ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                                EXECUTE SYNCHRONIZATION
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Protocol Termination */}
+                    <div className="app-card p-8 bg-red-500/[0.02] border-red-500/10 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="flex items-center gap-5">
+                            <div className="p-3 bg-red-500/10 rounded-2xl text-red-500"><ShieldAlert size={24}/></div>
+                            <div>
+                                <h4 className="text-xs font-black text-red-500 uppercase tracking-widest">Danger Protocol</h4>
+                                <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest mt-1">Erase identity and purge all vaults permanently</p>
+                            </div>
                         </div>
-
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">New Security Key (Optional)</label>
-                            <input 
-                                type="password" 
-                                placeholder="••••••••" 
-                                className="app-input font-mono" 
-                                value={newPassword} 
-                                onChange={(e) => setNewPassword(e.target.value)} 
-                            />
-                        </div>
-
-                        <button disabled={loading} className="app-btn-primary w-full py-4 mt-2 shadow-2xl shadow-orange-500/20">
-                            {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                            <span className="tracking-[3px] font-black uppercase text-xs">Execute Sync</span>
+                        <button onClick={() => setShowDeleteConfirm(true)} className="px-6 py-3 rounded-xl border-2 border-red-500/20 text-red-500 font-black text-[9px] uppercase tracking-[2px] hover:bg-red-500 hover:text-white transition-all shrink-0">
+                            Self Destruct
                         </button>
-                    </form>
-                </div>
-
-                <div className="space-y-6">
-                    <div className="app-card p-8 bg-red-500/5 border-red-500/10">
-                        <h4 className="text-xs font-black text-red-500 uppercase tracking-[3px] flex items-center gap-3 italic mb-3">
-                            <AlertTriangle size={18} /> Danger Protocol
-                        </h4>
-                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest leading-relaxed">
-                            Permanently erase your identity and all encrypted vaults. This command is irreversible.
-                        </p>
-                        <button onClick={() => setShowDeleteConfirm(true)} className="mt-6 w-full py-4 rounded-2xl border-2 border-red-500/20 text-red-500 font-black text-[10px] uppercase tracking-[3px] hover:bg-red-500 hover:text-white transition-all">
-                            Self Destruct Account
-                        </button>
                     </div>
                 </div>
             </div>
 
+            {/* DELETE MODAL */}
             <AnimatePresence>
                 {showDeleteConfirm && (
-                    <ModalLayout title="Vault Destruction" onClose={() => setShowDeleteConfirm(false)}>
+                    <ModalLayout title="Protocol: Termination" onClose={() => setShowDeleteConfirm(false)}>
                         <div className="space-y-6">
                             <div className="p-5 rounded-2xl bg-red-500/10 border border-red-500/20 flex gap-4">
                                 <AlertTriangle className="text-red-500 shrink-0" size={24} />
-                                <p className="text-[11px] font-bold text-red-500 uppercase leading-relaxed">Final Warning: All financial history will be purged.</p>
+                                <p className="text-[11px] font-bold text-red-500 uppercase leading-relaxed">
+                                    Warning: Executing this command will permanently wipe your identity and all financial archives.
+                                </p>
                             </div>
-                            <button onClick={handleDeleteAccount} disabled={loading} className="w-full py-4 bg-red-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl">
-                                {loading ? "PURGING..." : "CONFIRM DESTRUCTION"}
+                            <button onClick={handleDeleteAccount} disabled={loading} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-transform">
+                                {loading ? "PURGING..." : "CONFIRM TERMINATION"}
                             </button>
                         </div>
                     </ModalLayout>

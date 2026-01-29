@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Plus, Search, Loader2, FileUp, Filter, 
     ArrowDownAZ, LayoutGrid, ChevronDown, ChevronLeft, ChevronRight, 
-    Share2, Copy, Trash2, Edit2, Wallet, BarChart3, Download
+    Share2, Copy, Trash2, Edit2, Wallet, BarChart3, Download, Check, CreditCard, Layers, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -16,7 +16,73 @@ import { BookCard } from '@/components/BookCard';
 import { AdvancedExportModal } from '@/components/Modals/AdvancedExportModal';
 import { AnalyticsChart } from '@/components/AnalyticsChart';
 
-export const BooksSection = ({ currentUser, currentBook, setCurrentBook, triggerFab, setTriggerFab }: any) => {
+// --- CUSTOM DROPDOWN (SCROLLABLE & THEMED) ---
+const CustomSelect = ({ label, value, options, onChange, icon: Icon }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsOpen(false);
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="space-y-2 relative" ref={dropdownRef}>
+            <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1 flex items-center gap-2">
+                {Icon && <Icon size={12} className="text-orange-500" />} {label}
+            </label>
+            <button 
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center justify-between h-14 px-5 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-2xl focus:border-orange-500 transition-all text-[11px] font-black uppercase tracking-widest text-[var(--text-main)]"
+            >
+                <span className="truncate">{value}</span>
+                <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 5, scale: 0.95 }} 
+                        animate={{ opacity: 1, y: 0, scale: 1 }} 
+                        exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                        className="absolute z-[200] left-0 right-0 top-full mt-2 w-full bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl overflow-hidden"
+                    >
+                        <div className="max-h-48 overflow-y-auto no-scrollbar p-1">
+                            {options.map((opt: string) => (
+                                <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => { onChange(opt); setIsOpen(false); }}
+                                    className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500 transition-colors flex items-center justify-between rounded-xl mb-1 ${value === opt ? 'text-orange-500 bg-orange-500/5' : 'text-[var(--text-muted)]'}`}
+                                >
+                                    {opt}
+                                    {value === opt && <Check size={14} />}
+                                </button>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+export const BooksSection = ({ 
+    currentUser, 
+    currentBook, 
+    setCurrentBook, 
+    triggerFab, 
+    setTriggerFab, 
+    externalModalType, 
+    setExternalModalType,
+    bookForm,   
+    setBookForm  
+}: any) => {
+    
     // --- ১. সকল স্টেট (States) ---
     const [books, setBooks] = useState<any[]>([]);
     const [entries, setEntries] = useState<any[]>([]); 
@@ -24,24 +90,32 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
     const [isLoading, setIsLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
-    // ড্যাশবোর্ড ও ডিটেইলস কন্ট্রোলস
     const [searchQuery, setSearchQuery] = useState(''); 
     const [bookSortOrder, setBookSortOrder] = useState<'recent' | 'az'>('recent');
     const [detailsSearchQuery, setDetailsSearchQuery] = useState(''); 
     const [detailsPage, setDetailsPage] = useState(1);
 
-    // গ্লোবাল মডাল ম্যানেজমেন্ট
     const [modalType, setModalType] = useState<'none' | 'addBook' | 'addEntry' | 'deleteConfirm' | 'deleteBookConfirm' | 'editBook' | 'analytics' | 'export' | 'share'>('none');
+    
+    // Sync with External Modal
+    useEffect(() => {
+        if (externalModalType && externalModalType !== 'none') {
+            setModalType(externalModalType);
+            setExternalModalType('none');
+        }
+    }, [externalModalType, setExternalModalType]);
+
     const [deleteTarget, setDeleteTarget] = useState<any>(null);
     const [editTarget, setEditTarget] = useState<any>(null);
     const [confirmName, setConfirmName] = useState('');
 
-    const [bookForm, setBookForm] = useState({ name: '', description: '' });
+    // 🔥 UPDATE 1: Added 'time' field to entryForm state
     const [entryForm, setEntryForm] = useState({ 
         title: '', amount: '', type: 'expense', 
-        category: currentUser?.categories?.[0] || 'General', 
-        paymentMethod: 'Cash', note: '', status: 'Completed', 
-        date: new Date().toISOString().split('T')[0] 
+        category: currentUser?.categories?.[0] || 'GENERAL', 
+        paymentMethod: 'CASH', note: '', status: 'Completed', 
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) 
     });
 
     // শেয়ারিং স্টেট
@@ -49,11 +123,9 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
     const [isSharing, setIsSharing] = useState(false);
     const [shareLoading, setShareLoading] = useState(false);
 
-    // --- ২. হেল্পার ও ডাটা লজিক ---
-
+    // --- ২. হেল্পার এবং ডাটা লজিক ---
     const getCurrencySymbol = () => currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
-    // ✅ সমাধান: স্মার্ট স্ক্রল ফিক্স (বই পরিবর্তন করলে একদম উপরে যাবে)
     useEffect(() => {
         if (currentBook) {
             window.scrollTo(0, 0); 
@@ -62,36 +134,25 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
     }, [currentBook]);
 
     const fetchData = async () => {
-    if (!currentUser?._id) return;
-    setIsLoading(true);
-    try {
-        const booksRes = await fetch(`/api/books?userId=${currentUser._id}`);
-        if (booksRes.ok) {
-            const responseData = await booksRes.json();
-            
-            // 🔥 গুরুত্বপূর্ণ ফিক্স: ডাটা অ্যারো কি না তা চেক করা
-            // যদি responseData.books থাকে তবে সেটা নেবে, না হলে সরাসরি responseData নেবে
-            const booksArray = Array.isArray(responseData) ? responseData : (responseData.books || []);
-            
-            setBooks(booksArray);
-            
-            // ড্যাশবোর্ড ব্যালেন্স ক্যালকুলেশন লজিক ফিক্স
-            let tempAllEntries: any[] = [];
-            await Promise.all(booksArray.map(async (book: any) => {
-                const res = await fetch(`/api/entries?bookId=${book._id}`);
-                const entryData = await res.json();
-                // এখানেও অ্যারো চেক
-                const entries = Array.isArray(entryData) ? entryData : (entryData.entries || []);
-                tempAllEntries = [...tempAllEntries, ...entries];
-                    }));
-                    setAllEntries(tempAllEntries);
-                }
-            } catch (err) { 
-                console.error("Fetch Error:", err); 
-            } finally { 
-                setIsLoading(false); 
+        if (!currentUser?._id) return;
+        setIsLoading(true);
+        try {
+            const booksRes = await fetch(`/api/books?userId=${currentUser._id}`);
+            if (booksRes.ok) {
+                const responseData = await booksRes.json();
+                const booksArray = Array.isArray(responseData) ? responseData : (responseData.books || []);
+                setBooks(booksArray);
+                
+                let temp: any[] = [];
+                const res = await Promise.all(booksArray.map(async (b: any) => {
+                    const r = await fetch(`/api/entries?bookId=${b._id}`);
+                    const d = await r.json();
+                    return d.entries || d;
+                }));
+                setAllEntries(res.flat());
             }
-        };
+        } catch (err) { console.error("Sync Failure", err); } finally { setIsLoading(false); }
+    };
 
     const fetchBookEntries = async (id: string) => {
         try {
@@ -115,51 +176,41 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
     // FAB Trigger
     useEffect(() => {
         if (!triggerFab) return;
-        if (currentBook) openNewEntryModal(); 
+        if (currentBook) setModalType('addEntry'); 
         else { setBookForm({ name: '', description: '' }); setModalType('addBook'); }
         setTriggerFab(false); 
     }, [triggerFab]);
 
     // --- ৩. অ্যাকশন হ্যান্ডলার্স ---
-
     const handleSaveBook = async (e: React.FormEvent) => {
         e.preventDefault();
         const isEdit = modalType === 'editBook';
         const url = isEdit ? `/api/books/${currentBook._id}` : '/api/books';
-        const res = await fetch(url, { 
-            method: isEdit ? 'PUT' : 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ ...bookForm, userId: currentUser._id }) 
-        });
-        if (res.ok) { setModalType('none'); fetchData(); if(isEdit) setCurrentBook(null); toast.success("Ledger Synchronized"); }
+        const res = await fetch(url, { method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bookForm, userId: currentUser._id }) });
+        if (res.ok) { setModalType('none'); fetchData(); if(isEdit) setCurrentBook(null); toast.success("Ledger Sync Successful"); }
     };
 
     const handleSaveEntry = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!currentBook?._id) return;
 
-        // ✅ ডুপ্লিকেট চেক লজিক (Security Protocol)
+        // ডুপ্লিকেট চেক লজিক
         const isDuplicate = entries.some(prev => 
             prev.title.toLowerCase() === entryForm.title.toLowerCase() && 
             prev.amount === Number(entryForm.amount) && 
             new Date(prev.date).toDateString() === new Date(entryForm.date).toDateString()
         );
 
-        if (!editTarget && isDuplicate) {
-            return toast.error("Matching record found in vault. Duplicate entry blocked.");
-        }
+        if (!editTarget && isDuplicate) return toast.error("Duplicate blocked.");
 
         const url = editTarget ? `/api/entries/${editTarget._id}` : '/api/entries';
-        const res = await fetch(url, { 
-            method: editTarget ? 'PUT' : 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ ...entryForm, bookId: currentBook._id }) 
-        });
+        // 🔥 UPDATE 3: entryForm includes 'time' now, so spread operator handles it
+        const res = await fetch(url, { method: editTarget ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...entryForm, bookId: currentBook._id }) });
         if (res.ok) { 
             setModalType('none'); setEditTarget(null);
             await fetchBookEntries(currentBook._id); 
             await fetchData(); 
-            toast.success("Transaction Secured");
+            toast.success("Secured");
         }
     };
 
@@ -174,67 +225,138 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
         try {
             const res = await fetch('/api/books/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookId: currentBook._id, enable: !isSharing }) });
             const data = await res.json();
-            if (res.ok) { setIsSharing(data.data.isPublic); setShareToken(data.data.shareToken); toast.success("Link Protocol Updated"); }
-        } catch (err) { toast.error("Protocol Error"); } finally { setShareLoading(false); }
+            if (res.ok) { setIsSharing(data.data.isPublic); setShareToken(data.data.shareToken); toast.success("Access Updated"); }
+        } catch (err) { toast.error("Error"); } finally { setShareLoading(false); }
     };
 
     const handleDeleteEntry = async () => {
-        if (confirmName !== deleteTarget.title) return toast.error("Identity mismatch");
+        if (confirmName !== deleteTarget.title) return toast.error("Mismatch");
         await fetch(`/api/entries/${deleteTarget._id}`, { method: 'DELETE' });
-        setModalType('none'); fetchBookEntries(currentBook._id); fetchData(); toast.success('Record Cleared');
+        setModalType('none'); fetchBookEntries(currentBook._id); fetchData(); toast.success('Cleared');
     };
 
     const handleDeleteBook = async () => {
-        if (confirmName !== currentBook.name) return toast.error("Identity mismatch");
+        if (confirmName !== currentBook.name) return toast.error("Mismatch");
         await fetch(`/api/books/${currentBook._id}`, { method: 'DELETE' });
         setModalType('none'); setCurrentBook(null); fetchData(); toast.success('Vault Terminated');
     };
 
     const openEditEntry = (entry: any) => {
         setEditTarget(entry);
-        setEntryForm({ ...entry, amount: entry.amount.toString(), date: new Date(entry.date).toISOString().split('T')[0] });
+        setEntryForm({ ...entry, amount: entry.amount.toString(), date: new Date(entry.date).toISOString().split('T')[0],
+        time: entry.time || "" });
         setModalType('addEntry');
     };
 
     const openNewEntryModal = () => { 
         setEditTarget(null);
-        setEntryForm({ title:'', amount:'', type:'expense', category: currentUser?.categories?.[0] || 'General', paymentMethod:'Cash', note:'', status: 'Completed', date: new Date().toISOString().split('T')[0] }); 
+        setEntryForm({ 
+            title:'', amount:'', type:'expense', category: currentUser?.categories?.[0] || 'GENERAL', paymentMethod:'CASH', note:'', status: 'Completed', 
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) // Reset time on new
+        }); 
         setModalType('addEntry'); 
     };
 
-    // --- ৪. এক্সেল ইমপোর্ট ---
-    const handleImportClick = () => fileInputRef.current?.click();
     const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const loadingToast = toast.loading("Verifying Vault Signature...");
+
+        const loadingToast = toast.loading("Executing Secure Import Protocol...");
         try {
             const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data);
+            const workbook = XLSX.read(data, { cellDates: true });
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+
             if (worksheet['A1']?.v !== "SOURCE: CASHBOOK PRO DIGITAL LEDGER") {
                 toast.dismiss(loadingToast);
-                return toast.error("Invalid Source: File signature missing!");
+                return toast.error("Unsupported File! Structure mismatch.");
             }
-            const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, { range: 4 });
-            const importedBookName = file.name.replace("_Report.xlsx", "").replace(".xlsx", "");
+
+            const vaultIdentityRaw = worksheet['A2']?.v || "";
+            const importedBookName = vaultIdentityRaw.includes(":") 
+                ? vaultIdentityRaw.split(":")[1].trim() 
+                : file.name.split('_')[0];
+
+            const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, { range: 5 });
+
+            if (!rawData || rawData.length === 0) {
+                toast.dismiss(loadingToast);
+                return toast.error("Empty Archive: No transactions found.");
+            }
+
             let targetBookId;
             const existingBook = books.find(b => b.name.toLowerCase() === importedBookName.toLowerCase());
-            if (existingBook) targetBookId = existingBook._id;
-            else {
-                const res = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: importedBookName, description: "Secure Import", userId: currentUser._id }) });
+
+            if (existingBook) {
+                targetBookId = existingBook._id;
+            } else {
+                const res = await fetch('/api/books', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: importedBookName, description: "Restored via Protocol", userId: currentUser._id })
+                });
                 const json = await res.json();
+                if (!res.ok) throw new Error(json.message);
                 targetBookId = json.book._id;
             }
-            const importPromises = rawData.map(row => fetch('/api/entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookId: targetBookId, title: row.Title, amount: Number(row.Amount), type: row.Type.toLowerCase(), category: row.Category, paymentMethod: row.Method || "Cash", note: row.Note, date: new Date(row.Date) }) }));
+
+            const entriesRes = await fetch(`/api/entries?bookId=${targetBookId}`);
+            const entriesJson = await entriesRes.json();
+            const existingEntries = entriesJson.entries || entriesJson;
+
+            const newRecords = rawData.filter(row => {
+                if (!row.Title || !row.Amount) return false;
+                const isDup = existingEntries.some((old: any) => 
+                    old.title.toLowerCase() === String(row.Title).toLowerCase() &&
+                    old.amount === Number(row.Amount) &&
+                    new Date(old.date).toDateString() === new Date(row.Date).toDateString() &&
+                    old.type.toLowerCase() === String(row.Type).toLowerCase()
+                );
+                return !isDup;
+            });
+
+            if (newRecords.length === 0) {
+                toast.dismiss(loadingToast);
+                return toast.success("Vault is already up to date.");
+            }
+
+            const importPromises = newRecords.map(row => {
+                const cleanNote = (row.Note === "-" || !row.Note) ? "" : row.Note;
+
+                return fetch('/api/entries', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bookId: targetBookId,
+                        title: row.Title,
+                        amount: Number(row.Amount),
+                        type: String(row.Type).toLowerCase(),
+                        category: row.Category || "GENERAL",
+                        paymentMethod: row.Method || "CASH",
+                        note: cleanNote,
+                        date: new Date(row.Date),
+                        status: row.Status || "Completed",
+                        time: "12:00" // Default time for imported entries
+                    })
+                });
+            });
+
             await Promise.all(importPromises);
-            await fetchData();
+            
+            await fetchData(); 
             toast.dismiss(loadingToast);
-            toast.success("Vault Synchronized Successfully");
-        } catch (error) { toast.dismiss(loadingToast); toast.error("Import Protocol Failed"); }
+            toast.success(`Success! Synchronized ${newRecords.length} records with ${importedBookName}`);
+
+        } catch (error: any) {
+            console.error("IMPORT_FAILURE:", error);
+            toast.dismiss(loadingToast);
+            toast.error("Decryption failed.corrupted structure.");
+        } finally {
+            if (e.target) e.target.value = ''; 
+        }
     };
 
-    // --- ৫. রেন্ডার লজিক ---
     const filteredBooks = books
         .filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()))
         .sort((a, b) => bookSortOrder === 'az' ? a.name.localeCompare(b.name) : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -244,61 +366,53 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
         return d.filter(e => e.type === 'income').reduce((a,b)=>a+b.amount,0) - d.filter(e => e.type === 'expense').reduce((a,b)=>a+b.amount,0);
     };
 
+    if (isLoading && books.length === 0) return <div className="flex justify-center py-40"><Loader2 className="animate-spin text-orange-500" size={40} /></div>;
+
     return (
         <div className="space-y-6">
             <AnimatePresence mode="wait">
                 {!currentBook ? (
-                    /* --- DASHBOARD --- */
                     <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
+                        {/* ১. লেজার হাব কন্ট্রোল বার */}
                         <div className="bg-[var(--bg-card)] p-5 md:p-6 rounded-[32px] border border-[var(--border-color)] shadow-sm flex flex-col md:flex-row gap-6 items-center justify-between">
-                            <div className="flex items-center gap-4 w-full md:w-auto text-center md:text-left">
+                            <div className="flex items-center gap-4 w-full md:w-auto">
                                 <div className="p-4 bg-orange-500/10 rounded-2xl text-orange-500 shadow-inner"><LayoutGrid size={24} /></div>
-                                <div>
-                                    <h3 className="text-2xl font-black text-[var(--text-main)] tracking-tighter uppercase italic leading-none">Ledger Hub</h3>
+                                <div className="text-left">
+                                    <h3 className="text-2xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none">Ledger Hub</h3>
                                     <p className="text-[10px] font-bold text-orange-500 uppercase tracking-[3px] mt-1.5">{books.length} ACTIVE VAULTS</p>
                                 </div>
                             </div>
-                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                                <div className="flex items-center gap-3 w-full">
-                                    <div className="relative flex-1 md:w-64 group">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" size={18} />
-                                        <input type="text" placeholder="SEARCH LEDGERS..." className="app-input pl-12 py-4 bg-[var(--bg-app)] border-2 rounded-2xl text-xs font-black uppercase outline-none w-full" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => setBookSortOrder(bookSortOrder === 'recent' ? 'az' : 'recent')} className="p-4 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-orange-500 transition-all"><Filter size={20}/></button>
-                                        <button onClick={handleImportClick} className="p-4 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-green-500 transition-all"><FileUp size={20} /></button>
-                                    </div>
-                                    <input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".xlsx, .xls" className="hidden" />
+                            <div className="flex flex-wrap items-center justify-end gap-3 w-full md:w-auto">
+                                <div className="relative flex-1 md:w-64 group">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" size={18} />
+                                    <input type="text" placeholder="SEARCH LEDGERS..." className="app-input pl-12 py-4 bg-[var(--bg-app)] border-2 rounded-2xl text-xs font-black uppercase tracking-widest outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                                 </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setBookSortOrder(bookSortOrder === 'recent' ? 'az' : 'recent')} className="p-4 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-orange-500 transition-all"><Filter size={20}/></button>
+                                    <button onClick={() => fileInputRef.current?.click()} className="p-4 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-green-500 transition-all"><FileUp size={20} /></button>
+                                </div>
+                                <input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".xlsx, .xls" className="hidden" />
                             </div>
                         </div>
 
+                        {/* ২. গ্রিড */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 px-1">
-                            {/* ADD NEW LEDGER CARD */}
-<div 
-    onClick={() => { setBookForm({name:'', description:''}); setModalType('addBook'); }} 
-    
-    // 🔥 FIX: এই লাইনটি দেখুন। books.length > 0 হলে মোবাইলে hidden, কিন্তু ডেস্কটপে (md) flex থাকবে।
-    // আর যদি বই না থাকে, তবে সবসময় flex থাকবে।
-    className={`app-card h-[210px] border-2 border-dashed border-orange-500/30 flex-col items-center justify-center text-orange-500 cursor-pointer transition-all hover:bg-orange-500/5 group 
-    ${books.length > 0 ? 'hidden md:flex' : 'flex'}`}
->
-    <Plus size={36} strokeWidth={3} className="mb-2 group-hover:scale-110 transition-transform" />
-    <span className="text-[11px] font-black uppercase tracking-widest">Create Ledger</span>
-</div>
+                            <div onClick={() => { setBookForm({name:'', description:''}); setModalType('addBook'); }} className={`app-card h-[210px] border-2 border-dashed border-orange-500/30 flex-col items-center justify-center text-orange-500 cursor-pointer transition-all hover:bg-orange-500/5 group ${books.length > 0 ? 'hidden md:flex' : 'flex'}`}>
+                                <Plus size={36} strokeWidth={3} className="mb-2 group-hover:scale-110 transition-transform" />
+                                <span className="text-[11px] font-black uppercase tracking-widest">Create Ledger</span>
+                            </div>
                             {filteredBooks.map((b: any) => (
                                 <BookCard key={b._id} book={b} onClick={() => setCurrentBook(b)} balance={getBookBalance(b._id)} currencySymbol={getCurrencySymbol()} />
                             ))}
                         </div>
                     </motion.div>
                 ) : (
-                    /* --- DETAILS --- */
                     <motion.div key="details" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                        <div className="min-h-[650px] overflow-hidden">
+                        <div className="min-h-[650px] overflow-hidden vault-content-padding">
                             <BookDetails 
                                 currentBook={currentBook} items={entries} currentUser={currentUser} onBack={() => setCurrentBook(null)}
                                 onAdd={() => setModalType('addEntry')} 
-                                onEdit={openEditEntry} 
+                                onEdit={(e:any)=>{setEditTarget(e); setEntryForm({...e, amount: e.amount.toString(), date: new Date(e.date).toISOString().split('T')[0]}); setModalType('addEntry');}} 
                                 onDelete={(e: any) => {setDeleteTarget(e); setConfirmName(''); setModalType('deleteConfirm');}}
                                 onToggleStatus={handleToggleStatus} 
                                 onEditBook={() => {setBookForm({name: currentBook.name, description: currentBook.description}); setModalType('editBook');}}
@@ -311,7 +425,7 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
                 )}
             </AnimatePresence>
 
-            {/* ✅ গ্লোবাল মডাল লেয়ার - এবার একদম রুট লেভেলে রাখা হয়েছে যাতে পুরো স্ক্রিন ব্লার হয় */}
+            {/* ✅ গ্লোবাল মডাল লেয়ার */}
             <AnimatePresence>
                 {modalType !== 'none' && (
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -328,49 +442,105 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
                                 </ModalLayout>
                             )}
 
+                            {/* --- ENTRY MODAL (HYBRID: BOTTOM SHEET ON MOBILE, MODAL ON DESKTOP) --- */}
                             {modalType === 'addEntry' && (
-                                <ModalLayout title={editTarget ? "Modify Protocol" : "New Entry Protocol"} onClose={() => setModalType('none')}>
-                                    <div className="max-h-[80vh] overflow-y-auto no-scrollbar px-1">
-                                        <form onSubmit={handleSaveEntry} className="space-y-6 pb-4">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-[var(--text-main)] uppercase tracking-[2px] ml-1">Identity</label>
-                                                <input required placeholder="E.G. SERVER RENT" className="app-input h-14 text-sm font-extrabold uppercase border-2 focus:border-orange-500 transition-all" value={entryForm.title} onChange={e => setEntryForm({...entryForm, title: e.target.value})} />
+                                <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center sm:p-4">
+                                    
+                                    {/* Backdrop */}
+                                    <motion.div 
+                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+                                        onClick={() => setModalType('none')} 
+                                        className="fixed inset-0 bg-black/60 backdrop-blur-md"
+                                    />
+
+                                    {/* Card Content */}
+                                    <motion.div 
+                                        initial={{ y: "100%" }} 
+                                        animate={{ y: 0 }} 
+                                        exit={{ y: "100%" }} 
+                                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                                        className="bg-[var(--bg-card)] w-full md:max-w-lg md:rounded-[32px] rounded-t-[32px] border-t md:border border-[var(--border-color)] shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+                                    >
+                                        {/* Header */}
+                                        <div className="px-6 py-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-app)]/50 shrink-0">
+                                            <div>
+                                                <h2 className="text-xs font-black text-[var(--text-main)] uppercase tracking-[2px] italic">
+                                                    {editTarget ? "PROTOCOL: MODIFY" : "PROTOCOL: NEW ENTRY"}
+                                                </h2>
+                                                <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mt-0.5">Secure Transaction</p>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                            {/* Mobile Close Bar */}
+                                            <div className="md:hidden w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full absolute top-2 left-1/2 -translate-x-1/2 opacity-50"></div>
+                                            
+                                            <button onClick={() => setModalType('none')} className="p-2 rounded-xl text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-500 transition-colors">
+                                                <X size={20} />
+                                            </button>
+                                        </div>
+
+                                        {/* Scrollable Form Body */}
+                                        <div className="p-6 overflow-y-auto no-scrollbar">
+                                            <form onSubmit={handleSaveEntry} className="space-y-6">
+                                                
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-[var(--text-main)] uppercase tracking-[2px] ml-1">Capital</label>
-                                                    <div className="flex items-center h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-2xl px-4 gap-3 focus-within:border-orange-500">
-                                                        <span className="text-xl font-black text-orange-500">{getCurrencySymbol()}</span>
-                                                        <input required type="number" placeholder="0.00" className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-xl font-mono-finance font-bold" value={entryForm.amount} onChange={e => setEntryForm({...entryForm, amount: e.target.value})} />
+                                                    <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1">Identity</label>
+                                                    <input required placeholder="E.G. SERVER MAINTENANCE" className="app-input h-14 text-sm font-extrabold uppercase tracking-widest border-2 focus:border-orange-500 transition-all bg-[var(--bg-app)]" value={entryForm.title} onChange={e => setEntryForm({...entryForm, title: e.target.value})} />
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1">Capital</label>
+                                                        <div className="flex items-center h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-2xl px-4 gap-3 focus-within:border-orange-500 transition-all">
+                                                            <span className="text-lg font-black text-orange-500 select-none">{getCurrencySymbol()}</span>
+                                                            <input required type="number" placeholder="0.00" className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-lg font-mono-finance font-bold text-[var(--text-main)] outline-none" value={entryForm.amount} onChange={e => setEntryForm({...entryForm, amount: e.target.value})} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1">Date</label>
+                                                            <input type="date" className="app-input h-14 uppercase text-xs font-black tracking-widest border-2 cursor-pointer focus:border-orange-500 bg-[var(--bg-app)]" value={entryForm.date} onChange={e => setEntryForm({...entryForm, date: e.target.value})} />
+                                                        </div>
+                                                        {/* 🔥 UPDATE 2: Added Time Input */}
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1">Time</label>
+                                                            <input type="time" className="app-input h-14 uppercase text-xs font-black tracking-widest border-2 cursor-pointer focus:border-orange-500 bg-[var(--bg-app)]" value={entryForm.time} onChange={e => setEntryForm({...entryForm, time: e.target.value})} />
+                                                        </div>
                                                     </div>
                                                 </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <CustomSelect 
+                                                        label="Classification" value={entryForm.category} icon={Layers}
+                                                        options={currentUser?.categories || ['GENERAL']}
+                                                        onChange={(val: string) => setEntryForm({...entryForm, category: val})}
+                                                    />
+                                                    <CustomSelect 
+                                                        label="Channel" value={entryForm.paymentMethod} icon={CreditCard}
+                                                        options={['CASH', 'BANK', 'BKASH', 'NAGAD']}
+                                                        onChange={(val: string) => setEntryForm({...entryForm, paymentMethod: val})}
+                                                    />
+                                                </div>
+
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-[var(--text-main)] uppercase tracking-[2px] ml-1">Timestamp</label>
-                                                    <input type="date" className="app-input h-14 font-bold uppercase text-xs" value={entryForm.date} onChange={e => setEntryForm({...entryForm, date: e.target.value})} />
+                                                    <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1">Note</label>
+                                                    <input placeholder="OPTIONAL MEMO..." className="app-input h-12 text-[10px] font-bold uppercase tracking-widest border-2 focus:border-orange-500 bg-[var(--bg-app)]" value={entryForm.note} onChange={e => setEntryForm({...entryForm, note: e.target.value})} />
                                                 </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-5">
-                                                <div className="relative">
-                                                    <select className="app-input h-14 px-5 text-[10px] font-black uppercase appearance-none cursor-pointer" value={entryForm.category} onChange={e => setEntryForm({...entryForm, category: e.target.value})}>
-                                                        {currentUser?.categories?.map((cat: string) => <option key={cat} value={cat} className='bg-slate-900'>{cat.toUpperCase()}</option>)}
-                                                    </select>
-                                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" size={16}/>
+
+                                                <div className="flex gap-4 pt-2">
+                                                    <button type="button" onClick={() => setEntryForm({...entryForm, type: 'income'})} className={`flex-1 h-14 rounded-2xl font-black text-[10px] tracking-[3px] border-2 transition-all ${entryForm.type === 'income' ? 'bg-green-600 border-green-600 text-white shadow-lg' : 'bg-transparent border-[var(--border)] text-[var(--text-muted)] opacity-50'}`}>INCOME</button>
+                                                    <button type="button" onClick={() => setEntryForm({...entryForm, type: 'expense'})} className={`flex-1 h-14 rounded-2xl font-black text-[10px] tracking-[3px] border-2 transition-all ${entryForm.type === 'expense' ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-transparent border-[var(--border)] text-[var(--text-muted)] opacity-50'}`}>EXPENSE</button>
                                                 </div>
-                                                <div className="relative">
-                                                    <select className="app-input h-14 px-5 text-[10px] font-black uppercase appearance-none cursor-pointer" value={entryForm.paymentMethod} onChange={e => setEntryForm({...entryForm, paymentMethod: e.target.value})}>
-                                                        <option value="Cash" className='bg-slate-900'>CASH</option><option value="Bank" className='bg-slate-900'>BANK</option><option value="bKash" className='bg-slate-900'>BKASH</option>
-                                                    </select>
-                                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" size={16}/>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-4">
-                                                <button type="button" onClick={() => setEntryForm({...entryForm, type: 'income'})} className={`flex-1 h-14 rounded-2xl font-black text-[10px] border-2 transition-all ${entryForm.type === 'income' ? 'bg-green-600 border-green-600 text-white shadow-lg shadow-green-600/20' : 'border-[var(--border-color)] text-slate-500 opacity-50'}`}>INCOME</button>
-                                                <button type="button" onClick={() => setEntryForm({...entryForm, type: 'expense'})} className={`flex-1 h-14 rounded-2xl font-black text-[10px] border-2 transition-all ${entryForm.type === 'expense' ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-600/20' : 'border-[var(--border-color)] text-slate-500 opacity-50'}`}>EXPENSE</button>
-                                            </div>
-                                            <button className="app-btn-primary w-full h-16 text-sm font-black tracking-[4px] shadow-2xl mt-2">CONFIRM</button>
-                                        </form>
-                                    </div>
-                                </ModalLayout>
+
+                                                {/* Footer Button - Fixed at bottom on mobile if needed, or just scroll */}
+                                                <button className="app-btn-primary w-full h-16 text-sm font-black tracking-[4px] shadow-2xl mt-4 bg-orange-500 hover:bg-orange-600 transition-all active:scale-[0.98]">
+                                                    CONFIRM PROTOCOL
+                                                </button>
+                                                
+                                                {/* Mobile Spacing for keyboard */}
+                                                <div className="h-4 md:hidden"></div> 
+                                            </form>
+                                        </div>
+                                    </motion.div>
+                                </div>
                             )}
 
                             {modalType === 'analytics' && <ModalLayout title="Vault Analytics" onClose={() => setModalType('none')}><div className="h-[350px] py-4"><AnalyticsChart entries={entries} /></div></ModalLayout>}
@@ -378,7 +548,7 @@ export const BooksSection = ({ currentUser, currentBook, setCurrentBook, trigger
                             {modalType === 'share' && (
                                 <ModalLayout title="Vault Share" onClose={() => setModalType('none')}>
                                     <div className="space-y-6 py-2">
-                                        <div className={`p-6 rounded-2xl border flex justify-between items-center ${isSharing ? 'bg-green-500/5 border-green-500/20' : 'bg-slate-50/50 border-slate-200'}`}>
+                                        <div className={`p-6 rounded-2xl border flex justify-between items-center ${isSharing ? 'bg-green-500/5 border-green-500/20' : ' border-slate-200'}`}>
                                             <div><h4 className={`text-xs font-black uppercase ${isSharing ? 'text-green-600' : 'text-slate-400'}`}>{isSharing ? 'Protocol: Live' : 'Protocol: Off'}</h4></div>
                                             <button onClick={handleShareToggle} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-lg ${isSharing ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>{shareLoading ? '...' : (isSharing ? 'Disable' : 'Enable')}</button>
                                         </div>

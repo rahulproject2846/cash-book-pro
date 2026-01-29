@@ -13,19 +13,17 @@ const jakarta = Plus_Jakarta_Sans({
 // PWA: প্রোডাকশন লেভেল মেটাডেটা সেটআপ
 export const metadata: Metadata = {
   title: "Vault Pro | Secure Digital Ledger",
-  description: "Private and secure financial protocol for personal and business wealth tracking.",
+  description: "Private and secure financial protocol.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/icon-192.png", // আইফোনের জন্য
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Vault Pro",
-  },
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/icon-192.png",
-  },
-  formatDetection: {
-    telephone: false,
   },
 };
 

@@ -24,6 +24,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (data.note !== undefined) updatePayload.note = data.note.trim();
     if (data.date) updatePayload.date = new Date(data.date);
     if (data.status) updatePayload.status = data.status;
+    if (data.time !== undefined) updatePayload.time = data.time;
 
     // ২. ডাটাবেসে আপডেট করা
     const updatedEntry = await Entry.findByIdAndUpdate(

@@ -8,14 +8,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const bookId = searchParams.get('bookId');
     
-    // ১. সেফটি চেক: bookId না থাকলে ডাটাবেসে কল না করে খালি লিস্ট পাঠানো
+    // সেফটি চেক: bookId না থাকলে ডাটাবেসে কল না করে খালি লিস্ট পাঠানো
     if (!bookId || bookId === 'undefined' || bookId === 'null') {
       return NextResponse.json({ success: true, entries: [] });
     }
 
     await connectDB();
     
-    // ২. সর্টিং লজিক: লেটেস্ট তারিখের ট্রানজেকশন সবার আগে আসবে
+    // সর্টিং লজিক: লেটেস্ট তারিখের ট্রানজেকশন সবার আগে আসবে
     const entries = await Entry.find({ bookId }).sort({ date: -1, createdAt: -1 }); 
     
     return NextResponse.json({
@@ -30,11 +30,14 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: নতুন ট্রানজেকশন (Entry) তৈরি করা
+// POST: নতুন ট্রানজেকশন (Entry) তৈরি করা (With Time Support)
 export async function POST(req: Request) {
   try {
     const data = await req.json();
-    const { bookId, title, amount, type, category, paymentMethod, note, date, status } = data;
+    const { 
+        bookId, title, amount, type, category, 
+        paymentMethod, note, date, time, status 
+    } = data;
 
     // ১. ভ্যালিডেশন
     if (!bookId || !title || amount === undefined) {
@@ -61,10 +64,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ 
             message: "A matching transaction already exists for this date. Potential duplicate blocked.",
             duplicate: true 
-        }, { status: 409 }); // 409 Conflict
+        }, { status: 409 });
     }
 
-    // ৩. ডাটা স্যানিটাইজ এবং সেভ করা
+    // ৩. ডাটা স্যানিটাইজ এবং সেভ করা (Time ফিল্ড সহ)
     const newEntry = await Entry.create({
       bookId,
       title: title.trim(),
@@ -74,6 +77,7 @@ export async function POST(req: Request) {
       paymentMethod: paymentMethod || "Cash",
       note: note?.trim() || "",
       date: new Date(date),
+      time: time || "", // 🔥 এখানে টাইম প্রটোকল যোগ করা হয়েছে
       status: status || "Completed"
     });
 
