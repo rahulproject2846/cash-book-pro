@@ -216,7 +216,7 @@ const handleSaveEntry = async (e: React.FormEvent) => {
         date: entryForm.date,
         time: entryForm.time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         // 🔥 FIX: স্ট্যাটাস সবসময় Title Case হবে (Pending/Completed)
-        status: (entryForm.status.toLowerCase() === 'completed' ? 'Completed' : 'Pending'), 
+        status: (entryForm.status.toLowerCase() === 'completed' ? 'completed' : 'Pending'), 
         bookId: currentBook._id,
         userId: currentUser._id,
         synced: 0 as 0 | 1,
