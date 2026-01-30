@@ -260,21 +260,21 @@ const handleSaveEntry = async (e: React.FormEvent) => {
     const handleToggleStatus = async (entry: any) => {
     // ১. বর্তমান স্ট্যাটাস চেক (Case Insensitive)
     const currentStatus = entry.status ? entry.status.toLowerCase() : 'completed';
-    // ২. নতুন স্ট্যাটাস সেট করা (Title Case এ)
-    const newStatus = currentStatus === 'pending' ? 'completed' : 'Pending';
+    
+    // ২. নতুন স্ট্যাটাস সেট করা (অবশ্যই lowercase)
+    // এখানে Explicitly টাইপ বলে দিচ্ছি যাতে TypeScript কনফিউজড না হয়
+    const newStatus: "completed" | "pending" = currentStatus === 'pending' ? 'completed' : 'pending';
 
     try {
-        // ৩. Dexie তে আপডেট করা (synced: 0 করে দেওয়া যাতে পরে সিঙ্ক হয়)
-        // localId কে অগ্রাধিকার দেওয়া হচ্ছে কারণ অফলাইন ডাটায় _id থাকে না
         const targetKey = entry.localId ? entry.localId : entry._id;
         
-        // এখানে সরাসরি put ব্যবহার না করে update ব্যবহার করা হলো এবং পুরো অবজেক্ট মার্জ করা হলো
+        // ৩. Dexie থেকে ডাটা আনা
         const entryToUpdate = await db.entries.get(targetKey);
         
         if (entryToUpdate) {
             await db.entries.put({
                 ...entryToUpdate,
-                status: newStatus,
+                status: newStatus, // এখন এটি হুবহু "completed" অথবা "pending"
                 synced: 0,
                 updatedAt: Date.now()
             });
@@ -284,10 +284,9 @@ const handleSaveEntry = async (e: React.FormEvent) => {
             await fetchData();
             window.dispatchEvent(new Event('vault-updated'));
 
-            // ৫. ফিডব্যাক
-            toast.success(`Marked as ${newStatus}`);
+            // ৫. ফিডব্যাক (ইউজারকে দেখানোর সময় বড় হাতের দেখাবে)
+            toast.success(`Marked as ${newStatus === 'completed' ? 'Completed' : 'Pending'}`);
 
-            // ৬. যদি নেট থাকে, তবে সিঙ্ক ট্রিগার করো
             if (navigator.onLine) {
                 window.dispatchEvent(new Event('online'));
             }
