@@ -261,7 +261,7 @@ const handleSaveEntry = async (e: React.FormEvent) => {
     // ১. বর্তমান স্ট্যাটাস চেক (Case Insensitive)
     const currentStatus = entry.status ? entry.status.toLowerCase() : 'completed';
     // ২. নতুন স্ট্যাটাস সেট করা (Title Case এ)
-    const newStatus = currentStatus === 'pending' ? 'Completed' : 'Pending';
+    const newStatus = currentStatus === 'pending' ? 'completed' : 'Pending';
 
     try {
         // ৩. Dexie তে আপডেট করা (synced: 0 করে দেওয়া যাতে পরে সিঙ্ক হয়)
