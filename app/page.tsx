@@ -1,11 +1,12 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Book, Plus, WifiOff, History, Mail, ShieldCheck, Chrome } from 'lucide-react';
+import { Loader2, Book, Plus, WifiOff, Chrome, History } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Offline DB logic
+// Core Logic & Database Protocol (v3)
 import { db } from '@/lib/offlineDB';
+import AuthScreen from '@/components/Auth/AuthScreen';
 
 // Layout & Sections
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
@@ -17,104 +18,192 @@ import { TimelineSection } from '@/components/Sections/TimelineSection';
 import { ModalLayout } from '@/components/Modals';
 
 export default function CashBookApp() {
-  // --- ১. সকল স্টেট (Core States) ---
+  // --- CORE STATES ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null); 
   const [currentBook, setCurrentBook] = useState<any>(null); 
   const [isLoading, setIsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('books');
   
-  // মডাল ও ফরম স্টেট
+  // MODAL & AUTH STATES
   const [globalModalType, setGlobalModalType] = useState<'none' | 'addBook' | 'addEntry' | 'analytics' | 'export' | 'share' | 'editBook' | 'deleteBookConfirm' | 'register'>('none');
   const [bookForm, setBookForm] = useState({ name: '', description: '' });
+  
+  // OTP & Auth States
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' });
   
   const [triggerFab, setTriggerFab] = useState(false);
   const [showFabModal, setShowFabModal] = useState(false);
   
-  // UX ও সিঙ্ক স্টেট
+  // UX & SYNC STATES
   const [isOnline, setIsOnline] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false); // Loop Breaker
   const [lastBackPress, setLastBackPress] = useState(0);
 
-  // --- ২. অফলাইন সিঙ্ক প্রোটোকল ---
+  // --- ১. অফলাইন সিঙ্ক প্রোটোকল (ROBUST VERSION) ---
   const syncOfflineData = useCallback(async () => {
-    if (!navigator.onLine || isSyncing) return;
-    const pending = await db.pendingEntries.toArray();
+    // ১. স্ট্রিক্ট চেক: নেট না থাকলে বা অলরেডি সিঙ্ক চললে চুপচাপ ফিরে যাবে
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (isSyncing) return;
+    if (!currentUser?._id) return;
+
+    // ২. পেন্ডিং ডাটা চেক (synced === 0)
+    const pending = await db.entries.where('synced').equals(0).toArray();
+    
     if (pending.length === 0) return;
+
     setIsSyncing(true);
-    const syncToast = toast.loading(`Synchronizing ${pending.length} offline records...`);
+    // ৩. টোস্ট আইডি রাখা (যাতে পরে এটাকে রিমুভ করা যায়)
+    const syncToastId = toast.loading(`Vault Sync: Uploading ${pending.length} records...`);
+
     try {
       for (const entry of pending) {
-        const res = await fetch('/api/entries', {
-          method: 'POST',
+        
+        // ডিলিট রিকোয়েস্ট হ্যান্ডলিং
+        if (entry.isDeleted === 1 && entry._id) {
+            await fetch(`/api/entries/${entry._id}`, { method: 'DELETE' });
+            await db.entries.delete(entry.localId!);
+            continue;
+        }
+
+        // ক্রিয়েট বা আপডেট লজিক
+        const apiMethod = entry._id ? 'PUT' : 'POST';
+        const apiUrl = entry._id ? `/api/entries/${entry._id}` : '/api/entries';
+        
+        const payload = { 
+            ...entry, 
+            userId: currentUser._id,
+            bookId: entry.bookId 
+        };
+
+        const res = await fetch(apiUrl, {
+          method: apiMethod,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(entry.data),
+          body: JSON.stringify(payload),
         });
-        if (res.ok) await db.pendingEntries.delete(entry.id!);
+
+        if (res.ok || res.status === 409) { // 409 = Duplicate handled
+          const serverData = await res.json();
+          // লোকাল ডাটাবেস আপডেট: synced = 1
+          await db.entries.update(entry.localId!, { 
+            synced: 1, 
+            _id: entry._id || serverData.entry?._id || serverData.data?._id 
+          });
+        }
       }
-      toast.success("All data secured in Cloud Vault", { id: syncToast });
-      window.dispatchEvent(new Event('vault-synced'));
+      
+      // ৪. সফল হলে লোডিং টোস্ট সরিয়ে সাকসেস মেসেজ
+      toast.success("Cloud Sync Complete", { id: syncToastId });
+      window.dispatchEvent(new Event('vault-updated'));
+
     } catch (err) {
-      toast.error("Sync partial failure", { id: syncToast });
+      // ৫. ফেইল করলে লোডিং সরিয়ে এরর মেসেজ (ঝুলে থাকবে না)
+      toast.error("Sync Paused (Network Unstable)", { id: syncToastId });
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing]);
+  }, [isSyncing, currentUser]);
 
-  // --- ৩. স্মার্ট ন্যাভিগেশন ও ব্যাক-বাটন ---
+  // --- ২. ইন্টেলিজেন্ট হাইড্রেশন (LOOP-FREE) ---
+  const hydrateLocalDatabase = useCallback(async (user: any) => {
+      if (!navigator.onLine || !user?._id) return;
+      
+      try {
+        console.log("🔄 Hydrating Local Vault...");
+        const [booksRes, entriesRes] = await Promise.all([
+            fetch(`/api/books?userId=${user._id}`),
+            fetch(`/api/entries/all?userId=${user._id}`)
+        ]);
+
+        if (booksRes.ok && entriesRes.ok) {
+            const booksData = await booksRes.json();
+            const entriesData = await entriesRes.json();
+
+            // বই সেভ করা
+            const books = Array.isArray(booksData) ? booksData : (booksData.books || []);
+            if (books.length > 0) await db.books.bulkPut(books);
+
+            // এন্ট্রি সেভ করা
+            const entries = Array.isArray(entriesData) ? entriesData : (entriesData.entries || []);
+            if (entries.length > 0) {
+                await db.transaction('rw', db.entries, async () => {
+                    for (const item of entries) {
+                        const localItem = await db.entries.where('_id').equals(item._id).first();
+                        await db.entries.put({
+                            ...item,
+                            localId: localItem?.localId, // আগের localId রাখা জরুরি
+                            synced: 1,
+                            isDeleted: 0,
+                            cid: item.cid || localItem?.cid || `cid_${Date.now()}`
+                        });
+                    }
+                });
+            }
+            setIsHydrated(true); // লুপ ব্রেকার
+            window.dispatchEvent(new Event('vault-updated'));
+        }
+      } catch (err) { console.error("Hydration Failed", err); }
+  }, []);
+
+  // --- ৩. লাইভ মনিটরিং ---
   useEffect(() => {
-    if (currentBook) window.history.pushState({ view: 'detail' }, '');
-    else window.history.pushState({ view: 'list' }, '');
-
-    const handleBackButton = (e: PopStateEvent) => {
-      if (currentBook) setCurrentBook(null);
-      else if (activeSection !== 'books') setActiveSection('books');
-      else {
-        const now = Date.now();
-        if (now - lastBackPress < 2000) return; 
-        setLastBackPress(now);
-        toast("Press back again to exit Vault", { icon: '🛡️' });
-        window.history.pushState({ view: 'list' }, '');
-      }
-    };
     const handleOnlineStatus = () => {
       setIsOnline(navigator.onLine);
-      if (navigator.onLine) syncOfflineData();
+      if (navigator.onLine) syncOfflineData(); // নেট আসলে সিঙ্ক হবে
+    };
+
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', () => setIsOnline(false));
+    
+    // ব্যাক বাটন হ্যান্ডলিং
+    const handleBackButton = () => {
+        if (currentBook) setCurrentBook(null);
+        else if (activeSection !== 'books') setActiveSection('books');
+        else {
+            const now = Date.now();
+            if (now - lastBackPress < 2000) return; 
+            setLastBackPress(now);
+            toast("Press back again to exit Vault", { icon: '🛡️' });
+            window.history.pushState({ view: 'list' }, '');
+        }
     };
     window.addEventListener('popstate', handleBackButton);
-    window.addEventListener('online', handleOnlineStatus);
-    window.addEventListener('offline', handleOnlineStatus);
-    return () => {
-      window.removeEventListener('popstate', handleBackButton);
-      window.removeEventListener('online', handleOnlineStatus);
-      window.removeEventListener('offline', handleOnlineStatus);
-    };
-  }, [currentBook, lastBackPress, activeSection, syncOfflineData]);
 
-  // --- ৪. অথেনটিকেশন ও ইনিশিয়ালাইজেশন ---
+    return () => {
+      window.removeEventListener('online', handleOnlineStatus);
+      window.removeEventListener('offline', () => setIsOnline(false));
+      window.removeEventListener('popstate', handleBackButton);
+    };
+  }, [currentBook, activeSection, syncOfflineData, lastBackPress]); // ডিপেন্ডেন্সি ফিক্সড
+
+  // --- ৪. সেশন এবং অটো-হাইড্রেশন ---
   useEffect(() => {
     const savedUser = localStorage.getItem('cashbookUser');
     if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
+      const user = JSON.parse(savedUser);
+      setCurrentUser(user);
       setIsLoggedIn(true);
-      setActiveSection('books');
+      // শুধুমাত্র একবার কল হবে যদি হাইড্রেটেড না থাকে
+      if (!isHydrated) hydrateLocalDatabase(user);
     }
     setTimeout(() => setIsLoading(false), 800);
-  }, []);
+  }, [hydrateLocalDatabase, isHydrated]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     localStorage.removeItem('cashbookUser');
+    try {
+        await Promise.all([db.books.clear(), db.entries.clear()]);
+    } catch (err) {}
     setIsLoggedIn(false);
     setCurrentUser(null);
     setCurrentBook(null);
-    setActiveSection('books');
+    setIsHydrated(false);
     toast.success('Vault Locked');
   };
-
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '' });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,6 +218,7 @@ export default function CashBookApp() {
         setCurrentUser(data.user);
         setIsLoggedIn(true);
         setActiveSection('books');
+        hydrateLocalDatabase(data.user); // লগইনের পর ফোর্স কল
         toast.success(`Welcome Back, ${data.user.username}`);
     } else {
         toast.error(data.message || 'Invalid Credentials');
@@ -153,9 +243,23 @@ export default function CashBookApp() {
       toast.success('Vault Created! Please Login.'); 
       setGlobalModalType('none'); 
       setOtpSent(false);
-    } else { toast.error(data.message || 'Verification Failed'); }
+      setOtpCode('');
+    } else { 
+      toast.error(data.message || 'Verification Failed'); 
+    }
   };
 
+  const handleGoogleLogin = () => {
+    toast("Redirecting to Google Secure Auth...", { icon: '🚀' });
+  };
+
+  // --- ৫. রেন্ডার গেটওয়ে ---
+  if (isLoading) return (
+    <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="animate-spin text-orange-500" size={48} />
+        <p className="text-[10px] font-black uppercase tracking-[5px] text-[#2D2D2D] animate-pulse">Establishing Secure Port</p>
+    </div>
+  );
   // --- ৫. ডাইনামিক সেকশন কনফিগারেশন ---
   const dashboardSections = [
     { 
@@ -182,31 +286,33 @@ export default function CashBookApp() {
 
   const currentComponent = dashboardSections.find(s => s.id === activeSection)?.component;
 
-  if (isLoading) return (
-    <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="animate-spin text-orange-500" size={48} />
-        <p className="text-[10px] font-black uppercase tracking-[5px] text-[#2D2D2D] animate-pulse">Establishing Secure Port</p>
-    </div>
-  );
-
-  // --- ৬. অথ গেটওয়ে (LOGIN / REGISTER) ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0F0F0F] p-4 font-sans">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="app-card w-full max-w-md p-10 text-center relative overflow-hidden border-[#2D2D2D]">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-orange-500"></div>
-          <h2 className="text-5xl font-black mb-10 text-white italic tracking-tighter uppercase leading-none">VAULT<span className="text-orange-500">PRO.</span></h2>
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.5)]"></div>
+          <h2 className="text-5xl font-black mb-10 text-white italic tracking-tighter uppercase leading-none">
+            VAULT<span className="text-orange-500">PRO.</span>
+          </h2>
+          
           <form onSubmit={handleLogin} className="space-y-4">
               <input type="email" placeholder="IDENTITY EMAIL" className="app-input font-bold" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} required />
               <input type="password" placeholder="SECURITY KEY" className="app-input font-bold" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} required />
               <button type="submit" className="app-btn-primary w-full py-4.5 shadow-2xl">UNSEAL ACCESS</button>
           </form>
+
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-[#2D2D2D]"></span></div>
             <div className="relative flex justify-center text-[9px] uppercase font-black tracking-widest"><span className="bg-[#1A1A1B] px-4 text-[#444]">Secure Middleware</span></div>
           </div>
-          <button onClick={() => toast("Redirecting to Google...", { icon: '🚀' })} className="w-full py-4 border-2 border-[#2D2D2D] rounded-2xl flex items-center justify-center gap-3 text-[11px] font-black uppercase tracking-widest text-white hover:bg-white hover:text-black transition-all"><Chrome size={18} /> Continue with Google</button>
-          <p onClick={() => setGlobalModalType('register')} className="text-[#888888] text-[10px] mt-10 hover:text-orange-500 cursor-pointer font-black uppercase tracking-widest transition-colors">New Operator? <span className="text-orange-500 underline decoration-2">Initialize Account</span></p>
+
+          <button onClick={handleGoogleLogin} className="w-full py-4 border-2 border-[#2D2D2D] rounded-2xl flex items-center justify-center gap-3 text-[11px] font-black uppercase tracking-widest text-white hover:bg-white hover:text-black transition-all">
+             <Chrome size={18} /> Continue with Google
+          </button>
+          
+          <p onClick={() => setGlobalModalType('register')} className="text-[#888888] text-[10px] mt-10 hover:text-orange-500 cursor-pointer font-black uppercase tracking-widest transition-colors">
+              New Operator? <span className="text-orange-500 underline decoration-2">Initialize Account</span>
+          </p>
         </motion.div>
 
         <AnimatePresence>
@@ -233,7 +339,7 @@ export default function CashBookApp() {
     );
   }
 
-  // --- ৭. মেইন অ্যাপ রেন্ডার ---
+  // --- ৬. ড্যাশবোর্ড রেন্ডার ---
   return (
     <DashboardLayout 
         activeSection={activeSection} setActiveSection={setActiveSection}
@@ -243,7 +349,6 @@ export default function CashBookApp() {
         onOpenAnalytics={() => setGlobalModalType('analytics')}
         onOpenExport={() => setGlobalModalType('export')}
         onOpenShare={() => setGlobalModalType('share')}
-        // ✅ ফিক্স: এডিট বাটনে চাপ দিলে ডাটা সেট হয়ে মডাল খুলবে
         onEditBook={() => {
             if (currentBook) {
                 setBookForm({ name: currentBook.name, description: currentBook.description || "" });
@@ -253,9 +358,9 @@ export default function CashBookApp() {
         onDeleteBook={() => setGlobalModalType('deleteBookConfirm')}
     >
         <AnimatePresence mode="wait">
-            <motion.div key={activeSection + (currentBook?._id || '')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }}>
+            <motion.div key={activeSection + (currentBook?._id || '')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                 {!isOnline && (
-                    <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 anim-fade-up">
+                    <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center gap-3 text-orange-500">
                         <WifiOff size={20} />
                         <span className="text-[10px] font-black uppercase tracking-widest">Protocol Offline: Data queued for sync</span>
                     </div>
@@ -264,7 +369,7 @@ export default function CashBookApp() {
             </motion.div>
         </AnimatePresence>
 
-        {/* স্মার্ট প্লাস বাটন মডাল */}
+        {/* FAB Modal */}
         <AnimatePresence>
             {showFabModal && (
                 <ModalLayout title="Protocol Shortcut" onClose={() => setShowFabModal(false)}>

@@ -18,7 +18,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider 
       attribute="class" 
-      defaultTheme="dark" // আপনার স্টুডিও থিম যেহেতু ডার্কে বেশি সুন্দর, তাই ডিফল্ট ডার্ক রাখা ভালো
+      defaultTheme="light" // আপনার স্টুডিও থিম যেহেতু ডার্কে বেশি সুন্দর, তাই ডিফল্ট ডার্ক রাখা ভালো
       enableSystem={true} 
       disableTransitionOnChange // থিম পরিবর্তনের সময় যাতে ট্রানজিশন স্মুথ হয়
     >

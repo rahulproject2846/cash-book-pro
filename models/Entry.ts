@@ -18,7 +18,7 @@ export interface IEntry extends Document {
   note?: string;
   date: Date;
   time?: string;
-  status: 'Completed' | 'Pending';
+  status: 'completed' | 'pending' | 'Completed' | 'Pending'; // সব ধরনের সাপোর্ট
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,7 +28,7 @@ const EntrySchema = new Schema<IEntry>({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Book', 
     required: [true, "Vault ID (bookId) is mandatory"],
-    index: true // বুক অনুযায়ী ট্রানজেকশন দ্রুত লোড করার জন্য
+    index: true
   },
   title: { 
     type: String, 
@@ -44,7 +44,7 @@ const EntrySchema = new Schema<IEntry>({
   type: { 
     type: String, 
     enum: {
-        values: ['income', 'expense'],
+        values: ['income', 'expense', 'Income', 'Expense'], // ছোট এবং বড় হাতের সাপোর্ট
         message: '{VALUE} is not a valid protocol type'
     },
     required: true 
@@ -68,7 +68,7 @@ const EntrySchema = new Schema<IEntry>({
   date: { 
     type: Date, 
     required: [true, "Timestamp (date) is mandatory"],
-    index: true // তারিখ অনুযায়ী ফিল্টারিং ফাস্ট করার জন্য
+    index: true
   },
   time: { 
     type: String, 
@@ -76,18 +76,18 @@ const EntrySchema = new Schema<IEntry>({
   },
   status: { 
     type: String, 
-    enum: ['Completed', 'Pending'], 
+    // 🔥 ফিক্স: ছোট হাতের এবং বড় হাতের উভয়ই রাখা হলো
+    enum: ['pending', 'completed', 'Pending', 'Completed'], 
     default: 'Completed',
     index: true
   }
 }, { 
   timestamps: true,
-  versionKey: false // ক্লিন ডাটার জন্য __v বাদ দেওয়া হয়েছে
+  versionKey: false
 });
 
 // ২. ইনডেক্সিং প্রোটোকল: 
-// ড্যাশবোর্ড এবং ডিটেইলস পেজে সার্চ ও ফিল্টারিং সুপার ফাস্ট হবে
 EntrySchema.index({ bookId: 1, date: -1, createdAt: -1 });
-EntrySchema.index({ bookId: 1, type: 1, status: 1 }); // এনালিটিক্স এর জন্য
+EntrySchema.index({ bookId: 1, type: 1, status: 1 });
 
 export default models.Entry || model<IEntry>('Entry', EntrySchema);

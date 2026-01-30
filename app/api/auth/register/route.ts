@@ -2,71 +2,66 @@ import connectDB from "@/lib/db";
 import User from "@/models/User";
 import { NextResponse } from "next/server";
 import bcrypt from 'bcryptjs';
+import { sendOTP } from "@/lib/mail";
 
 export async function POST(req: Request) {
   try {
-    const data = await req.json();
-    const { username, email, password } = data; 
-
-    // ১. ইনপুট ভ্যালিডেশন: কোনো ফিল্ড খালি থাকলে এরর
-    if (!username || !email || !password) {
-      return NextResponse.json(
-        { message: "Identity details (name, email, password) are missing" }, 
-        { status: 400 }
-      );
-    }
+    const { username, email, password } = await req.json();
 
     await connectDB();
-    
-    // ২. ইমেইল ক্লিন করা এবং আগের রেকর্ড চেক করা
-    const cleanEmail = email.toLowerCase().trim();
-    const userExists = await User.findOne({ email: cleanEmail });
-    
-    if (userExists) {
-      return NextResponse.json(
-        { message: "This email is already registered in the vault" }, 
-        { status: 400 }
-      );
+
+    // ১. চেক করি ইউজার আগে থেকেই আছে কি না
+    const existingUser = await User.findOne({ email });
+
+    if (existingUser) {
+      // যদি ইউজার থাকে এবং ভেরিফাইড হয় -> এরর দেখাবো
+      if (existingUser.isVerified) {
+        return NextResponse.json({ message: "Account already exists! Please Login." }, { status: 400 });
+      }
+      // যদি ইউজার থাকে কিন্তু ভেরিফাইড না হয় -> আমরা নতুন করে ওটিপি পাঠাবো (পাসওয়ার্ড আপডেট সহ)
+      // (নিচে লজিক কন্টিনিউ হবে)
     }
 
-    // ৩. পাসওয়ার্ড হ্যাশ করা (সিকিউরিটি লেভেল ১০)
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    
-    // ৪. ডিফল্ট ডাটা সহ ইউজার তৈরি করা
-    // এটি করলে নতুন ইউজারের ড্যাশবোর্ড সাথে সাথেই রেডি থাকবে
-    const user = await User.create({ 
-      username, 
-      email: cleanEmail, 
-      password: hashedPassword,
-      // ডিফল্ট ক্যাটাগরি এবং কারেন্সি সেট করে দেওয়া হচ্ছে
-      categories: ['General', 'Salary', 'Food', 'Rent', 'Shopping', 'Loan'],
-      currency: 'BDT (৳)',
-      preferences: {
-        dailyReminder: false,
-        weeklyReports: false,
-        highExpenseAlert: false
-      }
-    });
-    
-    // ৫. সফল রেজিস্ট্রেশন রেসপন্স
-    return NextResponse.json({
-      success: true,
-      message: "Vault initialized successfully",
-      user: {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        categories: user.categories,
-        currency: user.currency
-      }
-    }, { status: 201 });
+    // ২. ৬ ডিজিটের র‍্যান্ডম কোড তৈরি
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // ১০ মিনিট মেয়াদ
+
+    // ৩. পাসওয়ার্ড হ্যাশ করা
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    if (existingUser) {
+        // আপডেট (আগের আন-ভেরিফাইড ইউজার)
+        existingUser.username = username;
+        existingUser.password = hashedPassword;
+        existingUser.otpCode = otpCode;
+        existingUser.otpExpiry = otpExpiry;
+        await existingUser.save();
+    } else {
+        // নতুন ইউজার তৈরি
+        await User.create({
+            username,
+            email,
+            password: hashedPassword,
+            otpCode,
+            otpExpiry,
+            isVerified: false, // ডিফল্ট ফলস
+            authProvider: 'credentials',
+            categories: ['GENERAL', 'SALARY', 'FOOD', 'RENT', 'SHOPPING', 'LOAN'],
+            currency: 'BDT (৳)'
+        });
+    }
+
+    // ৪. ইমেইল পাঠানো
+    const emailSent = await sendOTP(email, otpCode);
+
+    if (!emailSent) {
+        return NextResponse.json({ message: "Failed to send email. Check connection." }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: "OTP Sent Successfully" });
 
   } catch (error: any) {
-    console.error("REGISTER_API_ERROR:", error.message);
-    return NextResponse.json(
-      { message: "System failure during registration" }, 
-      { status: 500 }
-    );
+    console.error("REGISTER_ERROR:", error);
+    return NextResponse.json({ message: "System Error" }, { status: 500 });
   }
 }
