@@ -276,23 +276,23 @@ main {
   height: auto !important;
 }*/
 
-/* globals.css এর নিচে এইটুকু আপডেট করুন */
+/* globals.css এর নিচে এইটুকু আপডেট করুন 
 .fixed-header-padding {
-  padding-top: 120px !important; /* হেডারের জন্য উপর থেকে গ্যাপ */
-  padding-bottom: 120px !important; /* মোবাইল মেনুর জন্য নিচ থেকে অতিরিক্ত গ্যাপ */
+  padding-top: 120px !important; 
+  padding-bottom: 120px !important; 
 }
 
-/* ফিক্সড হেডারের ট্রানজিশন স্মুথ করার জন্য */
+
 header {
   transition: left 0.3s ease, margin-left 0.3s ease;
 }
 
 
-/* ফিক্সড হেডারের উচ্চতা অনুযায়ী কন্টেন্ট নিচে নামানো */
+
 .vault-content-padding {
-  /* হেডারের উচ্চতা সাধারণত ৮৪-৯০ পিক্সেল হয় */
+ 
   padding-top: 120px !important;
-}
+} */
 
 @media (max-width: 768px) {
   .vault-content-padding {

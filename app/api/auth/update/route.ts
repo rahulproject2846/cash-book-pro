@@ -5,53 +5,64 @@ import bcrypt from 'bcryptjs';
 
 export async function PUT(req: Request) {
   try {
-    const { userId, currentPassword, newName, newPassword } = await req.json();
+    const data = await req.json();
+    const { userId, currentPassword, newName, newPassword, image, isCustomImage } = data;
 
-    if (!userId || !currentPassword) {
-      return NextResponse.json({ message: "Identity verification failed: Current key missing" }, { status: 400 });
+    if (!userId) {
+      return NextResponse.json({ message: "User ID is required" }, { status: 400 });
     }
 
     await connectDB();
-
-    // ১. ইউজার খুঁজে বের করা
     const user = await User.findById(userId);
+
     if (!user) {
-      return NextResponse.json({ message: "Identity not found in vault" }, { status: 404 });
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    // ২. বর্তমান পাসওয়ার্ড চেক করা (Verification Protocol)
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return NextResponse.json({ message: "Access Denied: Current security key is incorrect" }, { status: 401 });
+    // ১. পাসওয়ার্ড ভেরিফিকেশন (শুধুমাত্র ক্রেডেনশিয়াল একাউন্টের জন্য)
+    // Google বা অন্য প্রোভাইডার হলে পাসওয়ার্ড চেক স্কিপ করবে
+    if (user.authProvider === 'credentials') {
+        if (!currentPassword) {
+            return NextResponse.json({ message: "Current password is required" }, { status: 400 });
+        }
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return NextResponse.json({ message: "Incorrect current password" }, { status: 401 });
+        }
     }
 
-    // ৩. আপডেট ডাটা তৈরি করা
-    const updateData: any = {};
-    if (newName) updateData.username = newName.trim();
-    
+    // ২. নাম আপডেট
+    if (newName) user.username = newName.trim();
+
+    // ৩. ইমেজ আপডেট (Avatar/Custom Image)
+    // image যদি null বা string হয়, সেটা আপডেট হবে
+    if (image !== undefined) {
+        user.image = image;
+        user.isCustomImage = isCustomImage;
+    }
+
+    // ৪. নতুন পাসওয়ার্ড সেট করা
     if (newPassword) {
         if (newPassword.length < 6) {
-          return NextResponse.json({ message: "New key must be at least 6 characters" }, { status: 400 });
+            return NextResponse.json({ message: "Password must be at least 6 characters" }, { status: 400 });
         }
-        const salt = await bcrypt.genSalt(10);
-        updateData.password = await bcrypt.hash(newPassword, salt);
+        user.password = await bcrypt.hash(newPassword, 10);
     }
 
-    // ৪. আপডেট সম্পাদন করা
-    const updatedUser = await User.findByIdAndUpdate(
-        userId, 
-        { $set: updateData }, 
-        { new: true }
-    ).select("-password -__v");
+    // ডাটাবেসে সেভ করা
+    await user.save();
+
+    // রেসপন্সে পাসওয়ার্ড ফিল্ড বাদ দিয়ে ইউজার ডাটা পাঠানো
+    const { password, ...userWithoutPass } = user.toObject();
 
     return NextResponse.json({
-        success: true,
-        message: "Identity protocol synchronized",
-        user: updatedUser
+      success: true,
+      message: "Profile updated successfully",
+      user: userWithoutPass
     }, { status: 200 });
 
   } catch (error: any) {
-    console.error("IDENTITY_UPDATE_ERROR:", error.message);
-    return NextResponse.json({ message: "Protocol failure" }, { status: 500 });
+    console.error("PROFILE_UPDATE_ERROR:", error);
+    return NextResponse.json({ message: "Update failed. Please try again." }, { status: 500 });
   }
 }

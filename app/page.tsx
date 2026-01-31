@@ -1,234 +1,312 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, WifiOff, Book, History } from 'lucide-react';
+import { Loader2, Book, WifiOff, History } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Core Logic & Database Protocol (v3)
+// Core Systems
 import { db } from '@/lib/offlineDB';
 import AuthScreen from '@/components/Auth/AuthScreen';
 
-// Layout & Sections
+// Layout & UI Shell
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
 import { BooksSection } from '@/components/Sections/BooksSection';
 import { ReportsSection } from '@/components/Sections/ReportsSection';
+import { TimelineSection } from '@/components/Sections/TimelineSection';
 import { SettingsSection } from '@/components/Sections/SettingsSection';
 import { ProfileSection } from '@/components/Sections/ProfileSection';
-import { TimelineSection } from '@/components/Sections/TimelineSection';
+
+// Global Modals
 import { ModalLayout } from '@/components/Modals';
+import { AdvancedExportModal } from '@/components/Modals/AdvancedExportModal';
+import { AnalyticsChart } from '@/components/AnalyticsChart';
+import { ShareModal } from '@/components/Modals/ShareModal';
 
 export default function CashBookApp() {
-  // --- CORE STATES ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null); 
-  const [currentBook, setCurrentBook] = useState<any>(null); 
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentBook, setCurrentBook] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('books');
+  const [isOnline, setIsOnline] = useState(true);
   
-  // MODAL & UI STATES
-  const [globalModalType, setGlobalModalType] = useState<'none' | 'addBook' | 'addEntry' | 'analytics' | 'export' | 'share' | 'editBook' | 'deleteBookConfirm'>('none');
+  // Logic Synchronization Refs
+  const isSyncingRef = useRef(false);
+  const hydrationDoneRef = useRef(false);
+
+  // Global Modal Orchestration
+  const [globalModal, setGlobalModal] = useState<'none' | 'addBook' | 'editBook' | 'analytics' | 'export' | 'share' | 'deleteBookConfirm'>('none');
+  const [activeEntries, setActiveEntries] = useState<any[]>([]); // For Analytics/Export
   const [bookForm, setBookForm] = useState({ name: '', description: '' });
   const [triggerFab, setTriggerFab] = useState(false);
   const [showFabModal, setShowFabModal] = useState(false);
-  
-  // UX & SYNC STATES
-  const [isOnline, setIsOnline] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false); 
-  const [lastBackPress, setLastBackPress] = useState(0);
 
-  // --- ১. অফলাইন সিঙ্ক প্রোটোকল (ROBUST VERSION) ---
+  // --- 1. CLOUD SYNC ENGINE (Background Processing) ---
   const syncOfflineData = useCallback(async () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    if (isSyncing || !currentUser?._id) return;
+    if (!navigator.onLine || isSyncingRef.current || !currentUser?._id) return;
 
     const pending = await db.entries.where('synced').equals(0).toArray();
     if (pending.length === 0) return;
 
-    setIsSyncing(true);
-    const syncToastId = toast.loading(`Vault Sync: Uploading ${pending.length} records...`);
-
+    isSyncingRef.current = true;
     try {
       for (const entry of pending) {
         if (entry.isDeleted === 1 && entry._id) {
-            await fetch(`/api/entries/${entry._id}`, { method: 'DELETE' });
-            await db.entries.delete(entry.localId!);
-            continue;
+          await fetch(`/api/entries/${entry._id}`, { method: 'DELETE' });
+          await db.entries.delete(entry.localId!);
+          continue;
         }
 
-        const apiMethod = entry._id ? 'PUT' : 'POST';
-        const apiUrl = entry._id ? `/api/entries/${entry._id}` : '/api/entries';
-        
-        const res = await fetch(apiUrl, {
-          method: apiMethod,
+        const { _id, localId, synced, isDeleted, ...payload } = entry;
+        const res = await fetch(entry._id ? `/api/entries/${entry._id}` : '/api/entries', {
+          method: entry._id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...entry, userId: currentUser._id }),
+          body: JSON.stringify({ ...payload, userId: currentUser._id }),
         });
 
-        if (res.ok) {
+        if (res.ok || res.status === 409) {
           const serverData = await res.json();
-          await db.entries.update(entry.localId!, { 
-            synced: 1, 
-            _id: entry._id || serverData.entry?._id 
+          await db.entries.update(entry.localId!, {
+            synced: 1,
+            _id: serverData.entry?._id || serverData.data?._id || entry._id
           });
         }
       }
-      toast.success("Cloud Sync Complete", { id: syncToastId });
       window.dispatchEvent(new Event('vault-updated'));
     } catch (err) {
-      toast.error("Sync Paused (Network Unstable)", { id: syncToastId });
+      console.warn("Vault Sync Engine: Connection Interrupted");
     } finally {
-      setIsSyncing(false);
+      isSyncingRef.current = false;
     }
-  }, [isSyncing, currentUser]);
+  }, [currentUser?._id]);
 
-  // --- ২. ইন্টেলিজেন্ট হাইড্রেশন ---
-  const hydrateLocalDatabase = useCallback(async (user: any) => {
-      if (!navigator.onLine || !user?._id) return;
-      try {
-        const [booksRes, entriesRes] = await Promise.all([
-            fetch(`/api/books?userId=${user._id}`),
-            fetch(`/api/entries/all?userId=${user._id}`)
-        ]);
-
-        if (booksRes.ok && entriesRes.ok) {
-            const books = await booksRes.json();
-            const entriesData = await entriesRes.json();
-            const entries = Array.isArray(entriesData) ? entriesData : (entriesData.entries || []);
-
-            if (books.length > 0) await db.books.bulkPut(books);
-            if (entries.length > 0) {
-                await db.transaction('rw', db.entries, async () => {
-                    for (const item of entries) {
-                        const localItem = await db.entries.where('_id').equals(item._id).first();
-                        await db.entries.put({
-                            ...item,
-                            localId: localItem?.localId,
-                            synced: 1,
-                            isDeleted: 0
-                        });
-                    }
-                });
-            }
-            setIsHydrated(true);
-            window.dispatchEvent(new Event('vault-updated'));
+  // ২. CashBookApp ফাংশনের ভেতরে শেয়ার টগল লজিক যোগ করুন
+const handleToggleShare = async (enable: boolean) => {
+    try {
+        const res = await fetch('/api/books/share', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ bookId: currentBook._id, enable }) 
+        });
+        const data = await res.json();
+        if (res.ok) {
+            // লোকাল ডেক্সি ডাটাবেসেও আপডেট করুন যাতে সাথে সাথে UI পরিবর্তন হয়
+            await db.books.update(currentBook._id, { 
+                isPublic: data.data.isPublic, 
+                shareToken: data.data.shareToken 
+            }as any);
+            // currentBook স্টেট আপডেট করা হলো
+            setCurrentBook({ ...currentBook, isPublic: data.data.isPublic, shareToken: data.data.shareToken });
+            toast.success(enable ? "Vault is now Live" : "Vault is now Private");
         }
-      } catch (err) { console.error("Hydration Failed", err); }
-  }, []);
+    } catch (err) {
+        toast.error("Sharing protocol failed");
+    }
+};
 
-  // --- ৩. সেশন এবং লাইভ মনিটরিং ---
+  // --- 2. DATA HYDRATION (Syncing Cloud to Local) ---
+  const hydrateVault = useCallback(async (user: any) => {
+    if (!navigator.onLine || !user?._id || hydrationDoneRef.current) return;
+    
+    hydrationDoneRef.current = true;
+    try {
+      const [booksRes, entriesRes] = await Promise.all([
+          fetch(`/api/books?userId=${user._id}`),
+          fetch(`/api/entries/all?userId=${user._id}`)
+      ]);
+
+      if (booksRes.ok && entriesRes.ok) {
+          const bData = await booksRes.json();
+          const eData = await entriesRes.json();
+          const books = Array.isArray(bData) ? bData : (bData.books || []);
+          const entries = Array.isArray(eData) ? eData : (eData.entries || []);
+
+          if (books.length > 0) await db.books.bulkPut(books);
+          if (entries.length > 0) {
+              await db.transaction('rw', db.entries, async () => {
+                  for (const item of entries) {
+                      const local = await db.entries.where('_id').equals(item._id).first();
+                      await db.entries.put({
+                          ...item,
+                          localId: local?.localId,
+                          synced: 1,
+                          isDeleted: 0,
+                          status: (item.status || 'completed').toLowerCase(),
+                          type: (item.type || 'expense').toLowerCase()
+                      });
+                  }
+              });
+          }
+          window.dispatchEvent(new Event('vault-updated'));
+          syncOfflineData();
+      }
+    } catch (err) { 
+        hydrationDoneRef.current = false;
+    }
+  }, [syncOfflineData]);
+
+  // --- 3. MODAL DATA PREPARATION ---
+  const handleOpenGlobalModal = async (type: 'analytics' | 'export' | 'share') => {
+    if (!currentBook?._id) return toast.error("Select a vault first");
+    
+    // Fetch latest local entries for the modal
+    const data = await db.entries
+        .where('bookId').equals(currentBook._id)
+        .and(item => item.isDeleted === 0)
+        .toArray();
+    
+    setActiveEntries(data);
+    setGlobalModal(type);
+  };
+
+  // --- 4. LIFECYCLE & EVENT MONITORING ---
   useEffect(() => {
     const savedUser = localStorage.getItem('cashbookUser');
     if (savedUser) {
       const user = JSON.parse(savedUser);
       setCurrentUser(user);
       setIsLoggedIn(true);
-      if (!isHydrated) hydrateLocalDatabase(user);
+      hydrateVault(user);
     }
-    setTimeout(() => setIsLoading(false), 800);
-  }, [hydrateLocalDatabase, isHydrated]);
+    
+    const lTimer = setTimeout(() => setIsLoading(false), 1000);
 
-  useEffect(() => {
-    const handleOnlineStatus = () => {
-      setIsOnline(navigator.onLine);
-      if (navigator.onLine) syncOfflineData();
+    const handleNetworkActivity = () => {
+        setIsOnline(navigator.onLine);
+        if (navigator.onLine) syncOfflineData();
     };
-    window.addEventListener('online', handleOnlineStatus);
+
+    window.addEventListener('online', handleNetworkActivity);
     window.addEventListener('offline', () => setIsOnline(false));
+
     return () => {
-      window.removeEventListener('online', handleOnlineStatus);
-      window.removeEventListener('offline', () => setIsOnline(false));
+        clearTimeout(lTimer);
+        window.removeEventListener('online', handleNetworkActivity);
     };
-  }, [syncOfflineData]);
+  }, [hydrateVault, syncOfflineData]);
 
-  // --- ৪. হ্যান্ডলার ফাংশনস ---
-  const handleAuthSuccess = (userData: any) => {
-    localStorage.setItem('cashbookUser', JSON.stringify(userData));
-    setCurrentUser(userData);
-    setIsLoggedIn(true);
-    hydrateLocalDatabase(userData);
-  };
-
+  // --- 5. SYSTEM HANDLERS ---
   const handleLogout = async () => {
     localStorage.removeItem('cashbookUser');
-    try { await Promise.all([db.books.clear(), db.entries.clear()]); } catch (err) {}
-    setIsLoggedIn(false);
-    setCurrentUser(null);
-    setCurrentBook(null);
-    setIsHydrated(false);
-    toast.success('Vault Locked');
+    await Promise.all([db.books.clear(), db.entries.clear()]);
+    window.location.reload();
   };
 
-  // --- ৫. রেন্ডার গেটওয়ে ---
+  const handleLoginSuccess = (user: any) => {
+    localStorage.setItem('cashbookUser', JSON.stringify(user));
+    setCurrentUser(user);
+    setIsLoggedIn(true);
+    hydrateVault(user);
+  };
+
   if (isLoading) return (
     <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center space-y-4">
         <Loader2 className="animate-spin text-orange-500" size={48} />
-        <p className="text-[10px] font-black uppercase tracking-[5px] text-[#2D2D2D] animate-pulse">Establishing Secure Port</p>
+        <p className="text-[10px] font-black uppercase tracking-[5px] text-white/10">Establishing Protocol</p>
     </div>
   );
 
-  if (!isLoggedIn) {
-    return <AuthScreen onLoginSuccess={handleAuthSuccess} />;
-  }
+  if (!isLoggedIn) return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
+
+  // --- 6. VIEW ROUTING ---
+  const sectionMap: Record<string, React.ReactNode> = {
+    books: (
+        <BooksSection 
+            currentUser={currentUser} 
+            currentBook={currentBook} 
+            setCurrentBook={setCurrentBook} 
+            triggerFab={triggerFab} 
+            setTriggerFab={setTriggerFab} 
+            externalModalType={globalModal} 
+            setExternalModalType={setGlobalModal} 
+            bookForm={bookForm} 
+            setBookForm={setBookForm} 
+        />
+    ),
+    reports: <ReportsSection currentUser={currentUser} />,
+    timeline: <TimelineSection currentUser={currentUser} />,
+    settings: <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />,
+    profile: <ProfileSection currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
+  };
 
   return (
-    <DashboardLayout 
+    <DashboardLayout
         activeSection={activeSection} setActiveSection={setActiveSection}
         onLogout={handleLogout} currentUser={currentUser}
         currentBook={currentBook} onBack={() => setCurrentBook(null)}
         onFabClick={() => { if (activeSection === 'books') setTriggerFab(true); else setShowFabModal(true); }}
-        onOpenAnalytics={() => setGlobalModalType('analytics')}
-        onOpenExport={() => setGlobalModalType('export')}
-        onOpenShare={() => setGlobalModalType('share')}
-        onEditBook={() => {
-            if (currentBook) {
-                setBookForm({ name: currentBook.name, description: currentBook.description || "" });
-                setGlobalModalType('editBook');
-            }
+        
+        // Header Integration (Lifts state from header to root)
+        onOpenAnalytics={() => handleOpenGlobalModal('analytics')}
+    onOpenExport={() => handleOpenGlobalModal('export')}
+    onOpenShare={() => setGlobalModal('share')}
+        
+        onEditBook={() => { 
+            if (currentBook) { 
+                setBookForm({ name: currentBook.name, description: currentBook.description || "" }); 
+                setGlobalModal('editBook'); 
+            } 
         }}
-        onDeleteBook={() => setGlobalModalType('deleteBookConfirm')}
+        onDeleteBook={() => setGlobalModal('deleteBookConfirm')}
     >
         <AnimatePresence mode="wait">
             <motion.div key={activeSection + (currentBook?._id || '')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                 {!isOnline && (
-                    <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center gap-3 text-orange-500">
+                    <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/20 rounded-[20px] flex items-center gap-3 text-orange-500 shadow-xl">
                         <WifiOff size={20} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Protocol Offline: Data queued for sync</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Protocol Offline: Vault Secured Locally</span>
                     </div>
                 )}
-                
-                {/* সেকশন রেন্ডারিং */}
-                {activeSection === 'books' && (
-                    <BooksSection 
-                        currentUser={currentUser} currentBook={currentBook} setCurrentBook={setCurrentBook} 
-                        triggerFab={triggerFab} setTriggerFab={setTriggerFab}
-                        externalModalType={globalModalType as any} setExternalModalType={setGlobalModalType as any}
-                        bookForm={bookForm} setBookForm={setBookForm}
-                    />
-                )}
-                {activeSection === 'reports' && <ReportsSection currentUser={currentUser} />}
-                {activeSection === 'timeline' && <TimelineSection currentUser={currentUser} />}
-                {activeSection === 'settings' && <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />}
-                {activeSection === 'profile' && <ProfileSection currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />}
+                {sectionMap[activeSection]}
             </motion.div>
         </AnimatePresence>
 
-        {/* FAB Shortcut Modal */}
-        <AnimatePresence>
-            {showFabModal && (
-                <ModalLayout title="Protocol Shortcut" onClose={() => setShowFabModal(false)}>
-                    <div className="grid grid-cols-1 gap-4">
-                        <button onClick={() => { setActiveSection('books'); setCurrentBook(null); setTriggerFab(true); setShowFabModal(false); }} className="w-full p-6 bg-orange-500/5 border border-orange-500/10 rounded-3xl flex items-center gap-5 group hover:bg-orange-500 transition-all">
-                             <div className="p-3 bg-orange-500 rounded-2xl text-white group-hover:bg-white group-hover:text-orange-500"><Book size={24}/></div>
-                             <div className="text-left">
-                                <p className="font-black uppercase text-xs tracking-widest group-hover:text-white">New Ledger</p>
-                                <p className="text-[9px] font-bold text-[#555] group-hover:text-white/60">Initialize a new financial vault</p>
-                             </div>
-                        </button>
-                    </div>
-                </ModalLayout>
-            )}
-        </AnimatePresence>
+        {/* --- ROOT LEVEL MODAL LAYER --- */}
+<AnimatePresence>
+    {/* ১. এনালিটিক্স মডাল */}
+    {globalModal === 'analytics' && currentBook && (
+        <ModalLayout 
+            key="analytics-modal" // ইউনিক কি দিন
+            title="Vault Intelligence" 
+            onClose={() => setGlobalModal('none')}
+        >
+            <div className="h-[450px] py-4" onClick={(e) => e.stopPropagation()}>
+                <AnalyticsChart entries={activeEntries} />
+            </div>
+        </ModalLayout>
+    )}
+
+    {/* ২. এক্সপোর্ট মডাল */}
+    {globalModal === 'export' && currentBook && (
+        <AdvancedExportModal 
+            key="export-modal"
+            isOpen={true} 
+            onClose={() => setGlobalModal('none')} 
+            entries={activeEntries} 
+            bookName={currentBook.name} 
+        />
+    )}
+    
+    {/* ৩. শেয়ার মডাল */}
+    {globalModal === 'share' && currentBook && (
+        <ModalLayout 
+            key="share-modal"
+            title="Protocol Sharing" 
+            onClose={() => setGlobalModal('none')}
+        >
+            {/* আপনার শেয়ারিং লজিক এখানে */}
+            <div className="p-10 text-center text-[10px] font-black uppercase tracking-widest text-white/20">
+                Sharing Protocol Initializing...
+            </div>
+        </ModalLayout>
+    )}
+    <ShareModal 
+        isOpen={globalModal === 'share'}
+        onClose={() => setGlobalModal('none')}
+        currentBook={currentBook}
+        onToggleShare={handleToggleShare}
+    />
+</AnimatePresence>
     </DashboardLayout>
   );
 }

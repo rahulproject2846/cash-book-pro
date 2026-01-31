@@ -20,6 +20,7 @@ export interface LocalEntry {
   isDeleted: 0 | 1;     // ১ = ডিলিট করতে হবে
   createdAt: number;
   updatedAt: number;
+  isPublic?: boolean;
 }
 
 export interface LocalBook {
