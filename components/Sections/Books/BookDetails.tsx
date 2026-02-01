@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Search, BarChart3, Download, ArrowUpDown, LayoutGrid, 
-    ChevronDown, Check, SlidersHorizontal, ChevronLeft, ChevronRight, X 
+    SlidersHorizontal, ChevronLeft, ChevronRight, X 
 } from 'lucide-react';
 
 // Sub-components
@@ -12,14 +12,20 @@ import { TransactionTable } from './TransactionTable';
 import { MobileTransactionCards } from './MobileTransactionCards';
 import CustomSelect from '@/components/CustomSelect';
 
+// 🔥 ১. সিগন্যাল ফাংশন (গ্লোবাল ইভেন্ট ট্রিগার)
+const triggerModal = (type: string) => {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('open-vault-modal', { detail: type }));
+    }
+};
+
 export const BookDetails = ({ 
     currentBook, items, onBack, onEdit, onDelete, onToggleStatus, 
-    searchQuery, setSearchQuery, pagination, currentUser, stats,
-    onOpenAnalytics, onOpenExport 
+    searchQuery, setSearchQuery, pagination, currentUser, stats
 }: any) => {
     
-    if (!currentBook) return null;
-
+    // 🔥 FIX: হুকগুলো সবার আগে কল করতে হবে (Return এর আগে)
+    
     // --- ১. গ্লোবাল স্টেট ---
     const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
     const [categoryFilter, setCategoryFilter] = useState('all');
@@ -30,7 +36,8 @@ export const BookDetails = ({
     const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
     // --- ২. ফিল্টারিং এবং স্মার্ট সর্টিং ---
-    let processedItems = [...items].filter(i => (i.title || "").toLowerCase().includes(searchQuery.toLowerCase()));
+    // (নোট: items না থাকলে এরর এড়াতে ডিফল্ট অ্যারে ব্যবহার করা হয়েছে)
+    let processedItems = [...(items || [])].filter(i => (i.title || "").toLowerCase().includes(searchQuery.toLowerCase()));
     
     if (categoryFilter !== 'all') {
         processedItems = processedItems.filter(item => (item.category || "").toLowerCase() === categoryFilter.toLowerCase());
@@ -48,7 +55,10 @@ export const BookDetails = ({
         return 0;
     });
 
-    const currentItems = processedItems.slice((pagination.currentPage - 1) * 10, pagination.currentPage * 10);
+    const currentItems = processedItems.slice(((pagination?.currentPage || 1) - 1) * 10, (pagination?.currentPage || 1) * 10);
+
+    // 🔥 FIX: হুক কল শেষ হওয়ার পর এখন আমরা চেক করব বই আছে কি না
+    if (!currentBook) return null;
 
     return (
         <div className="w-full pb-32" onClick={() => { setShowSortMenu(false); setShowMobileSettings(false); }}>
@@ -57,46 +67,37 @@ export const BookDetails = ({
                 
                 {/* ১. স্ট্যাটাস গ্রিড (StatsGrid) */}
                 <StatsGrid 
-                    income={stats.inflow} 
-                    expense={stats.outflow} 
+                    income={stats?.inflow || 0} 
+                    expense={stats?.outflow || 0} 
                     labelPrefix="Vault" 
                     currency={currentUser?.currency} 
                 />
 
                 {/* ২. রেসপন্সিভ টুলবার */}
-                <div className="flex flex-col md:flex-row gap-3 items-center w-full relative z-[100]">
+                <div className="flex gap-3 items-center w-full relative z-[100]">
                     
-                    {/* সার্চ বার (Flexible) */}
-                    <div className="relative flex-1 w-full group">
-                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-orange-500 transition-colors">
+                    {/* সার্চ বার */}
+                    <div className="relative flex-1 group h-14">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-orange-500 transition-colors pointer-events-none">
                             <Search size={20} />
                         </div>
                         <input 
                             value={searchQuery}
-                            onChange={e => {setSearchQuery(e.target.value); pagination.setPage(1);}}
-                            placeholder="FILTER BY TITLE..." 
-                            className="app-input pl-14 pr-6 h-14 font-black uppercase tracking-widest focus:border-orange-500 shadow-sm transition-all"
+                            onChange={e => {setSearchQuery(e.target.value); if(pagination?.setPage) pagination.setPage(1);}}
+                            placeholder="FILTER..." 
+                            aria-label="Filter transactions"
+                            className="w-full h-full pl-14 pr-4 bg-[var(--bg-card)] border-2 border-[var(--border-color)] rounded-2xl text-xs font-black uppercase tracking-widest focus:outline-none focus:border-orange-500 text-[var(--text-main)] shadow-sm transition-all"
                         />
                     </div>
 
-                    {/* ডেস্কটপ বাটন সেট (View -> Sort -> Stats -> Export) */}
+                    {/* ডেস্কটপ বাটন সেট */}
                     <div className="hidden xl:flex items-center gap-3">
                         
-                        {/* ১. ক্যাটাগরি সিলেক্ট (🔥 ফিক্সড: বাটন সরিয়ে ফেলা হয়েছে) */}
-                        <div className="min-w-[180px]">
-                            <CustomSelect 
-                                value={categoryFilter} 
-                                options={userCategories} 
-                                onChange={setCategoryFilter} 
-                                icon={LayoutGrid} 
-                            />
-                        </div>
-
-                        {/* ২. সর্ট বাটন */}
+                        {/* ১. সর্ট বাটন */}
                         <div className="relative">
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }} 
-                                className={`flex items-center gap-3 px-6 h-14 rounded-2xl border-2 transition-all active:scale-95 font-black text-[11px] tracking-widest uppercase ${showSortMenu ? 'border-orange-500 text-orange-500 bg-orange-500/5' : 'border-[var(--border-color)] text-[var(--text-muted)] bg-[var(--bg-card)] hover:border-orange-500'}`}
+                                className={`flex items-center gap-3 px-6 h-14 rounded-2xl border-2 transition-all active:scale-95 font-black text-[11px] tracking-widest uppercase ${showSortMenu ? 'border-orange-500 text-orange-500 bg-orange-500/5' : 'border-[var(--border-color)] text-[var(--text-muted)] bg-[var(--bg-card)] hover:border-orange-500 hover:text-orange-500'}`}
                             >
                                 <ArrowUpDown size={18} /> <span>SORT</span>
                             </button>
@@ -117,29 +118,46 @@ export const BookDetails = ({
                             </AnimatePresence>
                         </div>
 
-                        {/* ৩. স্ট্যাটাস মডাল বাটন */}
-                        <button onClick={onOpenAnalytics} className="flex items-center gap-3 px-6 h-14 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] font-black text-[11px] tracking-widest uppercase hover:border-orange-500 hover:text-orange-500 transition-all active:scale-95">
+                        {/* ২. ক্যাটাগরি সিলেক্ট */}
+                        <div className="min-w-[180px]">
+                            <CustomSelect 
+                                value={categoryFilter} 
+                                options={userCategories} 
+                                onChange={setCategoryFilter} 
+                                icon={LayoutGrid} 
+                            />
+                        </div>
+
+                        {/* ৩. স্ট্যাটস বাটন */}
+                        <button 
+                            onClick={() => triggerModal('analytics')} 
+                            className="flex items-center gap-3 px-6 h-14 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] font-black text-[11px] tracking-widest uppercase hover:border-orange-500 hover:text-orange-500 transition-all active:scale-95"
+                        >
                             <BarChart3 size={18} /> <span>STATS</span>
                         </button>
 
-                        {/* ৪. এক্সপোর্ট মডাল বাটন */}
-                        <button onClick={onOpenExport} className="flex items-center gap-3 px-6 h-14 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] font-black text-[11px] tracking-widest uppercase hover:border-green-500 hover:text-green-500 transition-all active:scale-95">
+                        {/* ৪. এক্সপোর্ট বাটন */}
+                        <button 
+                            onClick={() => triggerModal('export')} 
+                            className="flex items-center gap-3 px-6 h-14 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] font-black text-[11px] tracking-widest uppercase hover:border-green-500 hover:text-green-500 transition-all active:scale-95"
+                        >
                             <Download size={18} /> <span>EXPORT</span>
                         </button>
                     </div>
 
-                    {/* মোবাইল ভিউ সেটিংস বাটন */}
-                    <div className="xl:hidden w-full md:w-auto">
+                    {/* মোবাইল সেটিংস বাটন */}
+                    <div className="xl:hidden shrink-0">
                         <button 
                             onClick={(e) => { e.stopPropagation(); setShowMobileSettings(!showMobileSettings); }} 
-                            className={`w-full md:w-auto flex items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-90 ${showMobileSettings ? 'bg-orange-500 border-orange-500 text-white shadow-lg' : 'bg-[var(--bg-card)] border-[var(--border-color)] text-[var(--text-muted)]'}`}
+                            className={`w-14 h-14 flex items-center justify-center rounded-2xl border-2 transition-all active:scale-90 ${showMobileSettings ? 'bg-orange-500 border-orange-500 text-white shadow-lg' : 'bg-[var(--bg-card)] border-[var(--border-color)] text-[var(--text-muted)]'}`}
+                            aria-label="Open filter menu"
                         >
-                            <SlidersHorizontal size={22} /> <span className="md:hidden text-[10px] font-black uppercase tracking-widest">Protocol Filters</span>
+                            <SlidersHorizontal size={22} />
                         </button>
                     </div>
                 </div>
 
-                {/* ৩. মোবাইল সেটিংস প্যানেল (Fixed Logic) */}
+                {/* ৩. মোবাইল সেটিংস প্যানেল */}
                 <AnimatePresence>
                     {showMobileSettings && (
                         <div className="fixed inset-0 z-[150] flex items-end justify-center p-4">
@@ -162,10 +180,16 @@ export const BookDetails = ({
                                     </button>
 
                                     <div className="grid grid-cols-2 gap-4 pt-4">
-                                        <button onClick={() => {onOpenAnalytics(); setShowMobileSettings(false);}} className="h-20 rounded-2xl bg-orange-500/5 border border-orange-500/20 flex flex-col items-center justify-center gap-2 text-orange-500 active:bg-orange-500 active:text-white transition-all">
+                                        <button 
+                                            onClick={() => { triggerModal('analytics'); setShowMobileSettings(false); }} 
+                                            className="h-20 rounded-2xl bg-orange-500/5 border border-orange-500/20 flex flex-col items-center justify-center gap-2 text-orange-500 active:bg-orange-500 active:text-white transition-all"
+                                        >
                                             <BarChart3 size={24}/><span className="text-[9px] font-black uppercase">Analysis</span>
                                         </button>
-                                        <button onClick={() => {onOpenExport(); setShowMobileSettings(false);}} className="h-20 rounded-2xl bg-green-500/5 border border-green-500/20 flex flex-col items-center justify-center gap-2 text-green-500 active:bg-green-500 active:text-white transition-all">
+                                        <button 
+                                            onClick={() => { triggerModal('export'); setShowMobileSettings(false); }} 
+                                            className="h-20 rounded-2xl bg-green-500/5 border border-green-500/20 flex flex-col items-center justify-center gap-2 text-green-500 active:bg-green-500 active:text-white transition-all"
+                                        >
                                             <Download size={24}/><span className="text-[9px] font-black uppercase">Export</span>
                                         </button>
                                     </div>
@@ -204,9 +228,9 @@ export const BookDetails = ({
                 <div className="flex justify-between items-center py-4 px-2">
                     <p className="text-[10px] font-black text-[var(--text-muted)] uppercase hidden md:block tracking-[3px]">Protocol Archive</p>
                     <div className="flex gap-2 w-full md:w-auto justify-center md:justify-end items-center">
-                        <button disabled={pagination.currentPage === 1} onClick={() => pagination.setPage(pagination.currentPage - 1)} className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 hover:border-orange-500 transition-all"><ChevronLeft size={20}/></button>
-                        <div className="px-6 py-3.5 bg-orange-500 text-white rounded-2xl text-[11px] font-black uppercase tracking-[2px] shadow-lg shadow-orange-500/20">{pagination.currentPage} / {pagination.totalPages}</div>
-                        <button disabled={pagination.currentPage === pagination.totalPages} onClick={() => pagination.setPage(pagination.currentPage + 1)} className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 hover:border-orange-500 transition-all"><ChevronRight size={20}/></button>
+                        <button disabled={pagination?.currentPage === 1} onClick={() => pagination?.setPage(pagination.currentPage - 1)} className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 hover:border-orange-500 transition-all"><ChevronLeft size={20}/></button>
+                        <div className="px-6 py-3.5 bg-orange-500 text-white rounded-2xl text-[11px] font-black uppercase tracking-[2px] shadow-lg shadow-orange-500/20">{pagination?.currentPage} / {pagination?.totalPages}</div>
+                        <button disabled={pagination?.currentPage === pagination?.totalPages} onClick={() => pagination?.setPage(pagination.currentPage + 1)} className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 hover:border-orange-500 transition-all"><ChevronRight size={20}/></button>
                     </div>
                 </div>
             </div>

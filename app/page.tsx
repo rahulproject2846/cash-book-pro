@@ -1,14 +1,14 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Book, WifiOff, History } from 'lucide-react';
+import { Loader2, WifiOff, Book, History, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Core Systems
-import { db } from '@/lib/offlineDB';
+// Core Engine
+import { db, saveEntryToLocal } from '@/lib/offlineDB';
 import AuthScreen from '@/components/Auth/AuthScreen';
 
-// Layout & UI Shell
+// UI Shell
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
 import { BooksSection } from '@/components/Sections/BooksSection';
 import { ReportsSection } from '@/components/Sections/ReportsSection';
@@ -29,25 +29,50 @@ export default function CashBookApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('books');
   const [isOnline, setIsOnline] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
   
-  // Logic Synchronization Refs
   const isSyncingRef = useRef(false);
   const hydrationDoneRef = useRef(false);
 
-  // Global Modal Orchestration
+  // --- MODAL STATES ---
   const [globalModal, setGlobalModal] = useState<'none' | 'addBook' | 'editBook' | 'analytics' | 'export' | 'share' | 'deleteBookConfirm'>('none');
-  const [activeEntries, setActiveEntries] = useState<any[]>([]); // For Analytics/Export
+  const [activeEntries, setActiveEntries] = useState<any[]>([]); 
   const [bookForm, setBookForm] = useState({ name: '', description: '' });
+  
+  // 🔥 ফিক্সড: triggerFab স্টেট ডিফাইন করা হলো
   const [triggerFab, setTriggerFab] = useState(false);
   const [showFabModal, setShowFabModal] = useState(false);
 
-  // --- 1. CLOUD SYNC ENGINE (Background Processing) ---
+  // --- ১. স্মার্ট বাটন ক্লিক লজিক (The UX Flow) ---
+  const handleFabClick = () => {
+    if (currentBook) {
+        // যদি কোনো বইয়ের ভেতরে থাকি, BooksSection-কে এন্ট্রি মডাল খুলতে বলো
+        setTriggerFab(true); 
+    } else if (activeSection === 'books') {
+        // যদি ড্যাশবোর্ডে থাকি, সরাসরি বই তৈরির মডাল
+        setGlobalModal('addBook');
+    } else {
+        // অন্য যেকোনো পেজ থেকে আগে শর্টকাট পপ-আপ দেখাও
+        setShowFabModal(true);
+    }
+  };
+
+  // --- ২. মডাল ডেটা প্রিপারেশন (Analytics/Export) ---
+  const handleOpenGlobalModal = async (type: 'analytics' | 'export' | 'share') => {
+    if (!currentBook?._id) return toast.error("Select a vault first");
+    const data = await db.entries
+        .where('bookId').equals(currentBook._id)
+        .and(item => item.isDeleted === 0)
+        .toArray();
+    setActiveEntries(data);
+    setGlobalModal(type);
+  };
+
+  // --- ৩. ব্যাকগ্রাউন্ড সিঙ্ক ইঞ্জিন ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || isSyncingRef.current || !currentUser?._id) return;
-
     const pending = await db.entries.where('synced').equals(0).toArray();
     if (pending.length === 0) return;
-
     isSyncingRef.current = true;
     try {
       for (const entry of pending) {
@@ -56,14 +81,12 @@ export default function CashBookApp() {
           await db.entries.delete(entry.localId!);
           continue;
         }
-
         const { _id, localId, synced, isDeleted, ...payload } = entry;
         const res = await fetch(entry._id ? `/api/entries/${entry._id}` : '/api/entries', {
           method: entry._id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...payload, userId: currentUser._id }),
         });
-
         if (res.ok || res.status === 409) {
           const serverData = await res.json();
           await db.entries.update(entry.localId!, {
@@ -73,54 +96,24 @@ export default function CashBookApp() {
         }
       }
       window.dispatchEvent(new Event('vault-updated'));
-    } catch (err) {
-      console.warn("Vault Sync Engine: Connection Interrupted");
-    } finally {
-      isSyncingRef.current = false;
-    }
+    } catch (err) { console.warn("Sync Int."); } 
+    finally { isSyncingRef.current = false; }
   }, [currentUser?._id]);
 
-  // ২. CashBookApp ফাংশনের ভেতরে শেয়ার টগল লজিক যোগ করুন
-const handleToggleShare = async (enable: boolean) => {
-    try {
-        const res = await fetch('/api/books/share', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ bookId: currentBook._id, enable }) 
-        });
-        const data = await res.json();
-        if (res.ok) {
-            // লোকাল ডেক্সি ডাটাবেসেও আপডেট করুন যাতে সাথে সাথে UI পরিবর্তন হয়
-            await db.books.update(currentBook._id, { 
-                isPublic: data.data.isPublic, 
-                shareToken: data.data.shareToken 
-            }as any);
-            // currentBook স্টেট আপডেট করা হলো
-            setCurrentBook({ ...currentBook, isPublic: data.data.isPublic, shareToken: data.data.shareToken });
-            toast.success(enable ? "Vault is now Live" : "Vault is now Private");
-        }
-    } catch (err) {
-        toast.error("Sharing protocol failed");
-    }
-};
-
-  // --- 2. DATA HYDRATION (Syncing Cloud to Local) ---
+  // --- ৪. ক্লাউড হাইড্রেশন ---
   const hydrateVault = useCallback(async (user: any) => {
     if (!navigator.onLine || !user?._id || hydrationDoneRef.current) return;
-    
     hydrationDoneRef.current = true;
     try {
       const [booksRes, entriesRes] = await Promise.all([
           fetch(`/api/books?userId=${user._id}`),
           fetch(`/api/entries/all?userId=${user._id}`)
       ]);
-
       if (booksRes.ok && entriesRes.ok) {
           const bData = await booksRes.json();
           const eData = await entriesRes.json();
           const books = Array.isArray(bData) ? bData : (bData.books || []);
           const entries = Array.isArray(eData) ? eData : (eData.entries || []);
-
           if (books.length > 0) await db.books.bulkPut(books);
           if (entries.length > 0) {
               await db.transaction('rw', db.entries, async () => {
@@ -137,55 +130,53 @@ const handleToggleShare = async (enable: boolean) => {
                   }
               });
           }
+          setIsHydrated(true);
           window.dispatchEvent(new Event('vault-updated'));
           syncOfflineData();
       }
-    } catch (err) { 
-        hydrationDoneRef.current = false;
-    }
+    } catch (err) { hydrationDoneRef.current = false; }
   }, [syncOfflineData]);
 
-  // --- 3. MODAL DATA PREPARATION ---
-  const handleOpenGlobalModal = async (type: 'analytics' | 'export' | 'share') => {
-    if (!currentBook?._id) return toast.error("Select a vault first");
-    
-    // Fetch latest local entries for the modal
-    const data = await db.entries
-        .where('bookId').equals(currentBook._id)
-        .and(item => item.isDeleted === 0)
-        .toArray();
-    
-    setActiveEntries(data);
-    setGlobalModal(type);
-  };
-
-  // --- 4. LIFECYCLE & EVENT MONITORING ---
+  // --- ৫. লাইভ ইভেন্ট মনিটরিং ---
   useEffect(() => {
     const savedUser = localStorage.getItem('cashbookUser');
     if (savedUser) {
       const user = JSON.parse(savedUser);
       setCurrentUser(user);
       setIsLoggedIn(true);
-      hydrateVault(user);
+      if (!isHydrated) hydrateVault(user);
     }
-    
-    const lTimer = setTimeout(() => setIsLoading(false), 1000);
-
-    const handleNetworkActivity = () => {
+    const timer = setTimeout(() => setIsLoading(false), 1000);
+    const handleNetwork = () => {
         setIsOnline(navigator.onLine);
         if (navigator.onLine) syncOfflineData();
     };
-
-    window.addEventListener('online', handleNetworkActivity);
+    window.addEventListener('online', handleNetwork);
     window.addEventListener('offline', () => setIsOnline(false));
-
     return () => {
-        clearTimeout(lTimer);
-        window.removeEventListener('online', handleNetworkActivity);
+        clearTimeout(timer);
+        window.removeEventListener('online', handleNetwork);
     };
-  }, [hydrateVault, syncOfflineData]);
+  }, [hydrateVault, syncOfflineData, isHydrated]);
 
-  // --- 5. SYSTEM HANDLERS ---
+  // --- ৬. সিস্টেম হ্যান্ডলারস ---
+  const handleToggleShare = async (enable: boolean) => {
+    if (!currentBook?._id) return;
+    try {
+        const res = await fetch('/api/books/share', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ bookId: currentBook._id, enable }) 
+        });
+        const data = await res.json();
+        if (res.ok) {
+            await db.books.update(currentBook._id, { isPublic: data.data.isPublic, shareToken: data.data.shareToken } as any);
+            setCurrentBook({ ...currentBook, isPublic: data.data.isPublic, shareToken: data.data.shareToken });
+            toast.success(enable ? "Vault is Live" : "Vault is Private");
+        }
+    } catch (err) { toast.error("Share failed"); }
+  };
+
   const handleLogout = async () => {
     localStorage.removeItem('cashbookUser');
     await Promise.all([db.books.clear(), db.entries.clear()]);
@@ -199,30 +190,11 @@ const handleToggleShare = async (enable: boolean) => {
     hydrateVault(user);
   };
 
-  if (isLoading) return (
-    <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="animate-spin text-orange-500" size={48} />
-        <p className="text-[10px] font-black uppercase tracking-[5px] text-white/10">Establishing Protocol</p>
-    </div>
-  );
-
+  if (isLoading) return <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center space-y-4"><Loader2 className="animate-spin text-orange-500" size={48} /><p className="text-[10px] font-black uppercase tracking-[5px] text-white/10">Synchronizing</p></div>;
   if (!isLoggedIn) return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
 
-  // --- 6. VIEW ROUTING ---
   const sectionMap: Record<string, React.ReactNode> = {
-    books: (
-        <BooksSection 
-            currentUser={currentUser} 
-            currentBook={currentBook} 
-            setCurrentBook={setCurrentBook} 
-            triggerFab={triggerFab} 
-            setTriggerFab={setTriggerFab} 
-            externalModalType={globalModal} 
-            setExternalModalType={setGlobalModal} 
-            bookForm={bookForm} 
-            setBookForm={setBookForm} 
-        />
-    ),
+    books: <BooksSection currentUser={currentUser} currentBook={currentBook} setCurrentBook={setCurrentBook} triggerFab={triggerFab} setTriggerFab={setTriggerFab} externalModalType={globalModal} setExternalModalType={setGlobalModal} bookForm={bookForm} setBookForm={setBookForm} />,
     reports: <ReportsSection currentUser={currentUser} />,
     timeline: <TimelineSection currentUser={currentUser} />,
     settings: <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />,
@@ -234,79 +206,61 @@ const handleToggleShare = async (enable: boolean) => {
         activeSection={activeSection} setActiveSection={setActiveSection}
         onLogout={handleLogout} currentUser={currentUser}
         currentBook={currentBook} onBack={() => setCurrentBook(null)}
-        onFabClick={() => { if (activeSection === 'books') setTriggerFab(true); else setShowFabModal(true); }}
-        
-        // Header Integration (Lifts state from header to root)
+        onFabClick={handleFabClick}
         onOpenAnalytics={() => handleOpenGlobalModal('analytics')}
-    onOpenExport={() => handleOpenGlobalModal('export')}
-    onOpenShare={() => setGlobalModal('share')}
-        
-        onEditBook={() => { 
-            if (currentBook) { 
-                setBookForm({ name: currentBook.name, description: currentBook.description || "" }); 
-                setGlobalModal('editBook'); 
-            } 
-        }}
+        onOpenExport={() => handleOpenGlobalModal('export')}
+        onOpenShare={() => setGlobalModal('share')}
+        onEditBook={() => { if (currentBook) { setBookForm({ name: currentBook.name, description: currentBook.description || "" }); setGlobalModal('editBook'); } }}
         onDeleteBook={() => setGlobalModal('deleteBookConfirm')}
     >
         <AnimatePresence mode="wait">
-            <motion.div key={activeSection + (currentBook?._id || '')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-                {!isOnline && (
-                    <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/20 rounded-[20px] flex items-center gap-3 text-orange-500 shadow-xl">
-                        <WifiOff size={20} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Protocol Offline: Vault Secured Locally</span>
-                    </div>
-                )}
+            <motion.div key={activeSection} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
+                {!isOnline && <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/20 rounded-[20px] flex items-center gap-3 text-orange-500 shadow-xl"><WifiOff size={16} /><span className="text-[10px] font-black uppercase">Protocol Offline</span></div>}
                 {sectionMap[activeSection]}
             </motion.div>
         </AnimatePresence>
 
-        {/* --- ROOT LEVEL MODAL LAYER --- */}
-<AnimatePresence>
-    {/* ১. এনালিটিক্স মডাল */}
-    {globalModal === 'analytics' && currentBook && (
-        <ModalLayout 
-            key="analytics-modal" // ইউনিক কি দিন
-            title="Vault Intelligence" 
-            onClose={() => setGlobalModal('none')}
-        >
-            <div className="h-[450px] py-4" onClick={(e) => e.stopPropagation()}>
-                <AnalyticsChart entries={activeEntries} />
-            </div>
-        </ModalLayout>
-    )}
+        {/* --- GLOBAL MODAL LAYER --- */}
+        <AnimatePresence>
+            {globalModal === 'analytics' && currentBook && (
+                <ModalLayout key="analytics-modal" title="Vault Intelligence" onClose={() => setGlobalModal('none')}>
+                    <div className="h-[450px] py-4" onClick={(e) => e.stopPropagation()}><AnalyticsChart entries={activeEntries} /></div>
+                </ModalLayout>
+            )}
 
-    {/* ২. এক্সপোর্ট মডাল */}
-    {globalModal === 'export' && currentBook && (
-        <AdvancedExportModal 
-            key="export-modal"
-            isOpen={true} 
-            onClose={() => setGlobalModal('none')} 
-            entries={activeEntries} 
-            bookName={currentBook.name} 
-        />
-    )}
-    
-    {/* ৩. শেয়ার মডাল */}
-    {globalModal === 'share' && currentBook && (
-        <ModalLayout 
-            key="share-modal"
-            title="Protocol Sharing" 
-            onClose={() => setGlobalModal('none')}
-        >
-            {/* আপনার শেয়ারিং লজিক এখানে */}
-            <div className="p-10 text-center text-[10px] font-black uppercase tracking-widest text-white/20">
-                Sharing Protocol Initializing...
-            </div>
-        </ModalLayout>
-    )}
-    <ShareModal 
-        isOpen={globalModal === 'share'}
-        onClose={() => setGlobalModal('none')}
-        currentBook={currentBook}
-        onToggleShare={handleToggleShare}
-    />
-</AnimatePresence>
+            {globalModal === 'export' && currentBook && (
+                <AdvancedExportModal key="export-modal" isOpen={true} onClose={() => setGlobalModal('none')} entries={activeEntries} bookName={currentBook.name} />
+            )}
+            
+            {globalModal === 'share' && currentBook && (
+                <ShareModal key="share-modal" isOpen={true} onClose={() => setGlobalModal('none')} currentBook={currentBook} onToggleShare={handleToggleShare} />
+            )}
+
+            {/* 🔥 পপ-আপ শর্টকাট মডাল (অন্য পেজের জন্য) */}
+            {showFabModal && (
+                <ModalLayout title="Protocol Shortcut" onClose={() => setShowFabModal(false)}>
+                    <div className="grid grid-cols-1 gap-4 p-2">
+                        <button 
+                            onClick={() => { 
+                                setActiveSection('books'); 
+                                setCurrentBook(null); 
+                                setGlobalModal('addBook'); 
+                                setShowFabModal(false); 
+                            }} 
+                            className="w-full p-6 bg-white/[0.03] border border-white/[0.05] rounded-[32px] flex items-center gap-5 group hover:bg-orange-500 transition-all duration-300"
+                        >
+                             <div className="p-4 bg-orange-500 rounded-2xl text-white group-hover:bg-white group-hover:text-orange-500 shadow-lg shadow-orange-500/20">
+                                <Plus size={24} strokeWidth={4}/>
+                             </div>
+                             <div className="text-left">
+                                <p className="font-black uppercase text-xs tracking-[2px] text-white">Initialize Ledger</p>
+                                <p className="text-[9px] font-bold text-white/30 group-hover:text-white/60 uppercase tracking-widest mt-1">Go to Dashboard and create vault</p>
+                             </div>
+                        </button>
+                    </div>
+                </ModalLayout>
+            )}
+        </AnimatePresence>
     </DashboardLayout>
   );
 }

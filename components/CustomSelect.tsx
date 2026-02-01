@@ -18,17 +18,19 @@ const CustomSelect = ({ label, value, options, onChange, icon: Icon }: any) => {
 
     return (
         <div className="space-y-2 relative" ref={dropdownRef}>
-            <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[2px] ml-1 flex items-center gap-2">
-                {Icon && <Icon size={12} className="text-orange-500" />} {label}
-            </label>
             <button 
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between h-14 px-5 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-2xl focus:border-orange-500 transition-all text-[11px] font-black uppercase tracking-widest text-[var(--text-main)]"
-            >
-                <span className="truncate">{value}</span>
-                <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
-            </button>
+    type="button"
+    onClick={() => setIsOpen(!isOpen)}
+    // 🔥 ফিক্স: 'items-center' এবং 'h-14' নিশ্চিত করা হলো
+    className="w-full h-14 flex items-center justify-between px-5 bg-[var(--bg-app)] border-2 border-[var(--border-color)] rounded-2xl focus:border-orange-500 transition-all text-[11px] font-black uppercase tracking-widest text-[var(--text-main)]"
+>
+    {/* আইকন এবং টেক্সটকে একটি গ্রুপে রাখা হলো */}
+    <div className="flex items-center gap-3 overflow-hidden">
+        {Icon && <Icon size={18} className="shrink-0 text-orange-500" />}
+        <span className="truncate pt-0.5">{value === 'all' ? 'VIEW ALL' : value.toUpperCase()}</span>
+    </div>
+    <ChevronDown size={16} className={`shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+</button>
 
             <AnimatePresence>
                 {isOpen && (

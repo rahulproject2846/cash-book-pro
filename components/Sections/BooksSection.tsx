@@ -21,10 +21,10 @@ import { useVault } from '@/hooks/useVault';
 
 export const BooksSection = ({ 
     currentUser, currentBook, setCurrentBook, triggerFab, setTriggerFab, 
-    externalModalType, setExternalModalType, bookForm, setBookForm // page/setPage removed as we use local state
+    externalModalType, setExternalModalType, bookForm, setBookForm, page, setPage
 }: any) => {
     
-    // --- ১. লজিক ইঞ্জিন ইনজেকশন ---
+    // --- ১. লজিক ইঞ্জিন ---
     const {
         books, entries, allEntries, isLoading, stats,
         fetchData, fetchBookEntries, saveEntry, toggleEntryStatus, deleteEntry
@@ -34,10 +34,7 @@ export const BooksSection = ({
     const [searchQuery, setSearchQuery] = useState(''); 
     const [sortOption, setSortOption] = useState('Activity');
     
-    // 🔥 Dashboard Pagination State
     const [dashPage, setDashPage] = useState(1);
-
-    // Details View States
     const [detailsSearchQuery, setDetailsSearchQuery] = useState(''); 
     const [detailsPage, setDetailsPage] = useState(1);
 
@@ -47,74 +44,81 @@ export const BooksSection = ({
     const [confirmName, setConfirmName] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // --- ৩. বুক প্রসেসিং ইঞ্জিন (Sorting & Pagination) ---
-    // BooksSection.tsx এর ভেতর (লাইন 250 এর আশেপাশে)
+    // --- ৩. ফোর্স ক্লোজ মডাল ---
+    const forceCloseModal = () => {
+        setModalType('none');
+        setExternalModalType('none'); 
+        setBookForm({ name: '', description: '' });
+        setEditTarget(null);
+    };
 
-    const handleQuickAdd = (book: any) => { 
-    // Quick Add লজিককে এক জায়গায় নিয়ে আসা
-    setCurrentBook(book); 
-    setTimeout(() => {
-        setTriggerFab(true); 
-    }, 100);
-};
+    // --- ৪. বুক প্রসেসিং ইঞ্জিন (Sorting Fix & Time Fix) ---
+    const processedBooks = useMemo(() => {
+        const booksWithStats = books.map(book => {
+            const bookEntries = allEntries.filter(e => e.bookId === book._id && e.isDeleted === 0);
+            
+            const inflow = bookEntries.filter(e => e.type === 'income' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
+            const outflow = bookEntries.filter(e => e.type === 'expense' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
+            
+            // 🔥🔥🔥 MAJOR FIX: Time Sorting & Display Logic 🔥🔥🔥
+            
+            // ১. বই তৈরির/আপডেটের সময় (Timestamp এ কনভার্ট করা)
+            const bookTime = new Date(book.updatedAt || book.createdAt || 0).getTime();
 
-// BooksSection.tsx এর ভেতর (Line 250 এর আশেপাশে)
+            // ২. লেটেস্ট এন্ট্রির সময় খুঁজে বের করা
+            let lastEntryTime = 0;
+            if (bookEntries.length > 0) {
+                // createdAt অনুযায়ী সর্ট করে সবচেয়ে নতুনটি নেওয়া
+                const sortedEntries = [...bookEntries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                lastEntryTime = new Date(sortedEntries[0].createdAt).getTime();
+            }
 
-// ৩. বুক প্রসেসিং ইঞ্জিন (Sorting & Stats)
-const processedBooks = useMemo(() => {
-    const booksWithStats = books.map(book => {
-        // 🔥 FIX 1: e.bookId === book._id ব্যবহার করা হলো
-        const bookEntries = allEntries.filter(e => e.bookId === book._id && e.isDeleted === 0); 
-        
-        // ১. এন্ট্রিগুলোকে সঠিকভাবে সর্ট করে লেটেস্টটি বের করা (Sorting Entries)
-        const lastEntry = bookEntries.sort((a, b) => {
-            const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return tB - tA; // ডেট Descending
-        })[0];
+            // ৩. দুটির মধ্যে যেটি লেটেস্ট, সেটিই হবে lastUpdated (Number format)
+            // এটি করলে "Time Ago" ফিচার কাজ করবে এবং সর্টিং ঠিক হবে
+            const lastUpdated = Math.max(bookTime, lastEntryTime);
 
-        // ২. টাইম নরমালইজেশন (LastUpdated)
-        const lastUpdated = lastEntry 
-            ? new Date(lastEntry.createdAt).getTime() 
-            : new Date(book.updatedAt || 0).getTime();
+            return {
+                ...book,
+                // stats এর ভেতর lastUpdated এখন একটি Number (Timestamp), স্ট্রিং নয়
+                stats: { balance: inflow - outflow, inflow, outflow, lastUpdated }
+            };
+        });
 
-        // Stats Calculation
-        const inflow = bookEntries.filter(e => e.type === 'income' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
-        const outflow = bookEntries.filter(e => e.type === 'expense' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
+        // ফিল্টারিং
+        let filtered = booksWithStats.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-        return {
-            ...book,
-            stats: { balance: inflow - outflow, inflow, outflow, lastUpdated }
-        };
-    });
+        // সর্টিং (Activity Based on Timestamp)
+        filtered.sort((a, b) => {
+            if (sortOption === 'Activity') {
+                // নতুন টাইমস্ট্যাম্প (বড় সংখ্যা) আগে আসবে
+                return (b.stats.lastUpdated || 0) - (a.stats.lastUpdated || 0);
+            }
+            if (sortOption === 'Name (A-Z)') return a.name.localeCompare(b.name);
+            if (sortOption === 'Balance (High)') return b.stats.balance - a.stats.balance;
+            if (sortOption === 'Balance (Low)') return a.stats.balance - b.stats.balance;
+            return 0;
+        });
 
-    // ৩. সার্চ ফিল্টার
-    let filtered = booksWithStats.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        return filtered;
+    }, [books, allEntries, searchQuery, sortOption]);
 
-    // ৪. সর্টিং ইঞ্জিন (Dropdown Based)
-    filtered.sort((a, b) => {
-        if (sortOption === 'Activity') {
-            // বড় থেকে ছোট (নতুন থেকে পুরনো)
-            return (b.stats.lastUpdated || 0) - (a.stats.lastUpdated || 0);
-        }
-        if (sortOption === 'Name (A-Z)') return a.name.localeCompare(b.name);
-        if (sortOption === 'Balance (High)') return b.stats.balance - a.stats.balance;
-        if (sortOption === 'Balance (Low)') return a.stats.balance - b.stats.balance;
-        return 0;
-    });
-
-    return filtered;
-}, [books, allEntries, searchQuery, sortOption]); // সব ডেটা নির্ভরতা ঠিক আছে
-
-    // ৪. পেজিনেশন স্লাইসিং
+    // ৫. পেজিনেশন
     const ITEMS_PER_PAGE = 11; 
     const totalPages = Math.ceil(processedBooks.length / ITEMS_PER_PAGE) || 1;
     const currentBooks = processedBooks.slice(((dashPage || 1) - 1) * ITEMS_PER_PAGE, (dashPage || 1) * ITEMS_PER_PAGE);
 
-    // --- ৫. ইফেক্টস ---
+    // --- ৬. ইফেক্টস ---
+    useEffect(() => {
+        if (externalModalType && externalModalType !== 'none') {
+            if (['addBook', 'addEntry', 'editBook', 'deleteBookConfirm'].includes(externalModalType)) {
+                setModalType(externalModalType);
+                setExternalModalType('none'); 
+            }
+        }
+    }, [externalModalType, setExternalModalType]);
+
     useEffect(() => {
         if (currentUser) fetchData(); 
-
         const handleVaultRefresh = () => fetchData();
         window.addEventListener('vault-updated', handleVaultRefresh);
         return () => window.removeEventListener('vault-updated', handleVaultRefresh);
@@ -125,19 +129,20 @@ const processedBooks = useMemo(() => {
     }, [currentBook, fetchBookEntries]);
 
     useEffect(() => {
-        if (externalModalType && externalModalType !== 'none') {
-            setModalType(externalModalType);
-        }
-    }, [externalModalType, setExternalModalType]);
-
-    useEffect(() => {
         if (!triggerFab) return;
         if (currentBook) { setEditTarget(null); setModalType('addEntry'); }
         else { setBookForm({ name: '', description: '' }); setModalType('addBook'); }
         setTriggerFab(false); 
     }, [triggerFab, currentBook, setTriggerFab, setBookForm]);
 
-    // --- ৬. অ্যাকশন হ্যান্ডলার্স ---
+    // --- ৭. অ্যাকশন হ্যান্ডলার্স ---
+    const handleQuickAdd = (book: any) => { 
+        setCurrentBook(book); 
+        setTimeout(() => {
+            setTriggerFab(true); 
+        }, 100);
+    };
+
     const handleSaveBook = async (e: React.FormEvent) => {
         e.preventDefault();
         const isEdit = modalType === 'editBook';
@@ -157,8 +162,10 @@ const processedBooks = useMemo(() => {
             });
             if (res.ok) {
                 const result = await res.json();
+                // 🔥 Saving Updated Timestamp locally to trigger sort instantly
                 await db.books.put({ ...result.book || result.data, updatedAt: Date.now() });
-                setModalType('none');
+                
+                forceCloseModal(); 
                 fetchData();
                 if(isEdit) setCurrentBook(null);
                 toast.success("Ledger Synchronized");
@@ -172,9 +179,23 @@ const processedBooks = useMemo(() => {
             await fetchBookEntries(currentBook._id);
             await fetchData();
             window.dispatchEvent(new Event('vault-updated'));
-            setModalType('none'); 
-            setEditTarget(null); 
+            forceCloseModal(); 
         }
+    };
+
+    const handleDeleteBook = async () => {
+        if (!currentBook || confirmName !== currentBook.name) return toast.error("Identity mismatch");
+        try {
+            const res = await fetch(`/api/books/${currentBook._id}`, { method: 'DELETE' });
+            if (res.ok) {
+                await db.books.delete(currentBook._id);
+                await db.entries.where('bookId').equals(currentBook._id).delete();
+                forceCloseModal();
+                setCurrentBook(null);
+                fetchData();
+                toast.success('Vault Permanently Terminated');
+            } else throw new Error("Server Error");
+        } catch (err) { toast.error("Vault termination failed"); }
     };
 
     const handleDeleteEntry = async () => {
@@ -198,7 +219,6 @@ const processedBooks = useMemo(() => {
                 {!currentBook ? (
                     <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
                         
-                        {/* Control Bar */}
                         <div className="bg-[var(--bg-card)] p-6 rounded-[32px] border border-[var(--border-color)] flex flex-col md:flex-row gap-6 items-center justify-between shadow-sm">
                             <div className="flex items-center gap-4">
                                 <div className="p-4 bg-orange-500/10 rounded-2xl text-orange-500"><LayoutGrid size={24} /></div>
@@ -221,14 +241,12 @@ const processedBooks = useMemo(() => {
                                         icon={ArrowUpDown} 
                                     />
                                 </div>
-                                <button onClick={() => fileInputRef.current?.click()} className="p-4 rounded-2xl border-2 bg-[var(--bg-card)] hover:text-green-500 transition-all"><FileUp size={20} /></button>
+                                <button onClick={() => fileInputRef.current?.click()} className="p-4 rounded-2xl border-2 border-[var(--border-color)] bg-[var(--bg-card)] hover:text-green-500 transition-all"><FileUp size={20} /></button>
                                 <input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".xlsx, .xls" className="hidden" />
                             </div>
                         </div>
 
-                        {/* Ledger Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {/* Create Card */}
                             {(dashPage === 1) && (
                                 <div onClick={() => { setBookForm({name:'', description:''}); setModalType('addBook'); }} className="app-card h-[220px] border-2 border-dashed border-orange-500/30 flex flex-col items-center justify-center text-orange-500 cursor-pointer hover:bg-orange-500/5 transition-all group">
                                     <Plus size={36} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
@@ -236,23 +254,21 @@ const processedBooks = useMemo(() => {
                                 </div>
                             )}
 
-                            {/* Book Cards */}
                             {currentBooks.map((b: any) => (
                                 <BookCard 
                                     key={b._id} 
                                     book={b} 
-                                    stats={b.stats}
+                                    stats={b.stats} // stats now contains numeric lastUpdated
                                     currencySymbol={getCurrencySymbol()}
                                     onClick={() => {
                                          setCurrentBook(b); 
-                                         setDetailsPage(1); // Reset details pagination
+                                         setDetailsPage(1); 
                                     }} 
                                     onQuickAdd={() => handleQuickAdd(b)} 
                                 />
                             ))}
                         </div>
 
-                        {/* Pagination Controls */}
                         {totalPages > 1 && (
                             <div className="flex justify-between items-center py-4 px-2">
                                 <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[3px]">Protocol Archive</p>
@@ -266,7 +282,6 @@ const processedBooks = useMemo(() => {
 
                     </motion.div>
                 ) : (
-                    /* ডিটেইলস ভিউ */
                     <motion.div key={currentBook._id + ((currentBook as any).__uiKey || '')} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                         <BookDetails 
                             currentBook={currentBook} items={entries} stats={stats} currentUser={currentUser} 
@@ -275,6 +290,7 @@ const processedBooks = useMemo(() => {
                             onEdit={(e: any) => { setEditTarget(e); setModalType('addEntry'); }}
                             onDelete={(e: any) => { setDeleteTarget(e); setConfirmName(''); setModalType('deleteConfirm');}}
                             onToggleStatus={toggleEntryStatus}
+                            onDeleteBook={() => { setConfirmName(''); setModalType('deleteBookConfirm'); }}
                             searchQuery={detailsSearchQuery} 
                             setSearchQuery={setDetailsSearchQuery}
                             pagination={{ 
@@ -289,10 +305,9 @@ const processedBooks = useMemo(() => {
                 )}
             </AnimatePresence>
 
-            {/* ৫. মডাল ইঞ্জিন */}
             <EntryModal 
                 isOpen={modalType === 'addEntry'} 
-                onClose={() => setModalType('none')} 
+                onClose={forceCloseModal} 
                 currentUser={currentUser}
                 initialData={editTarget}
                 onSubmit={handleSaveEntryLogic} 
@@ -300,7 +315,7 @@ const processedBooks = useMemo(() => {
 
             <AnimatePresence>
                 {(modalType === 'addBook' || modalType === 'editBook') && (
-                    <ModalLayout title={modalType === 'editBook' ? "Protocol: Update" : "Protocol: Initialize"} onClose={() => setModalType('none')}>
+                    <ModalLayout title={modalType === 'editBook' ? "Protocol: Update" : "Protocol: Initialize"} onClose={forceCloseModal}>
                         <form onSubmit={handleSaveBook} className="space-y-4">
                             <input required placeholder="LEDGER IDENTITY" className="app-input font-bold uppercase" value={bookForm.name} onChange={e => setBookForm({...bookForm, name: e.target.value})} />
                             <input placeholder="DESCRIPTION" className="app-input text-xs uppercase" value={bookForm.description} onChange={e => setBookForm({...bookForm, description: e.target.value})} />
@@ -308,7 +323,8 @@ const processedBooks = useMemo(() => {
                         </form>
                     </ModalLayout>
                 )}
-                {modalType === 'deleteConfirm' && <DeleteConfirmModal targetName={deleteTarget?.title} confirmName={confirmName} setConfirmName={setConfirmName} onConfirm={handleDeleteEntry} onClose={() => setModalType('none')} />}
+                {modalType === 'deleteConfirm' && <DeleteConfirmModal targetName={deleteTarget?.title} confirmName={confirmName} setConfirmName={setConfirmName} onConfirm={handleDeleteEntry} onClose={forceCloseModal} />}
+                {modalType === 'deleteBookConfirm' && <DeleteConfirmModal targetName={currentBook?.name} confirmName={confirmName} setConfirmName={setConfirmName} onConfirm={handleDeleteBook} onClose={forceCloseModal} />}
             </AnimatePresence>
         </div>
     );

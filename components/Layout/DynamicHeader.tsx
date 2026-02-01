@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, Plus, Sun, Moon, MoreVertical, 
-    Share2, Download, Edit2, Trash2, UserCog, LogOut, ShieldCheck, BarChart3 
+    Share2, Download, Edit2, Trash2, UserCog, LogOut, ShieldCheck, BarChart3, User
 } from 'lucide-react';
 
 export const DynamicHeader = ({ 
@@ -26,27 +26,36 @@ export const DynamicHeader = ({
 
     return (
         <header 
-            className="fixed top-0 right-0 z-[400] bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-[var(--border-color)] px-4 md:px-10 py-5 flex justify-between items-center transition-all duration-300"
-            style={{ left: typeof window !== 'undefined' && window.innerWidth > 768 ? (collapsed ? '80px' : '260px') : '0' }}
+            // 🔥 Responsive Fix: JS এর বদলে Tailwind ক্লাস দিয়ে লেফট পজিশন কন্ট্রোল করা হয়েছে
+            className={`fixed top-0 right-0 z-[400] bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-[var(--border-color)] px-4 md:px-10 py-5 flex justify-between items-center transition-all duration-300 left-0 ${collapsed ? 'md:left-20' : 'md:left-[260px]'}`}
         >
-            {/* LEFT: Branding or Book Title */}
+            {/* LEFT SECTION: Branding & Titles */}
             <div className="flex items-center gap-4">
+                
+                {/* ১. মোবাইল ভিউ ব্রান্ডিং (শুধুমাত্র মোবাইলে এবং ড্যাশবোর্ডে দেখাবে) */}
+                {!currentBook && (
+                    <div className="md:hidden flex items-center gap-3">
+                        <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/20">V</div>
+                        <h1 className="text-lg font-black uppercase italic text-[var(--text-main)] tracking-tighter">Vault Pro</h1>
+                    </div>
+                )}
+
                 {currentBook && activeSection === 'books' ? (
+                    /* ২. বইয়ের ভেতরের ভিউ */
                     <div className="flex items-center gap-3">
                         <button onClick={onBack} className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all active:scale-90">
                             <ChevronLeft size={20} strokeWidth={3}/>
                         </button>
                         <div className="min-w-0 text-left">
                             <h2 className="text-xl md:text-2xl font-black uppercase tracking-tighter italic leading-none text-[var(--text-main)] truncate">{currentBook.name}</h2>
-                            <p className="text-[9px] font-bold text-orange-500 uppercase tracking-[2px] mt-1 opacity-80 flex items-center gap-1.5">
-                                <ShieldCheck size={10}/> Protocol Active
-                            </p>
+                            <p className="text-[9px] font-bold text-orange-500 uppercase tracking-[2px] mt-1 opacity-80 flex items-center gap-1.5"><ShieldCheck size={10}/> Protocol Active</p>
                         </div>
                     </div>
                 ) : (
-                    <div className="text-left">
-                        <h2 className="text-xl md:text-2xl font-black tracking-tighter italic leading-none text-[var(--text-main)]">
-                            {activeSection === 'books' ? `Hello, ${currentUser?.username?.split(' ')[0]}` : activeSection.toUpperCase()}
+                    /* ৩. ডেস্কটপ ড্যাশবোর্ড টাইটেল (Hello সরানো হয়েছে) */
+                    <div className="text-left hidden md:block">
+                        <h2 className="text-xl md:text-2xl font-black uppercase tracking-tighter italic leading-none text-[var(--text-main)]">
+                            {activeSection === 'books' ? 'Financial Dashboard' : activeSection}
                         </h2>
                         <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[3px] mt-1.5 opacity-60">
                             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -55,7 +64,7 @@ export const DynamicHeader = ({
                 )}
             </div>
             
-            {/* RIGHT: Action Buttons */}
+            {/* RIGHT SECTION: Action Buttons */}
             <div className="flex items-center gap-3 shrink-0">
                 <button 
                     onClick={onFabClick} 
@@ -85,6 +94,7 @@ export const DynamicHeader = ({
                                 <>
                                     <div className="fixed inset-0 z-[-1]" onClick={() => setShowSuperMenu(false)} />
                                     <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="absolute right-0 top-16 w-64 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-[24px] shadow-2xl z-[500] overflow-hidden p-2">
+                                        
                                         <button onClick={(e) => { e.stopPropagation(); safeOpenModal(onOpenAnalytics); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-blue-500">
                                             <BarChart3 size={18} className="shrink-0" /> <span>Analysis Report</span>
                                         </button>
@@ -100,14 +110,15 @@ export const DynamicHeader = ({
                                         
                                         <div className="h-px bg-[var(--border-color)] mx-2 my-1 opacity-50" />
                                         
-                                        {/* MANAGE PROFILE BUTTON (Restored) */}
                                         <button onClick={() => {setActiveSection('profile'); onBack(); setShowSuperMenu(false);}} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-orange-500">
                                             <UserCog size={18} className="shrink-0" /> <span>Manage Profile</span>
                                         </button>
 
+                                        {/* 🔥 Book Delete Fix */}
                                         <button onClick={(e) => { e.stopPropagation(); safeOpenModal(onDeleteBook); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] text-red-500 hover:bg-red-500/10">
                                             <Trash2 size={18} className="shrink-0" /> <span>Terminate Vault</span>
                                         </button>
+
                                         <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] text-red-500/70 hover:bg-red-500/10">
                                             <LogOut size={18} className="shrink-0" /> <span>Sing Out</span>
                                         </button>
@@ -118,16 +129,24 @@ export const DynamicHeader = ({
                     </div>
                 ) : (
                     <div className="relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowUserMenu(!showUserMenu); }} className={`w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-white text-lg font-black border-2 border-white/10 transition-transform active:scale-90 ${showUserMenu ? 'ring-2 ring-orange-500' : ''}`}>
-                            {currentUser?.username?.charAt(0) || "U"}
+                        {/* 🔥 Avatar Image Support */}
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setShowUserMenu(!showUserMenu); }} 
+                            className={`w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-white text-lg font-black border-2 border-white/10 uppercase transition-all overflow-hidden active:scale-90 ${showUserMenu ? 'ring-2 ring-orange-500' : ''}`}
+                        >
+                            {currentUser?.image ? (
+                                <img src={currentUser.image} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                currentUser?.username?.charAt(0) || "U"
+                            )}
                         </button>
                         <AnimatePresence>
                             {showUserMenu && (
                                 <>
                                     <div className="fixed inset-0 z-[-1]" onClick={() => setShowUserMenu(false)} />
                                     <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="absolute right-0 top-16 w-60 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-[24px] shadow-2xl z-[500] overflow-hidden p-2">
-                                        <button onClick={() => {setActiveSection('profile'); setShowUserMenu(false);}} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-orange-500">
-                                            <UserCog size={18} className="shrink-0" /> <span>Account Settings</span>
+                                        <button onClick={() => {setActiveSection('profile'); setShowUserMenu(false);}} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-blue-500">
+                                            <User size={18} className="shrink-0" /> <span>Account Settings</span>
                                         </button>
                                         <div className="mt-1 pt-1 border-t border-[var(--border-color)] opacity-40 mx-2" />
                                         <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] text-red-500/70 hover:text-red-500 hover:bg-red-500/5">

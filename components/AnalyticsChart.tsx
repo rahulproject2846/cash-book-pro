@@ -4,15 +4,25 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { PieChart as PieIcon } from 'lucide-react';
 
 export const AnalyticsChart = ({ entries }: { entries: any[] }) => {
+    
     // ১. ডাটা প্রসেসিং: ক্যাটাগরি অনুযায়ী খরচ ক্যালকুলেট করা
     const categoryData = entries
-        .filter(e => e.type === 'expense' && e.status === 'Completed')
+        .filter(e => 
+            // 🔥 ফিক্স: ছোট/বড় হাতের সমস্যা এড়াতে toLowerCase() ব্যবহার করা হলো
+            (e.type || '').toLowerCase() === 'expense' && 
+            (e.status || '').toLowerCase() === 'completed'
+        )
         .reduce((acc: any, curr) => {
-            const found = acc.find((item: any) => item.name === curr.category);
+            // ক্যাটাগরি নাম ক্লিন করা (সবসময় আপারকেস দেখানোর জন্য)
+            const catName = (curr.category || 'GENERAL').toUpperCase();
+            const amount = Number(curr.amount) || 0;
+
+            const found = acc.find((item: any) => item.name === catName);
+            
             if (found) {
-                found.value += curr.amount;
+                found.value += amount;
             } else {
-                acc.push({ name: curr.category, value: curr.amount });
+                acc.push({ name: catName, value: amount });
             }
             return acc;
         }, []);
