@@ -27,6 +27,8 @@ export interface LocalBook {
   _id: string;
   name: string;
   description?: string;
+  isPublic?: boolean;
+  shareToken?: string;
   updatedAt: number;
   synced?: 0 | 1;
 }

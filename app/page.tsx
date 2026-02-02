@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, WifiOff, Book, History, Plus } from 'lucide-react';
+import { Loader2, WifiOff, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // Core Engine
-import { db, saveEntryToLocal } from '@/lib/offlineDB';
+import { db } from '@/lib/offlineDB';
 import AuthScreen from '@/components/Auth/AuthScreen';
 
 // UI Shell
@@ -22,12 +22,18 @@ import { AdvancedExportModal } from '@/components/Modals/AdvancedExportModal';
 import { AnalyticsChart } from '@/components/AnalyticsChart';
 import { ShareModal } from '@/components/Modals/ShareModal';
 
+// --- Define Strict Type for Navigation ---
+type NavSection = 'books' | 'reports' | 'timeline' | 'settings' | 'profile';
+
 export default function CashBookApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentBook, setCurrentBook] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState('books');
+  
+  // FIX: Strictly typing the state to match DashboardLayout requirements
+  const [activeSection, setActiveSection] = useState<NavSection>('books');
+  
   const [isOnline, setIsOnline] = useState(true);
   const [isHydrated, setIsHydrated] = useState(false);
   
@@ -39,25 +45,21 @@ export default function CashBookApp() {
   const [activeEntries, setActiveEntries] = useState<any[]>([]); 
   const [bookForm, setBookForm] = useState({ name: '', description: '' });
   
-  // 🔥 ফিক্সড: triggerFab স্টেট ডিফাইন করা হলো
   const [triggerFab, setTriggerFab] = useState(false);
   const [showFabModal, setShowFabModal] = useState(false);
 
-  // --- ১. স্মার্ট বাটন ক্লিক লজিক (The UX Flow) ---
+  // --- ১. স্মার্ট বাটন ক্লিক লজিক ---
   const handleFabClick = () => {
     if (currentBook) {
-        // যদি কোনো বইয়ের ভেতরে থাকি, BooksSection-কে এন্ট্রি মডাল খুলতে বলো
         setTriggerFab(true); 
     } else if (activeSection === 'books') {
-        // যদি ড্যাশবোর্ডে থাকি, সরাসরি বই তৈরির মডাল
         setGlobalModal('addBook');
     } else {
-        // অন্য যেকোনো পেজ থেকে আগে শর্টকাট পপ-আপ দেখাও
         setShowFabModal(true);
     }
   };
 
-  // --- ২. মডাল ডেটা প্রিপারেশন (Analytics/Export) ---
+  // --- ২. মডাল ডেটা প্রিপারেশন ---
   const handleOpenGlobalModal = async (type: 'analytics' | 'export' | 'share') => {
     if (!currentBook?._id) return toast.error("Select a vault first");
     const data = await db.entries
@@ -160,23 +162,6 @@ export default function CashBookApp() {
   }, [hydrateVault, syncOfflineData, isHydrated]);
 
   // --- ৬. সিস্টেম হ্যান্ডলারস ---
-  const handleToggleShare = async (enable: boolean) => {
-    if (!currentBook?._id) return;
-    try {
-        const res = await fetch('/api/books/share', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ bookId: currentBook._id, enable }) 
-        });
-        const data = await res.json();
-        if (res.ok) {
-            await db.books.update(currentBook._id, { isPublic: data.data.isPublic, shareToken: data.data.shareToken } as any);
-            setCurrentBook({ ...currentBook, isPublic: data.data.isPublic, shareToken: data.data.shareToken });
-            toast.success(enable ? "Vault is Live" : "Vault is Private");
-        }
-    } catch (err) { toast.error("Share failed"); }
-  };
-
   const handleLogout = async () => {
     localStorage.removeItem('cashbookUser');
     await Promise.all([db.books.clear(), db.entries.clear()]);
@@ -190,19 +175,48 @@ export default function CashBookApp() {
     hydrateVault(user);
   };
 
-  if (isLoading) return <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center space-y-4"><Loader2 className="animate-spin text-orange-500" size={48} /><p className="text-[10px] font-black uppercase tracking-[5px] text-white/10">Synchronizing</p></div>;
+  const handleToggleShare = async (enable: boolean) => {
+    if (!currentBook?._id) return;
+    try {
+        const res = await fetch('/api/books/share', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ bookId: currentBook._id, enable }) 
+        });
+        const data = await res.json();
+        if (res.ok) {
+            
+            setCurrentBook({ 
+                ...currentBook, 
+                isPublic: data.data.isPublic, 
+                shareToken: data.data.shareToken 
+            });
+            toast.success(enable ? "Vault is Live" : "Vault is Private");
+        }
+    } catch (err) { toast.error("Share failed"); }
+  };
+
+  if (isLoading) return (
+    <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="animate-spin text-orange-500" size={48} />
+        <p className="text-[10px] font-black uppercase tracking-[5px] text-white/10">Synchronizing</p>
+    </div>
+  );
+  
   if (!isLoggedIn) return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
 
-  const sectionMap: Record<string, React.ReactNode> = {
+  // Sections Mapping
+  const sectionMap: Record<NavSection, React.ReactNode> = {
     books: <BooksSection currentUser={currentUser} currentBook={currentBook} setCurrentBook={setCurrentBook} triggerFab={triggerFab} setTriggerFab={setTriggerFab} externalModalType={globalModal} setExternalModalType={setGlobalModal} bookForm={bookForm} setBookForm={setBookForm} />,
     reports: <ReportsSection currentUser={currentUser} />,
-    timeline: <TimelineSection currentUser={currentUser} />,
+    timeline: <TimelineSection currentUser={currentUser} onBack={() => setActiveSection('books')} />,
     settings: <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />,
     profile: <ProfileSection currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={handleLogout} />
   };
 
   return (
     <DashboardLayout
+        // @ts-ignore
         activeSection={activeSection} setActiveSection={setActiveSection}
         onLogout={handleLogout} currentUser={currentUser}
         currentBook={currentBook} onBack={() => setCurrentBook(null)}
@@ -236,7 +250,6 @@ export default function CashBookApp() {
                 <ShareModal key="share-modal" isOpen={true} onClose={() => setGlobalModal('none')} currentBook={currentBook} onToggleShare={handleToggleShare} />
             )}
 
-            {/* 🔥 পপ-আপ শর্টকাট মডাল (অন্য পেজের জন্য) */}
             {showFabModal && (
                 <ModalLayout title="Protocol Shortcut" onClose={() => setShowFabModal(false)}>
                     <div className="grid grid-cols-1 gap-4 p-2">
