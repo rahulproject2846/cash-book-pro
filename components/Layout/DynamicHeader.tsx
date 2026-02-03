@@ -15,24 +15,19 @@ export const DynamicHeader = ({
     const [showSuperMenu, setShowSuperMenu] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
 
-    // --- Helper: Prevents Modal Flashing by closing menu after a small delay ---
-    const safeOpenModal = (action: () => void) => {
+    // 🔥 FIX: Remove setTimeout. Call both updates together for React Batching.
+    const handleAction = (action: () => void) => {
         setShowSuperMenu(false); 
         setShowUserMenu(false);
-        setTimeout(() => {
-            if (action) action();
-        }, 150); // Reliable delay for state transition
+        if (action) action(); // সরাসরি কল হবে, কোনো ডিলে ছাড়া
     };
 
     return (
         <header 
-            // 🔥 Responsive Fix: JS এর বদলে Tailwind ক্লাস দিয়ে লেফট পজিশন কন্ট্রোল করা হয়েছে
             className={`fixed top-0 right-0 z-[400] bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-[var(--border-color)] px-4 md:px-10 py-5 flex justify-between items-center transition-all duration-300 left-0 ${collapsed ? 'md:left-20' : 'md:left-[260px]'}`}
         >
-            {/* LEFT SECTION: Branding & Titles */}
+            {/* LEFT SECTION */}
             <div className="flex items-center gap-4">
-                
-                {/* ১. মোবাইল ভিউ ব্রান্ডিং (শুধুমাত্র মোবাইলে এবং ড্যাশবোর্ডে দেখাবে) */}
                 {!currentBook && (
                     <div className="md:hidden flex items-center gap-3">
                         <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/20">V</div>
@@ -41,7 +36,6 @@ export const DynamicHeader = ({
                 )}
 
                 {currentBook && activeSection === 'books' ? (
-                    /* ২. বইয়ের ভেতরের ভিউ */
                     <div className="flex items-center gap-3">
                         <button onClick={onBack} className="p-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all active:scale-90">
                             <ChevronLeft size={20} strokeWidth={3}/>
@@ -52,7 +46,6 @@ export const DynamicHeader = ({
                         </div>
                     </div>
                 ) : (
-                    /* ৩. ডেস্কটপ ড্যাশবোর্ড টাইটেল (Hello সরানো হয়েছে) */
                     <div className="text-left hidden md:block">
                         <h2 className="text-xl md:text-2xl font-black uppercase tracking-tighter italic leading-none text-[var(--text-main)]">
                             {activeSection === 'books' ? 'Financial Dashboard' : activeSection}
@@ -64,7 +57,7 @@ export const DynamicHeader = ({
                 )}
             </div>
             
-            {/* RIGHT SECTION: Action Buttons */}
+            {/* RIGHT SECTION */}
             <div className="flex items-center gap-3 shrink-0">
                 <button 
                     onClick={onFabClick} 
@@ -84,7 +77,10 @@ export const DynamicHeader = ({
                 {currentBook && activeSection === 'books' ? (
                     <div className="relative">
                         <button 
-                            onClick={(e) => { e.stopPropagation(); setShowSuperMenu(!showSuperMenu); }} 
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setShowSuperMenu(!showSuperMenu); 
+                            }} 
                             className={`p-3 rounded-2xl border transition-all active:scale-95 ${showSuperMenu ? 'bg-orange-500 text-white border-orange-500 shadow-lg' : 'bg-[var(--bg-card)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-orange-500'}`}
                         >
                             <MoreVertical size={20} strokeWidth={2.5} />
@@ -92,35 +88,35 @@ export const DynamicHeader = ({
                         <AnimatePresence>
                             {showSuperMenu && (
                                 <>
-                                    <div className="fixed inset-0 z-[-1]" onClick={() => setShowSuperMenu(false)} />
-                                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="absolute right-0 top-16 w-64 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-[24px] shadow-2xl z-[500] overflow-hidden p-2">
-                                        
-                                        <button onClick={(e) => { e.stopPropagation(); safeOpenModal(onOpenAnalytics); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-blue-500">
-                                            <BarChart3 size={18} className="shrink-0" /> <span>Analysis Report</span>
+                                    {/* 🔥 FIXED: Backdrop with proper propagation stop */}
+                                    <div className="fixed inset-0 z-[499]" onClick={(e) => { e.stopPropagation(); setShowSuperMenu(false); }} />
+                                    <motion.div 
+                                        initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+                                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                                        exit={{ opacity: 0, scale: 0.95, y: 10 }} 
+                                        className="absolute right-0 top-16 w-64 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-[24px] shadow-2xl z-[500] overflow-hidden p-2"
+                                    >
+                                        <button onClick={(e) => { e.stopPropagation(); handleAction(onOpenAnalytics); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-blue-500">
+                                            <BarChart3 size={18} /> <span>Analysis Report</span>
                                         </button>
-                                        <button onClick={(e) => { e.stopPropagation(); safeOpenModal(onOpenShare); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-purple-500">
-                                            <Share2 size={18} className="shrink-0" /> <span>Share Access</span>
+                                        <button onClick={(e) => { e.stopPropagation(); handleAction(onOpenShare); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-purple-500">
+                                            <Share2 size={18} /> <span>Share Access</span>
                                         </button>
-                                        <button onClick={(e) => { e.stopPropagation(); safeOpenModal(onOpenExport); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-green-500">
-                                            <Download size={18} className="shrink-0" /> <span>Export Report</span>
+                                        <button onClick={(e) => { e.stopPropagation(); handleAction(onOpenExport); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-green-500">
+                                            <Download size={18} /> <span>Export Report</span>
                                         </button>
-                                        <button onClick={(e) => { e.stopPropagation(); safeOpenModal(onEditBook); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-yellow-500">
-                                            <Edit2 size={18} className="shrink-0" /> <span>Edit Ledger</span>
+                                        <button onClick={(e) => { e.stopPropagation(); handleAction(onEditBook); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-yellow-500">
+                                            <Edit2 size={18} /> <span>Edit Ledger</span>
                                         </button>                                      
                                         
                                         <div className="h-px bg-[var(--border-color)] mx-2 my-1 opacity-50" />
                                         
-                                        <button onClick={() => {setActiveSection('profile'); onBack(); setShowSuperMenu(false);}} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-orange-500">
-                                            <UserCog size={18} className="shrink-0" /> <span>Manage Profile</span>
+                                        <button onClick={() => { handleAction(() => { setActiveSection('profile'); onBack(); }); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-orange-500">
+                                            <UserCog size={18} /> <span>Manage Profile</span>
                                         </button>
 
-                                        {/* 🔥 Book Delete Fix */}
-                                        <button onClick={(e) => { e.stopPropagation(); safeOpenModal(onDeleteBook); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] text-red-500 hover:bg-red-500/10">
-                                            <Trash2 size={18} className="shrink-0" /> <span>Terminate Vault</span>
-                                        </button>
-
-                                        <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] text-red-500/70 hover:bg-red-500/10">
-                                            <LogOut size={18} className="shrink-0" /> <span>Sing Out</span>
+                                        <button onClick={(e) => { e.stopPropagation(); handleAction(onDeleteBook); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-red-500 hover:bg-red-500/10">
+                                            <Trash2 size={18} /> <span>Terminate Vault</span>
                                         </button>
                                     </motion.div>
                                 </>
@@ -129,7 +125,6 @@ export const DynamicHeader = ({
                     </div>
                 ) : (
                     <div className="relative">
-                        {/* 🔥 Avatar Image Support */}
                         <button 
                             onClick={(e) => { e.stopPropagation(); setShowUserMenu(!showUserMenu); }} 
                             className={`w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-white text-lg font-black border-2 border-white/10 uppercase transition-all overflow-hidden active:scale-90 ${showUserMenu ? 'ring-2 ring-orange-500' : ''}`}
@@ -143,14 +138,14 @@ export const DynamicHeader = ({
                         <AnimatePresence>
                             {showUserMenu && (
                                 <>
-                                    <div className="fixed inset-0 z-[-1]" onClick={() => setShowUserMenu(false)} />
+                                    <div className="fixed inset-0 z-[499]" onClick={(e) => { e.stopPropagation(); setShowUserMenu(false); }} />
                                     <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="absolute right-0 top-16 w-60 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-[24px] shadow-2xl z-[500] overflow-hidden p-2">
-                                        <button onClick={() => {setActiveSection('profile'); setShowUserMenu(false);}} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-blue-500">
-                                            <User size={18} className="shrink-0" /> <span>Account Settings</span>
+                                        <button onClick={() => { handleAction(() => setActiveSection('profile')); }} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-blue-500">
+                                            <User size={18} /> <span>Account Settings</span>
                                         </button>
                                         <div className="mt-1 pt-1 border-t border-[var(--border-color)] opacity-40 mx-2" />
-                                        <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] text-red-500/70 hover:text-red-500 hover:bg-red-500/5">
-                                            <LogOut size={18} className="shrink-0" /> <span>Sing Out</span>
+                                        <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-3.5 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-red-500/70 hover:text-red-500 hover:bg-red-500/5">
+                                            <LogOut size={18} /> <span>Sign Out</span>
                                         </button>
                                     </motion.div>
                                 </>

@@ -2,20 +2,14 @@ import connectDB from "@/lib/db";
 import Book from "@/models/Book";
 import { NextResponse } from "next/server";
 
-// GET: ইউজারের সব লেজার (বই) লিস্ট দেখা
+// GET: ইউজারের সব লেজার লিস্ট দেখা (Unchanged)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    
-    // ১. ভ্যালিডেশন
-    if (!userId) {
-      return NextResponse.json({ message: "Security token (User ID) is required" }, { status: 400 });
-    }
+    if (!userId) return NextResponse.json({ message: "User ID is required" }, { status: 400 });
 
     await connectDB();
-    
-    // ২. ডেটা ফেচিং: updatedAt অনুযায়ী সর্ট (সর্বশেষ কাজ করা বই সবার উপরে)
     const books = await Book.find({ userId }).sort({ updatedAt: -1 });
     
     return NextResponse.json({
@@ -26,47 +20,50 @@ export async function GET(req: Request) {
 
   } catch (error: any) {
     console.error("GET_BOOKS_ERROR:", error.message);
-    return NextResponse.json({ message: "Failed to sync ledger list" }, { status: 500 });
+    return NextResponse.json({ message: "Failed to sync" }, { status: 500 });
   }
 }
 
-// POST: নতুন লেজার (বই) তৈরি করা
+// POST: নতুন লেজার তৈরি করা (Updated with new fields)
 export async function POST(req: Request) {
   try {
-    const { name, description, userId } = await req.json();
+    const { name, description, userId, type, phone, image } = await req.json();
     
-    // ১. ম্যান্ডেটরি ফিল্ড চেক
     if (!userId || !name) {
       return NextResponse.json({ message: "Ledger name and User ID are required" }, { status: 400 });
     }
 
     await connectDB();
     
-    // ২. ডুপ্লিকেট চেক: একই নামে ইউজার যাতে একাধিক বই না খোলে
+    // ডুপ্লিকেট চেক
     const existingBook = await Book.findOne({ 
         userId, 
-        name: { $regex: new RegExp(`^${name.trim()}$`, "i") } // Case-insensitive check
+        name: { $regex: new RegExp(`^${name.trim()}$`, "i") } 
     });
 
     if (existingBook) {
-        return NextResponse.json({ message: "A ledger with this name already exists in your vault" }, { status: 400 });
+        return NextResponse.json({ message: "Name already exists" }, { status: 400 });
     }
 
-    // ৩. নতুন বই তৈরি (ডেটা ক্লিন করে)
+    // ৩. নতুন বই তৈরি (নতুন ফিল্ড সহ)
     const newBook = await Book.create({ 
         name: name.trim(), 
         description: description?.trim() || "", 
-        userId 
+        userId,
+        // 🔥 হার্ড সিঙ্ক ডাটা
+        type: type?.toLowerCase() || 'general',
+        phone: phone?.trim() || "",
+        image: image || "" 
     });
     
     return NextResponse.json({
         success: true,
-        message: "New financial vault initialized",
+        message: "Vault initialized",
         book: newBook
     }, { status: 201 });
 
   } catch (error: any) {
     console.error("CREATE_BOOK_ERROR:", error.message);
-    return NextResponse.json({ message: "Protocol failure during ledger creation" }, { status: 500 });
+    return NextResponse.json({ message: "Creation failed" }, { status: 500 });
   }
 }

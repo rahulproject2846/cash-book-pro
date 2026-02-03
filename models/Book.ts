@@ -1,20 +1,23 @@
 import mongoose, { Schema, model, models, Document } from 'mongoose';
 
 /**
- * VAULT (BOOK) SCHEMA PROTOCOL
- * ----------------------------
+ * VAULT (BOOK) SCHEMA PROTOCOL - V2 (Elite Upgrade)
+ * -----------------------------------------------
  * এটি প্রতিটি লেজারের জন্য মূল ডাটা স্ট্রাকচার। 
- * timestamps: true ব্যবহারের ফলে updatedAt দিয়ে আমরা 
- * "Last Active First" লজিকটি হ্যান্ডেল করি।
+ * নতুনভাবে Type (General/Customer/Supplier), Phone এবং Image সাপোর্ট যোগ করা হয়েছে।
  */
 
-// ১. টাইপস্ক্রিপ্ট ইন্টারফেস (For Better IntelliSense)
+// ১. টাইপস্ক্রিপ্ট ইন্টারফেস
 export interface IBook extends Document {
   name: string;
   description?: string;
   userId: mongoose.Types.ObjectId;
   isPublic: boolean;
   shareToken?: string;
+  // --- নতুন প্রোটোকল ফিল্ডস ---
+  type: 'general' | 'customer' | 'supplier';
+  phone?: string;
+  image?: string; // Base64 বা ইমেজ URL
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,7 +26,7 @@ const BookSchema = new Schema<IBook>({
   name: { 
     type: String, 
     required: [true, "Vault identity name is required"],
-    trim: true, // অপ্রয়োজনীয় স্পেস রিমুভ করবে
+    trim: true,
     maxlength: [50, "Name cannot exceed 50 characters"]
   },
   description: { 
@@ -36,7 +39,7 @@ const BookSchema = new Schema<IBook>({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
     required: true,
-    index: true // সার্চ পারফরম্যান্স ফাস্ট করার জন্য ইনডেক্সিং
+    index: true 
   },
   // পাবলিক শেয়ারিং প্রোটোকল
   isPublic: { 
@@ -46,15 +49,33 @@ const BookSchema = new Schema<IBook>({
   shareToken: { 
     type: String, 
     unique: true, 
-    sparse: true, // শুধুমাত্র পাবলিক বইয়ের জন্য ইউনিক টোকেন থাকবে
+    sparse: true, 
     index: true
   },
+  // --- ২. নতুন ডাইনামিক ফিল্ডস (Elite OS Upgrade) ---
+  type: { 
+    type: String, 
+    enum: ['general', 'customer', 'supplier'], // প্রোটোকল ভ্যালিডেশন
+    default: 'general',
+    lowercase: true, // Strict Protocol: Always lowercase in DB
+    index: true
+  },
+  phone: { 
+    type: String, 
+    trim: true, 
+    default: "" 
+  },
+  image: { 
+    type: String, 
+    default: "" // ভল্ট আইডেন্টিটি ইমেজ (Base64)
+  }
 }, { 
-  timestamps: true, // অটোমেটিক createdAt এবং updatedAt ম্যানেজ করবে
-  versionKey: false // __v ফিল্ডটি বাদ দেওয়া হয়েছে ক্লিনার ডাটার জন্য
+  timestamps: true, 
+  versionKey: false 
 });
 
-// ২. ইনডেক্সিং: ইউজারের আন্ডারে যাতে বই দ্রুত খুঁজে পাওয়া যায়
+// ৩. ইনডেক্সিং: সার্চ এবং সর্টিং পারফরম্যান্স অপ্টিমাইজেশন
 BookSchema.index({ userId: 1, updatedAt: -1 });
+BookSchema.index({ userId: 1, type: 1 }); // টাইপ অনুযায়ী দ্রুত খোঁজার জন্য
 
 export default models.Book || model<IBook>('Book', BookSchema);

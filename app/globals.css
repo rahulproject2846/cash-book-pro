@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    /* --- MASTER VARIABLES --- */
     --bg-app: #F9FAFB;
     --bg-card: #FFFFFF;
     --text-main: #0F172A;
@@ -9,248 +10,130 @@
     --border: #E2E8F0;
     --border-color: #E2E8F0;
     --accent: #F97316;
-    --accent-soft: rgba(249, 115, 22, 0.05);
-    --ring: rgba(249, 115, 22, 0.15);
+    
+    /* Layout Variables */
+    --card-padding: 1.5rem; /* Default Padding */
+    --card-radius: 24px;
   }
 
+  /* --- DARK MODE (Studio Grey) --- */
   .dark {
-    --bg-app: #0F0F0F;      /* Deep Matte Grey */
-    --bg-card: #1A1A1B;     /* Studio Grey Elevation */
-    --text-main: #F0F0F0;   /* Studio White */
-    --text-muted: #888888;  /* Dimmed */
-    --border: #2D2D2D;      /* Precise Border */
+    --bg-app: #0F0F0F;
+    --bg-card: #1A1A1B;
+    --text-main: #F0F0F0;
+    --text-muted: #888888;
+    --border: #2D2D2D;
     --border-color: #2D2D2D;
-    --accent: #F97316;      
-    --accent-soft: rgba(249, 115, 22, 0.1);
-    --ring: rgba(249, 115, 22, 0.3);
+  }
+
+  /* --- MIDNIGHT MODE (OLED Black) - High Priority --- */
+  html.midnight-mode, 
+  html.midnight-mode .dark {
+    --bg-app: #000000 !important;
+    --bg-card: #0A0A0A !important;
+    --border: #181818 !important;
+    --border-color: #181818 !important;
+  }
+
+  /* --- COMPACT MODE - High Priority --- */
+  html.compact-deck {
+    --card-padding: 0.75rem !important;
+    --card-radius: 16px !important;
+    font-size: 14px;
   }
 
   * {
     box-sizing: border-box;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     background-color: var(--bg-app);
     color: var(--text-main);
-    font-family: var(--font-jakarta), 'Inter', sans-serif;
     overflow-x: hidden;
-    scroll-behavior: smooth;
-    transition: background-color 0.3s ease;
-  }
-
-  /* মডাল ওপেন থাকলে মেইন বডি স্ক্রল হবে না */
-  body:has(.modal-overlay) {
-    overflow: hidden !important;
-    padding-right: 0px; 
+    transition: background-color 0.4s ease, color 0.2s ease;
   }
 }
 
 @layer components {
-  /* কার্ড এবং কন্টেইনার */
+  /* --- UNIVERSAL CARD --- */
+  /* প্যাডিং এখন ভেরিয়েবল দিয়ে কন্ট্রোল হবে */
   .app-card {
     background-color: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 24px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: var(--card-radius);
+    padding: var(--card-padding);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   }
-
+  
   .app-card:hover {
-    border-color: rgba(249, 115, 22, 0.2);
+    border-color: rgba(249, 115, 22, 0.3);
   }
 
-  /* ইনপুট সিস্টেম */
+  /* --- STUDIO INPUT --- */
   .app-input {
     width: 100%;
     background-color: var(--bg-app);
     border: 1.5px solid var(--border);
     border-radius: 16px;
-    padding: 14px 18px;
     color: var(--text-main);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     outline: none;
+    transition: all 0.2s ease;
   }
-
+  
   .app-input:focus {
     border-color: var(--accent);
-    background-color: var(--bg-card);
-    box-shadow: 0 0 0 4px var(--ring);
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
   }
 
-  /* প্রিমিয়াম বাটন */
+  /* --- ACTION BUTTON --- */
   .app-btn-primary {
     background-color: var(--accent);
     color: white;
     font-weight: 800;
-    padding: 16px 28px;
     border-radius: 16px;
     letter-spacing: 0.05em;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    border: none;
+    transition: transform 0.1s ease;
   }
-
+  
   .app-btn-primary:active {
     transform: scale(0.96);
   }
 
-  /* ফিন্যান্স টেবিল */
-  .finance-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-
-  .finance-table th {
-    padding: 20px 24px;
-    text-transform: uppercase;
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.15em;
-    color: var(--text-muted);
-    border-bottom: 1.5px solid var(--border);
-    background-color: var(--bg-app);
-  }
-
-  .finance-table td {
-    padding: 22px 24px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  /* মডাল ওভারলে ও ব্যাকড্রপ সিস্টেম */
-  .modal-overlay {
-    position: fixed !important;
-    inset: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    z-index: 9999 !important;
-    padding: 1rem;
-  }
-
-  .modal-backdrop {
-    position: fixed !important;
-    inset: 0 !important;
-    background: rgba(0, 0, 0, 0.7) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    z-index: -1 !important;
-  }
-
-  /* গ্লোয়িং স্কেলিটন লোডার */
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      var(--border) 25%,
-      var(--bg-app) 50%,
-      var(--border) 75%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-    border-radius: 12px;
-  }
-
-  @keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  /* মাইক্রো অ্যানিমেশন */
-  .anim-fade-up {
-    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
+  /* --- FINANCE FONT --- */
+  .font-mono-finance {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
   }
 }
 
-/* ---------------------------------------------------------
-   SYSTEM LEVEL OVERRIDES
-   --------------------------------------------------------- */
+/* --- UTILITIES & OVERRIDES --- */
 
-/* বর্ডার কালার ইউনিফিকেশন */
-.border, .border-t, .border-b, .border-l, .border-r, hr {
-  border-color: var(--border) !important;
-}
+/* Scrollbar Polish */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-app); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-/* ফিন্যান্স ফন্ট লজিক */
-.font-mono-finance {
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+/* Remove Native Pickers Icon */
+input::-webkit-calendar-picker-indicator {
+    display: none !important;
+    -webkit-appearance: none;
 }
 
-/* কাস্টম প্রোটোকল স্ক্রলবার */
-::-webkit-scrollbar {
-  width: 5px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-app);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 20px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+/* Modal Lock */
+body:has(.modal-overlay) {
+    overflow: hidden !important;
 }
 
-/* ড্রপডাউন (Select) ডার্ক মোড ফিক্স */
-select.app-input {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238B949E'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
-  background-repeat: no-repeat !important;
-  background-position: right 1.25rem center !important;
-  background-size: 1em !important;
-  appearance: none !important;
-  cursor: pointer !important;
-}
-
-.dark select option {
-  background-color: #1A1A1B !important;
-  color: #F0F0F0 !important;
-  padding: 12px !important;
-}
-
-/* মোবাইল অপ্টিমাইজেশন */
-@media (max-width: 768px) {
-  .app-card { border-radius: 20px; }
-  
-  .app-input, .pill-btn, .bordered-icon-btn {
-    font-size: 14px !important;
-  }
-
-  /* বটম নেভিগেশন ব্লার ফিক্স */
-  .fixed.bottom-0 {
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-  }
-}
-
-/* --- GLOBAL STICKY HEADER FIX --- */
-.sticky-header {
-  position: sticky;
-  top: 0;
-  z-index: 50; /* সবকিছুর উপরে */
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  background-color: rgba(var(--bg-app-rgb), 0.85);
-  border-bottom: 1px solid var(--border-color);
-  width: 100%;
-}
-
-/* Mobile Padding Fix */
-@media (max-width: 768px) {
-  .app-container {
-    padding-left: 16px !important;
-    padding-right: 16px !important;
-  }
+/* Toast Z-Index Fix */
+#toast-root, .Toastify__toast-container { 
+  z-index: 99999 !important;
 }
 
 
@@ -293,35 +176,3 @@ header {
  
   padding-top: 120px !important;
 } */
-
-@media (max-width: 768px) {
-  .vault-content-padding {
-    padding-top: 100px !important; /* মোবাইলের জন্য একটু কম */
-  }
-}
-
-/* globals.css এর একদম নিচে এই কোডটুকু যোগ করুন */
-
-/* --- TOASTER TOP LINE FIX --- */
-/* এটি react-hot-toast এর কন্টেইনারকে টার্গেট করছে */
-#toast-root,
-div[data-rmiz="container"] { /* এই ডিভগুলোও চেক করা হলো */
-  z-index: 99999 !important;
-}
-
-/* 🔥 মডাল খোলার সময় টোস্ট সিস্টেমের রুট ডিভের অপ্রয়োজনীয় বর্ডার বা মার্জিন ০ করে দেওয়া */
-div[data-sonner-toaster][data-theme="dark"] {
-    --border-color: transparent !important;
-    --box-shadow: none !important;
-}
-
-/* আপনার স্ক্রিনশটের সমস্যার জন্য চূড়ান্ত ফিক্স: */
-/* টোস্টার রুট কন্টেইনারটি যদি কোনো অপ্রয়োজনীয় বর্ডার তৈরি করে থাকে */
-.Toastify__toast-container {
-    border: none !important;
-    margin: 0 !important;
-}
-
-/* অতিরিক্ত চেক: যদি আপনার পেজে কোনো Div ভুল করে বর্ডার তৈরি করে */
-/* এই ক্লাসটি যোগ করে দেখতে পারেন যদি সমস্যা না মেটে */
-/* .main-content-wrapper { border: none !important; } */

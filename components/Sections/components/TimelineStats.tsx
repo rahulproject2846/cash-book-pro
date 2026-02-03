@@ -12,7 +12,7 @@ export const TimelineStats = ({ stats, symbol }: any) => {
     ];
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+        <div className="hidden grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {cards.map((s, i) => (
                 <motion.div 
                     key={s.id}

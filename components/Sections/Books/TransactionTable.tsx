@@ -4,6 +4,7 @@ import {
     Edit2, Trash2, Zap, Clock 
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Tooltip } from '@/components/UI/Tooltip';
 
 // --- ১. ইন্টারফেস ডেফিনিশন ---
 interface Transaction {
@@ -145,12 +146,14 @@ export const TransactionTable = ({
                                 {/* 11. Options */}
                                 <td className="py-5 px-6 text-right">
                                     <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                        <Tooltip text="Edit Record">
                                         <button 
                                             onClick={() => onEdit(e)}
                                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-[var(--bg-app)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-blue-500 transition-all active:scale-90"
                                         >
                                             <Edit2 size={13} />
                                         </button>
+                                        </Tooltip>
                                         <button 
                                             onClick={() => onDelete(e)}
                                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-[var(--bg-app)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90"

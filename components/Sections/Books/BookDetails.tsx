@@ -86,7 +86,7 @@ export const BookDetails = ({
                 />
 
                 {/* ৪. ডেটা রেন্ডারিং (Table & Mobile Cards) */}
-                <div className="bg-[var(--bg-card)] rounded-[32px] border border-[var(--border-color)] overflow-hidden shadow-sm min-h-[500px] relative">
+                <div className="overflow-hidden relative transition-all duration-300 md:bg-[var(--bg-card)] md:rounded-[32px] md:border md:border-[var(--border-color)] md:shadow-sm md:min-h-[500px] bg-transparent border-none">
                     <TransactionTable items={currentItems} onEdit={onEdit} onDelete={onDelete} onToggleStatus={onToggleStatus} currencySymbol={currencySymbol} />
                     <MobileTransactionCards items={currentItems} onEdit={onEdit} onDelete={onDelete} onToggleStatus={onToggleStatus} currencySymbol={currencySymbol} />
                     

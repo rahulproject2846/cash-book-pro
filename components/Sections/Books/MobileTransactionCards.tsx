@@ -29,7 +29,7 @@ const TransactionCard = ({ e, onEdit, onDelete, onToggleStatus, currencySymbol }
     return (
         <motion.div 
             layout
-            className=" rounded-[32px] border border-[var(--border-color)] p-6 shadow-sm relative overflow-hidden"
+            className=" bg-[var(--bg-card)] rounded-[32px] border border-[var(--border-color)] p-6 shadow-sm relative overflow-hidden"
         >
             {/* 1. Top Header: Date & REF Integration (Moving 1 to 2) */}
             <div className="flex justify-between items-center mb-5">

@@ -3,7 +3,7 @@ import Book from "@/models/Book";
 import Entry from "@/models/Entry";
 import { NextResponse } from "next/server";
 
-// PUT: লেজারের নাম বা বিবরণ আপডেট করা
+// PUT: লেজারের নাম, বিবরণ, টাইপ, ফোন বা ইমেজ আপডেট করা
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -16,10 +16,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     await connectDB();
     
-    // ২. শুধুমাত্র নাম এবং ডেসক্রিপশন আপডেট করার অনুমতি দেওয়া (userId বা অন্য কিছু নয়)
+    // ২. আপডেটেড পেলোড তৈরি (নতুন ফিল্ড সহ)
     const updatePayload: any = {};
     if (data.name) updatePayload.name = data.name.trim();
     if (data.description !== undefined) updatePayload.description = data.description.trim();
+    
+    // 🔥 নতুন ডাটা সিঙ্ক লজিক
+    if (data.type) updatePayload.type = data.type.toLowerCase();
+    if (data.phone !== undefined) updatePayload.phone = data.phone.trim();
+    if (data.image !== undefined) updatePayload.image = data.image;
 
     const updatedBook = await Book.findByIdAndUpdate(
         id, 
@@ -43,36 +48,26 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
-// DELETE: লেজার ডিলিট করা (ভেতরের সব এন্ট্রি সহ)
+// DELETE: লেজার ডিলিট করা (Unchanged logic)
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
       const { id } = await params;
-
-      if (!id) {
-        return NextResponse.json({ message: "Ledger ID is required" }, { status: 400 });
-      }
+      if (!id) return NextResponse.json({ message: "Ledger ID is required" }, { status: 400 });
 
       await connectDB();
-
-      // ১. সিকিউরিটি চেক: বইটি আসলে আছে কি না দেখা
       const bookExists = await Book.findById(id);
-      if (!bookExists) {
-        return NextResponse.json({ message: "Ledger not found in the vault" }, { status: 404 });
-      }
+      if (!bookExists) return NextResponse.json({ message: "Ledger not found" }, { status: 404 });
       
-      // ২. ক্যাসকেড ডিলিট: প্রথমে বইয়ের ভেতরের সব ট্রানজেকশন ডিলিট করা
       await Entry.deleteMany({ bookId: id });
-      
-      // ৩. সবশেষে লেজার ডিলিট করা
       await Book.findByIdAndDelete(id);
 
       return NextResponse.json({ 
         success: true,
-        message: "Vault cleared and ledger deleted successfully" 
+        message: "Vault cleared successfully" 
       }, { status: 200 });
 
     } catch (error: any) {
       console.error("BOOK_DELETE_ERROR:", error.message);
-      return NextResponse.json({ message: "Ledger termination failed" }, { status: 500 });
+      return NextResponse.json({ message: "Termination failed" }, { status: 500 });
     }
 }

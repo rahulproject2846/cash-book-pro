@@ -1,44 +1,56 @@
 "use client";
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, AlertTriangle } from 'lucide-react';
 
 /**
- * VAULT PRO: MASTER MODAL ENGINE (V3)
+ * VAULT PRO: MASTER MODAL ENGINE (V3 - THEME STABLE)
  * ----------------------------------
- * Fix: Added event isolation to prevent "Ghost Closing" when triggered from menus.
+ * Fix: Added scroll-lock lifecycle and event stabilization while preserving theme variables.
  */
 
 export const ModalLayout = ({ title, children, onClose }: any) => {
+  
+  // ১. স্ক্রল লক লজিক (থিম বা স্টাইলে কোনো প্রভাব ফেলবে না)
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
   return (
-    <div className="modal-overlay">
-      {/* ১. ব্যাকড্রপ: এটি পুরো স্ক্রিন ব্লার করবে */}
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+      {/* ২. ব্যাকড্রপ: অরিজিনাল ক্লাস বজায় রাখা হয়েছে */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={onClose} // মডালের বাইরে ক্লিক করলে বন্ধ হবে
-        className="modal-backdrop"
+        onClick={(e) => {
+            e.stopPropagation(); // ইভেন্ট বাবলিং বন্ধ করবে
+            onClose();
+        }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
       />
 
-      {/* ২. মডাল কার্ড: স্টুডিও গ্রে থিম */}
+      {/* ৩. মডাল কার্ড: আপনার অরিজিনাল থিম ভেরিয়েবলগুলো ফেরত আনা হয়েছে */}
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
         transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-        // 🔥 ফিক্স: মডাল কার্ডের ভেতর ক্লিক করলে যাতে বন্ধ না হয়
         onClick={(e) => e.stopPropagation()} 
-        className="bg-[var(--bg-card)] w-full max-w-md rounded-[32px] border border-[var(--border-color)] shadow-[0_32px_120px_-20px_rgba(0,0,0,0.8)] relative z-[10000] overflow-hidden mx-4"
+        className="bg-[var(--bg-card)] w-full max-w-md rounded-[32px] border border-[var(--border-color)] shadow-[0_32px_120px_-20px_rgba(0,0,0,0.8)] relative z-[10001] overflow-hidden"
       >
-        {/* মডাল হেডার */}
+        {/* মডাল হেডার: অরিজিনাল থিম */}
         <div className="px-8 py-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-app)]/50 backdrop-blur-sm">
           <h2 className="text-xs font-black text-[var(--text-main)] uppercase tracking-[2px] italic">
             {title}
           </h2>
           <button 
             onClick={(e) => {
-                e.stopPropagation(); // ফিক্স
+                e.stopPropagation();
                 onClose();
             }}
             className="p-2 rounded-xl text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-500 transition-all active:scale-90"
@@ -47,7 +59,7 @@ export const ModalLayout = ({ title, children, onClose }: any) => {
           </button>
         </div>
 
-        {/* মডাল বডি: স্মার্ট স্ক্রল এরিয়া */}
+        {/* মডাল বডি */}
         <div className="p-8 max-h-[75vh] overflow-y-auto no-scrollbar">
           {children}
         </div>
@@ -56,9 +68,12 @@ export const ModalLayout = ({ title, children, onClose }: any) => {
   );
 };
 
-// --- ২. ডিলিট কনফার্মেশন মডাল ---
-export const DeleteConfirmModal = ({ targetName, confirmName, setConfirmName, onConfirm, onClose }: any) => {
-  const isMatch = confirmName?.toLowerCase() === targetName?.toLowerCase();
+// --- ২. ডিলিট কনফার্মেশন মডাল (থিম প্রোটেক্টেড) ---
+// --- ২. ডিলিট কনফার্মেশন মডাল (Fixed: Local Typing State) ---
+export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
+  // মডালের ভেতরেই লোকাল স্টেট ব্যবহার করা হয়েছে যাতে টাইপ করা যায়
+  const [localConfirmName, setLocalConfirmName] = React.useState('');
+  const isMatch = localConfirmName?.toLowerCase() === targetName?.toLowerCase();
 
   return (
     <ModalLayout title="Security Protocol: Termination" onClose={onClose}>
@@ -80,9 +95,9 @@ export const DeleteConfirmModal = ({ targetName, confirmName, setConfirmName, on
           <input 
             type="text" 
             placeholder={targetName}
-            className="app-input h-14 font-black uppercase tracking-widest border-red-500/20 focus:border-red-500 text-red-500 bg-red-500/[0.02]"
-            value={confirmName}
-            onChange={(e) => setConfirmName(e.target.value)}
+            className="w-full h-14 bg-[var(--bg-app)] border border-[var(--border-color)] rounded-2xl px-6 text-sm font-black uppercase tracking-widest text-red-500 focus:outline-none focus:border-red-500 transition-all"
+            value={localConfirmName}
+            onChange={(e) => setLocalConfirmName(e.target.value)} // এখন টাইপ করা যাবে
             autoFocus
           />
         </div>
@@ -97,7 +112,7 @@ export const DeleteConfirmModal = ({ targetName, confirmName, setConfirmName, on
           <button 
             onClick={(e) => {
                 e.stopPropagation();
-                onConfirm();
+                if (isMatch) onConfirm();
             }}
             disabled={!isMatch}
             className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-[2px] transition-all shadow-xl
@@ -115,7 +130,7 @@ export const DeleteConfirmModal = ({ targetName, confirmName, setConfirmName, on
   );
 };
 
-// --- ৩. অন্য মডালগুলো এক্সপোর্ট ---
+// --- ৩. অরিজিনাল এক্সপোর্টস (এগুলো কোনোভাবেই পরিবর্তন করা যাবে না) ---
 export { BookModal } from './BookModal';
 export { EntryModal } from './EntryModal';
 export { AdvancedExportModal } from './AdvancedExportModal';

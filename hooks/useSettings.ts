@@ -1,23 +1,20 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
+import { useTheme } from 'next-themes'; // থিম সিঙ্ক করার জন্য
 import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
 
 /**
- * VAULT ENGINE: SETTINGS CONTROLLER (V5)
- * --------------------------------------
- * Responsibilities:
- * 1. Financial Guardrails (Budget limits, Categories)
- * 2. Vault Health (Storage size, Entry counts, Cache cleaning)
- * 3. User Preferences Sync
+ * VAULT ENGINE: SETTINGS CONTROLLER (V6 - MASTER SYNC)
+ * --------------------------------------------------
+ * থিম কনফ্লিক্ট ফিক্স এবং হার্ড-সিঙ্ক লজিক যুক্ত করা হয়েছে।
  */
 
 export const useSettings = (currentUser: any, setCurrentUser: any) => {
-    // --- States ---
+    const { theme, setTheme } = useTheme();
     const [isLoading, setIsLoading] = useState(false);
     const [isCleaning, setIsCleaning] = useState(false);
     
-    // System Stats
     const [dbStats, setDbStats] = useState({
         totalEntries: 0,
         storageUsed: "0 KB",
@@ -25,41 +22,66 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
         categoryUsage: {} as Record<string, number>
     });
 
-    // User Preferences (Derived from Current User)
+    // Preferences Logic
     const [preferences, setPreferences] = useState(currentUser?.preferences || {
         dailyReminder: false,
-        weeklyReports: false,
         highExpenseAlert: false,
-        expenseLimit: 0 // New Feature: Expense Threshold
+        expenseLimit: 0,
+        isMidnight: false // নতুন মিডনাইট মোড স্টেট
     });
 
     const [categories, setCategories] = useState<string[]>(currentUser?.categories || []);
     const [currency, setCurrency] = useState(currentUser?.currency || 'BDT (৳)');
 
-    // --- 1. VAULT HEALTH DIAGNOSTICS ---
+    // --- ১. থিম প্রোটোকল লজিক (Midnight Mode Fix) ---
+    
+    // সিএসএস ভেরিয়েবল অ্যাপ্লাই করা
+    const applyMidnightCSS = (active: boolean) => {
+        const root = document.documentElement;
+        if (active) {
+            root.style.setProperty('--bg-app', '#000000');
+            root.style.setProperty('--bg-card', '#080808');
+            root.style.setProperty('--border', '#1A1A1A');
+            root.style.setProperty('--border-color', '#1A1A1A');
+        } else {
+            root.style.removeProperty('--bg-app');
+            root.style.removeProperty('--bg-card');
+            root.style.removeProperty('--border');
+            root.style.removeProperty('--border-color');
+        }
+    };
+
+    // থিম কনফ্লিক্ট হ্যান্ডলার
+    useEffect(() => {
+        if (preferences.isMidnight) {
+            if (theme !== 'dark') setTheme('dark'); // মিডনাইট থাকলে ডার্ক মোড বাধ্যতামুলক
+            applyMidnightCSS(true);
+        } else {
+            applyMidnightCSS(false);
+        }
+    }, [preferences.isMidnight, theme, setTheme]);
+
+    // লাইট মোড সিলেক্ট করলে মিডনাইট অটো অফ করা
+    useEffect(() => {
+        if (theme === 'light' && preferences.isMidnight) {
+            updatePreference('isMidnight', false);
+        }
+    }, [theme]);
+
+    // --- ২. ডাটাবেস ম্যাট্রিক্স (Vault Health) ---
     const calculateSystemStats = useCallback(async () => {
         if (!db.isOpen()) await db.open();
-        
         const entries = await db.entries.toArray();
-        
-        // A. Storage Estimation (Rough Approximation)
         const size = new Blob([JSON.stringify(entries)]).size;
         const sizeString = size > 1024 * 1024 
             ? `${(size / (1024 * 1024)).toFixed(2)} MB` 
             : `${(size / 1024).toFixed(2)} KB`;
 
-        // B. Category Usage Analysis
-        const usage: Record<string, number> = {};
-        entries.forEach(e => {
-            const cat = e.category || 'GENERAL';
-            usage[cat] = (usage[cat] || 0) + 1;
-        });
-
         setDbStats({
             totalEntries: entries.length,
             storageUsed: sizeString,
             lastSync: new Date().toLocaleTimeString(),
-            categoryUsage: usage
+            categoryUsage: {}
         });
     }, []);
 
@@ -67,7 +89,7 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
         if (currentUser) calculateSystemStats();
     }, [currentUser, calculateSystemStats]);
 
-    // --- 2. CLOUD SYNC PROTOCOL ---
+    // --- ৩. ক্লাউড হার্ড-সিঙ্ক ইঞ্জিন ---
     const syncSettings = async (newCats: string[], newCurr: string, newPref: any) => {
         setIsLoading(true);
         try {
@@ -86,26 +108,27 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
             if (res.ok) {
                 setCurrentUser(data.user);
                 localStorage.setItem('cashbookUser', JSON.stringify(data.user));
-                toast.success("System Configuration Updated");
-            } else {
-                throw new Error("API Error");
+                
+                // গ্লোবাল ইভেন্ট ফায়ার করা যাতে অন্য পেজ আপডেট হয়
+                window.dispatchEvent(new Event('vault-updated'));
+                window.dispatchEvent(new Event('vault-settings-updated'));
             }
         } catch (error) {
-            toast.error("Sync Protocol Failed");
+            toast.error("Cloud Sync Interrupted");
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- 3. ACTIONS ---
+    // --- ৪. অ্যাকশন হ্যান্ডলার্স ---
     
-    // Category Management
     const addCategory = (tag: string) => {
         const trimmed = tag.trim().toUpperCase();
         if (!trimmed || categories.includes(trimmed)) return;
         const newList = [...categories, trimmed];
         setCategories(newList);
         syncSettings(newList, currency, preferences);
+        toast.success(`Tag ${trimmed} Activated`);
     };
 
     const removeCategory = (tag: string) => {
@@ -114,28 +137,57 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
         syncSettings(newList, currency, preferences);
     };
 
-    // Preference Toggles
+    // ... আগের কোড ...
+
+    // Preference Toggles (Instant Update)
     const updatePreference = (key: string, value: any) => {
+        // ১. সাথে সাথে লোকাল স্টেট আপডেট
         const newPref = { ...preferences, [key]: value };
         setPreferences(newPref);
+
+        // ২. সাথে সাথে লোকাল স্টোরেজ এবং ইউজার অবজেক্ট আপডেট (যাতে রিলোডে ঠিক থাকে)
+        const updatedUser = { ...currentUser, preferences: newPref };
+        setCurrentUser(updatedUser);
+        localStorage.setItem('cashbookUser', JSON.stringify(updatedUser));
+
+        // ৩. স্পেশাল হ্যান্ডলিং: Midnight Mode
+        if (key === 'isMidnight') {
+            if (value === true) {
+                document.documentElement.classList.add('midnight-mode');
+                // Midnight অন করলে ডার্ক মোড ফোর্স করা
+                document.documentElement.classList.remove('light');
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('midnight-mode');
+            }
+        }
+
+        // ৪. স্পেশাল হ্যান্ডলিং: Compact Mode
+        if (key === 'compactMode') {
+             if (value === true) document.documentElement.classList.add('compact-deck');
+             else document.documentElement.classList.remove('compact-deck');
+        }
+
+        // ৫. সবার শেষে সার্ভারে ডাটা পাঠানো (সাইলেন্টলি)
         syncSettings(categories, currency, newPref);
     };
 
-    // Currency Switch
+    // ... বাকি কোড ...
+
     const updateCurrency = (val: string) => {
         setCurrency(val);
         syncSettings(categories, val, preferences);
+        toast.success(`Master Currency: ${val}`);
     };
 
-    // 🔥 DANGER ZONE: Cache Cleaning
     const clearLocalCache = async () => {
-        if(!confirm("Are you sure? This will wipe local data and force a re-sync from cloud.")) return;
-        
+        if(!confirm("Terminate local nodes? System will re-sync from cloud.")) return;
         setIsCleaning(true);
         try {
             await Promise.all([db.books.clear(), db.entries.clear()]);
-            toast.success("Local Cache Purged");
-            window.location.reload(); // Force app to reload and hydrate
+            localStorage.removeItem('cashbookUser');
+            toast.success("Protocol Purged Successfully");
+            window.location.reload();
         } catch (err) {
             toast.error("Purge Failed");
         } finally {
@@ -144,17 +196,12 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
     };
 
     return {
-        // Data
         categories,
         currency,
         preferences,
         dbStats,
-        
-        // States
         isLoading,
         isCleaning,
-
-        // Actions
         addCategory,
         removeCategory,
         updatePreference,

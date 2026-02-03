@@ -43,7 +43,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${jakarta.variable} font-sans antialiased selection:bg-orange-500/30`}>
+      <body className={`${jakarta.variable} font-sans antialiased selection:bg-orange-500/30`}
+      suppressHydrationWarning={true} >
         <Providers>
             {/* নোটিফিকেশন সিস্টেম - প্রিমিয়াম স্টাইল */}
             <Toaster 
