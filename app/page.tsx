@@ -8,18 +8,20 @@ import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
 import AuthScreen from '@/components/Auth/AuthScreen';
 
-// UI Shell
+// UI Shell & Layout
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
-import { BooksSection } from '@/components/Sections/BooksSection';
-import { ReportsSection } from '@/components/Sections/ReportsSection';
-import { TimelineSection } from '@/components/Sections/TimelineSection';
-import { SettingsSection } from '@/components/Sections/SettingsSection';
-import { ProfileSection } from '@/components/Sections/ProfileSection';
 
-// Global Modal Hook
+// Domain-Driven Sections (Folder Structure Updated)
+import { BooksSection } from '@/components/Sections/Books/BooksSection';
+import { ReportsSection } from '@/components/Sections/Reports/ReportsSection';
+import { TimelineSection } from '@/components/Sections/Timeline/TimelineSection';
+import { SettingsSection } from '@/components/Sections/Settings/SettingsSection';
+import { ProfileSection } from '@/components/Sections/Profile/ProfileSection';
+
+// Global Modal Engine
 import { useModal } from '@/context/ModalContext';
 
-// --- Define Strict Type for Navigation ---
+// --- Types ---
 type NavSection = 'books' | 'reports' | 'timeline' | 'settings' | 'profile';
 
 export default function CashBookApp() {
@@ -37,14 +39,14 @@ export default function CashBookApp() {
   const isSyncingRef = useRef(false);
   const hydrationDoneRef = useRef(false);
 
-  // --- MODAL DATA STATES ---
+  // --- MODAL STATES ---
   const [bookForm, setBookForm] = useState({ name: '', description: '' });
   const [triggerFab, setTriggerFab] = useState(false);
 
-  // --- ১. গ্লোবাল বুক সেভ লজিক (Fix for onSubmit error) ---
-const handleSaveBookGlobal = async (formData: any) => {
-    // ১. currentBook থাকলে সেটি এডিট, না থাকলে অ্যাড
-    const isEdit = !!currentBook?._id; 
+  // --- ১. গ্লোবাল বুক সেভ লজিক (Centralized) ---
+  const handleSaveBookGlobal = async (formData: any) => {
+    // লজিক: currentBook থাকলে এবং view 'editBook' হলে এটি আপডেট
+    const isEdit = !!currentBook?._id && view === 'editBook'; 
     const bookId = currentBook?._id;
 
     try {
@@ -53,33 +55,41 @@ const handleSaveBookGlobal = async (formData: any) => {
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ 
                 ...formData, 
-                _id: isEdit ? bookId : undefined, // এডিট হলে আইডি পেলোডে পাঠিয়ে দিন
+                _id: isEdit ? bookId : undefined, 
                 userId: currentUser._id 
             }), 
         });
         
         if (res.ok) {
             const result = await res.json();
-            // IndexDB তে আপডেট বা অ্যাড করা
-            await db.books.put({ ...(result.book || result.data), updatedAt: Date.now() });
+            const bookData = result.book || result.data;
+            
+            // Local-First: Update IndexDB
+            await db.books.put({ ...bookData, updatedAt: Date.now() });
             
             closeModal();
-            // নতুন বুক অ্যাড করলে বর্তমান বুক ক্লিয়ার করে দিন যাতে কনফ্লিক্ট না হয়
+            // নতুন বুক অ্যাড করলে সিলেকশন ক্লিয়ার করা হয়
             if (!isEdit) setCurrentBook(null); 
             
             window.dispatchEvent(new Event('vault-updated'));
             toast.success(isEdit ? "Protocol Updated" : "Ledger Initialized");
         }
-    } catch (err) { toast.error("Sync failure"); }
-};
+    } catch (err) { 
+        toast.error("Sync failure"); 
+    }
+  };
 
   // --- ২. স্মার্ট বাটন ক্লিক লজিক ---
   const handleFabClick = () => {
     if (currentBook) {
+        // যদি বইয়ের ভেতরে থাকি, তবে এন্ট্রি অ্যাড হবে
         setTriggerFab(true); 
     } else if (activeSection === 'books') {
+        // ড্যাশবোর্ডে থাকলে নতুন বই অ্যাড হবে
+        setCurrentBook(null); // 🔥 সেফটি: সিলেকশন ক্লিয়ার করা হলো
         openModal('addBook', { onSubmit: handleSaveBookGlobal, currentUser });
     } else {
+        // অন্য সেকশনে থাকলে শর্টকাট দেখাবে
         openModal('shortcut', { 
             onInitialize: () => {
                 setActiveSection('books');
@@ -90,7 +100,7 @@ const handleSaveBookGlobal = async (formData: any) => {
     }
   };
 
-  // --- ৩. মডাল ডেটা প্রিপারেশন (Export/Analytics/Share) ---
+  // --- ৩. গ্লোবাল মডাল ওপেনার (Export/Analytics) ---
   const handleOpenGlobalModal = async (type: any) => {
     if (type === 'analytics' || type === 'export' || type === 'share') {
         if (!currentBook?._id) return toast.error("Select a vault first");
@@ -109,7 +119,7 @@ const handleSaveBookGlobal = async (formData: any) => {
     }
   };
 
-  // --- ৪. ব্যাকগ্রাউন্ড সিঙ্ক ও হাইড্রেশন (অপরিবর্তিত) ---
+  // --- ৪. ব্যাকগ্রাউন্ড সিঙ্ক ইঞ্জিন (অপরিবর্তিত) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || isSyncingRef.current || !currentUser?._id) return;
     const pending = await db.entries.where('synced').equals(0).toArray();
@@ -141,42 +151,45 @@ const handleSaveBookGlobal = async (formData: any) => {
     finally { isSyncingRef.current = false; }
   }, [currentUser?._id]);
 
-  const hydrateVault = useCallback(async (user: any) => {
+// src/app/page.tsx এর ভেতর hydrateVault ফাংশনটি
+const hydrateVault = useCallback(async (user: any) => {
     if (!navigator.onLine || !user?._id || hydrationDoneRef.current) return;
     hydrationDoneRef.current = true;
     try {
-      const [booksRes, entriesRes] = await Promise.all([
+      const [booksRes, entriesRes, userSettingsRes] = await Promise.all([ // 🔥 ৩য় কল যোগ করা হলো
           fetch(`/api/books?userId=${user._id}`),
-          fetch(`/api/entries/all?userId=${user._id}`)
+          fetch(`/api/entries/all?userId=${user._id}`),
+          fetch(`/api/user/settings?userId=${user._id}`) // 🔥 ইউজারের সেটিংস লোড
       ]);
-      if (booksRes.ok && entriesRes.ok) {
+
+      // ... বাকি লজিক ...
+
+      if (booksRes.ok && entriesRes.ok && userSettingsRes.ok) {
           const bData = await booksRes.json();
           const eData = await entriesRes.json();
-          const books = Array.isArray(bData) ? bData : (bData.books || []);
-          const entries = Array.isArray(eData) ? eData : (eData.entries || []);
-          if (books.length > 0) await db.books.bulkPut(books);
-          if (entries.length > 0) {
-              await db.transaction('rw', db.entries, async () => {
-                  for (const item of entries) {
-                      const local = await db.entries.where('_id').equals(item._id).first();
-                      await db.entries.put({
-                          ...item,
-                          localId: local?.localId,
-                          synced: 1,
-                          isDeleted: 0,
-                          status: (item.status || 'completed').toLowerCase(),
-                          type: (item.type || 'expense').toLowerCase()
-                      });
-                  }
-              });
-          }
+          const settingsData = await userSettingsRes.json(); // 🔥 সেটিংস ডাটা পাওয়া গেল
+
+          // ... লোকাল ডেক্সিবি আপডেট লজিক ...
+
+          // 🔥 লোকাল ইউজার অবজেক্ট আপডেট (নতুন সেটিংস সহ)
+          const fullUser = { 
+              ...user, 
+              categories: settingsData.user?.categories || user.categories,
+              preferences: settingsData.user?.preferences || user.preferences,
+              currency: settingsData.user?.currency || user.currency
+          };
+          
+          setCurrentUser(fullUser);
+          localStorage.setItem('cashbookUser', JSON.stringify(fullUser)); // 🔥 লোকাল স্টোরেজ আপডেট
+
           setIsHydrated(true);
           window.dispatchEvent(new Event('vault-updated'));
           syncOfflineData();
       }
     } catch (err) { hydrationDoneRef.current = false; }
-  }, [syncOfflineData]);
+}, [syncOfflineData]);
 
+  // --- ৫. লাইভ ইভেন্ট মনিটরিং ---
   useEffect(() => {
     const savedUser = localStorage.getItem('cashbookUser');
     if (savedUser) {
@@ -198,7 +211,7 @@ const handleSaveBookGlobal = async (formData: any) => {
     };
   }, [hydrateVault, syncOfflineData, isHydrated]);
 
-  // --- ৫. সিস্টেম হ্যান্ডলারস ---
+  // --- ৬. সিস্টেম হ্যান্ডলারস ---
   const handleLogout = async () => {
     localStorage.removeItem('cashbookUser');
     await Promise.all([db.books.clear(), db.entries.clear()]);
@@ -241,8 +254,16 @@ const handleSaveBookGlobal = async (formData: any) => {
   
   if (!isLoggedIn) return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
 
+  // সেকশন ম্যাপিং: প্রপস পাস করা হচ্ছে যাতে চাইল্ড কম্পোনেন্ট গ্লোবাল লজিক ব্যবহার করতে পারে
   const sectionMap: Record<NavSection, React.ReactNode> = {
-    books: <BooksSection currentUser={currentUser} currentBook={currentBook} setCurrentBook={setCurrentBook} triggerFab={triggerFab} setTriggerFab={setTriggerFab} onGlobalSaveBook={handleSaveBookGlobal} />,
+    books: <BooksSection 
+              currentUser={currentUser} 
+              currentBook={currentBook} 
+              setCurrentBook={setCurrentBook} 
+              triggerFab={triggerFab} 
+              setTriggerFab={setTriggerFab} 
+              onGlobalSaveBook={handleSaveBookGlobal} // গ্লোবাল সেভ হ্যান্ডলার পাস করা হলো
+           />,
     reports: <ReportsSection currentUser={currentUser} />,
     timeline: <TimelineSection currentUser={currentUser} onBack={() => setActiveSection('books')} />,
     settings: <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />,
@@ -261,6 +282,7 @@ const handleSaveBookGlobal = async (formData: any) => {
         onOpenShare={() => handleOpenGlobalModal('share')}
         onEditBook={() => { 
             if (currentBook) { 
+                // এডিট মোড: currentBook ডাটা সহ ওপেন হবে
                 openModal('editBook', { currentBook, currentUser, onSubmit: handleSaveBookGlobal }); 
             } 
         }}

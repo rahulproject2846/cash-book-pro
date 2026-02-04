@@ -2,27 +2,26 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useSettings } from '@/hooks/useSettings';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Modular Components
-import { SettingsHeader } from './components/SettingsHeader';
-import { GovernanceModule } from './components/GovernanceModule';
-import { RegionModule } from './components/RegionModule'; // 🔥 নতুন মডিউল
-import { ExperienceModule } from './components/ExperienceModule';
-import { SystemMaintenance } from './components/SystemMaintenance';
+import { SettingsHeader } from './SettingsHeader';
+import { GovernanceModule } from './GovernanceModule';
+import { RegionModule } from './RegionModule';
+import { ExperienceModule } from './ExperienceModule';
+import { SystemMaintenance } from './SystemMaintenance';
 
 export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
-    // লজিক ইঞ্জিন হুক
+    const { T } = useTranslation();
     const {
         categories, currency, preferences, dbStats,
         isLoading, isCleaning,
         addCategory, removeCategory, updatePreference, updateCurrency, clearLocalCache
     } = useSettings(currentUser, setCurrentUser);
 
-    // লোকাল স্টেট
     const [newCat, setNewCat] = useState('');
     const [limitBuffer, setLimitBuffer] = useState(preferences?.expenseLimit || 0);
 
-    // লিমিট সেভ করার লজিক (OnBlur)
     const saveLimit = () => {
         if (limitBuffer !== preferences.expenseLimit) {
             updatePreference('expenseLimit', Number(limitBuffer));
@@ -30,14 +29,15 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
     };
 
     return (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto space-y-10 pb-32 px-4">
-            
-            {/* --- HEADER & SYNC PULSE --- */}
+        <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            // 🔥 ইনজেকশন: ডাইনামিক স্পেসিং এবং প্যাডিং
+            className="max-w-7xl mx-auto space-y-[var(--app-gap,2.5rem)] pb-32 px-[var(--card-padding,1rem)] md:px-0"
+        >
             <SettingsHeader isLoading={isLoading} />
 
-            <div className="space-y-10">
-                
-                {/* 1. GOVERNANCE (Tags & Expense Limits) */}
+            <div className="space-y-[var(--app-gap,2.5rem)]">
                 <GovernanceModule 
                     categories={categories} 
                     addCategory={addCategory} 
@@ -47,21 +47,20 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
                     saveLimit={saveLimit}
                     newCat={newCat}
                     setNewCat={setNewCat}
+                    currency={currency}
+                    updateCurrency={updateCurrency}
                 />
 
-                {/* 2. REGION (Language & Currency) - 🔥 NEW ADDITION */}
                 <RegionModule 
                     currency={currency} 
                     updateCurrency={updateCurrency} 
                 />
 
-                {/* 3. EXPERIENCE (Midnight Mode, Compact View, Security) */}
                 <ExperienceModule 
                     preferences={preferences} 
                     updatePreference={updatePreference} 
                 />
 
-                {/* 4. MAINTENANCE (Storage Health & Hard Reset) */}
                 <SystemMaintenance 
                     dbStats={dbStats} 
                     clearLocalCache={clearLocalCache} 
@@ -69,10 +68,9 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
                 />
             </div>
 
-            {/* Bottom System Stamp */}
             <div className="pt-10 flex flex-col items-center opacity-20">
                 <div className="h-px w-32 bg-[var(--border-color)] mb-4" />
-                <span className="text-[9px] font-black uppercase tracking-[8px]">Vault OS v5.0.1 Stable</span>
+                <span className="text-[9px] font-black uppercase tracking-[8px]">{T('system_version') || 'Vault OS v5.0.1 Stable'}</span>
             </div>
         </motion.div>
     );

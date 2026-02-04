@@ -14,6 +14,8 @@
     /* Layout Variables */
     --card-padding: 1.5rem; /* Default Padding */
     --card-radius: 24px;
+    --radius-card: 32px;
+    --card-min-height: 245px;
   }
 
   /* --- DARK MODE (Studio Grey) --- */
@@ -37,9 +39,11 @@
 
   /* --- COMPACT MODE - High Priority --- */
   html.compact-deck {
-    --card-padding: 0.75rem !important;
     --card-radius: 16px !important;
     font-size: 14px;
+    --card-padding: 1rem;
+    --app-gap: 0.75rem;
+    --card-min-height: 200px;
   }
 
   * {
@@ -135,6 +139,31 @@ body:has(.modal-overlay) {
 #toast-root, .Toastify__toast-container { 
   z-index: 99999 !important;
 }
+
+
+/* --- MIDNIGHT MODE (Super Priority) --- */
+  html.midnight-mode {
+    --bg-app: #000000 !important;
+    --bg-card: #080808 !important; /* একদম কালো না দিয়ে হালকা শেড */
+    --border: #181818 !important;
+    --border-color: #181818 !important;
+  }
+
+  /* --- COMPACT MODE (Force Layout) --- */
+  html.compact-deck {
+    --card-padding: 1rem !important;
+    --app-gap: 0.75rem !important;
+    --app-padding: 1rem !important;
+    
+    /* হেডার এবং ইনপুটের হাইট কমানো */
+    --input-height: 2.75rem !important; 
+    --header-height: 5rem !important;
+    --radius-card: 20px !important;
+    
+    /* ফন্ট সাইজ সামান্য কমানো */
+    font-size: 14px !important;
+  }
+
 
 
 /* globals.css এর নিচে যোগ করুন 

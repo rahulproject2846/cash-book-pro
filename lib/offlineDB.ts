@@ -1,10 +1,26 @@
+"use client";
 import Dexie, { Table } from 'dexie';
 
-// ১. এন্ট্রি ইন্টারফেস (নিখুঁত স্কিমা)
+// --- ১. ইন্টারফেসেস (Strict Type Definitions) ---
+
+export interface LocalUser {
+  _id: string;          // MongoDB ID
+  username: string;
+  email: string;
+  preferences: {
+    language: 'en' | 'bn';
+    compactMode: boolean;
+    isMidnight: boolean;
+    autoLock: boolean;
+    currency: string;
+  };
+  updatedAt: number;
+}
+
 export interface LocalEntry {
-  localId?: number;     // Dexie Auto-increment
-  _id?: string;         // MongoDB ID
-  cid: string;          // Client ID (Unique)
+  localId?: number;
+  _id?: string;
+  cid: string;
   bookId: string;
   userId: string;
   title: string;
@@ -16,8 +32,8 @@ export interface LocalEntry {
   date: string;
   time: string;
   status: 'completed' | 'pending';
-  synced: 0 | 1;        // ০ = আনসিঙ্কড, ১ = সিঙ্কড
-  isDeleted: 0 | 1;     // ১ = ডিলিট করতে হবে
+  synced: 0 | 1;
+  isDeleted: 0 | 1;
   createdAt: number;
   updatedAt: number;
   isPublic?: boolean;
@@ -33,28 +49,31 @@ export interface LocalBook {
   synced?: 0 | 1;
 }
 
+// --- ২. ডাটাবেজ ইঞ্জিন ---
+
 export class VaultProLocalDB extends Dexie {
   books!: Table<LocalBook>;
   entries!: Table<LocalEntry>;
+  users!: Table<LocalUser>; // 🔥 রেড লাইন ফিক্স: ইউজার টেবিল যোগ করা হলো
 
   constructor() {
     super('VaultPro_Storage_v3'); 
     
-    this.version(3).stores({
+    this.version(4).stores({ // ভলিউম ৪ (স্কিমা আপডেট)
       books: '_id, updatedAt',
-      // synced এবং isDeleted ইনডেক্স করা হয়েছে দ্রুত খোঁজার জন্য
-      entries: '++localId, _id, cid, bookId, userId, synced, isDeleted'
+      entries: '++localId, _id, cid, bookId, userId, synced, isDeleted',
+      users: '_id' // 🔥 ইউজারের প্রোফাইল সেভ করার জন্য
     });
   }
 }
 
 export const db = new VaultProLocalDB();
 
-// এন্ট্রি সেভ করার ফাংশন
+// --- ৩. হেল্পার ফাংশনস ---
+
 export const saveEntryToLocal = async (entryData: any) => {
   try {
     const timestamp = Date.now();
-    // CID জেনারেটর (যদি না থাকে)
     const cid = entryData.cid || `cid_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
 
     const newEntry: LocalEntry = {
@@ -63,18 +82,15 @@ export const saveEntryToLocal = async (entryData: any) => {
       amount: Number(entryData.amount),
       type: entryData.type.toLowerCase(),
       status: (entryData.status || 'completed').toLowerCase(),
-      synced: 0, // নতুন ডাটা সবসময় আনসিঙ্কড
+      synced: 0,
       isDeleted: 0,
       createdAt: entryData.createdAt || timestamp,
       updatedAt: timestamp
     };
 
-    // যদি _id থাকে (মানে সার্ভারের ডাটা এডিট হচ্ছে), তবে _id দিয়ে আপডেট হবে
-    // আর নতুন হলে cid দিয়ে অ্যাড হবে
-    const id = await db.entries.put(newEntry);
-    return id;
+    return await db.entries.put(newEntry);
   } catch (error) {
-    console.error("❌ DB Error:", error);
+    console.error("❌ DB Error [saveEntryToLocal]:", error);
     throw error;
   }
 };

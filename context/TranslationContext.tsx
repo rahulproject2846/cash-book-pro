@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { translations, Language } from '@/lib/translations';
+import { db } from '@/lib/offlineDB'; // 🔥 ডাটাবেজে সেভ করার জন্য ইমপোর্ট করা হলো
 
 interface TranslationContextType {
     language: Language;
@@ -11,32 +12,63 @@ interface TranslationContextType {
 const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
 
 export const TranslationProvider = ({ children, currentUser }: { children: React.ReactNode, currentUser: any }) => {
-    // ইউজারের প্রেফারেন্স বা ব্রাউজার ল্যাঙ্গুয়েজ থেকে ডিটেক্ট করা
+    // ১. লোকাল স্টেট
     const [language, setLanguageState] = useState<Language>('en');
 
+    // ২. সিস্টেম লোড হওয়ার সময় ল্যাঙ্গুয়েজ ডিটেক্ট করার প্রোটোকল
+// ১. সিস্টেম লোড হওয়ার সময় ল্যাঙ্গুয়েজ ডিটেক্ট করা (FIXED)
     useEffect(() => {
-        // ১. আগে চেক করো ইউজারের সেভ করা সেটিংস আছে কি না
-        const savedLang = currentUser?.preferences?.language || localStorage.getItem('vault_lang');
-        if (savedLang) {
-            setLanguageState(savedLang as Language);
+        // ক. সবথেকে লেটেস্ট সোর্স (Local Storage) আগে চেক করা
+        const localLang = localStorage.getItem('vault_lang');
+        // খ. সার্ভারের ডাটা (User Profile)
+        const userLang = currentUser?.preferences?.language;
+
+        if (localLang) {
+            // যদি লোকালে সেট করা থাকে, সেটিই চূড়ান্ত (Priority 1)
+            setLanguageState(localLang as Language);
+        } else if (userLang) {
+            // যদি লোকালে না থাকে (নতুন ডিভাইস), তবে সার্ভারের ডাটা নাও (Priority 2)
+            setLanguageState(userLang as Language);
         } else {
-            // ২. না থাকলে ব্রাউজারের ভাষা চেক করো (বাংলা হলে অটো বাংলা হবে)
+            // ডিফল্ট ব্রাউজার চেক (Priority 3)
             const browserLang = navigator.language.startsWith('bn') ? 'bn' : 'en';
             setLanguageState(browserLang);
         }
     }, [currentUser]);
 
-    const setLanguage = (lang: Language) => {
+    /**
+     * 🔥 UPGRADE: setLanguage ফাংশন এখন পারমানেন্টলি ডাটা সেভ করবে।
+     * এটি লোকাল স্টেট, লোকাল স্টোরেজ এবং IndexDB তিন জায়গাতেই আপডেট পাঠাবে।
+     */
+    const setLanguage = async (lang: Language) => {
+        // ক. ইউআই দ্রুত আপডেট করার জন্য স্টেট চেঞ্জ
         setLanguageState(lang);
+        
+        // খ. দ্রুত সিঙ্কের জন্য লোকাল স্টোরেজে সেভ
         localStorage.setItem('vault_lang', lang);
-        // গ্লোবাল ইভেন্ট যাতে অন্য কম্পোনেন্ট দ্রুত আপডেট হয়
+
+        // গ. ডাটাবেজে পারমানেন্টলি সেভ করা (Surgical Add)
+        if (currentUser?._id) {
+            try {
+                // Dexie এর মাধ্যমে ইউজারের প্রেফারেন্স টেবিল আপডেট
+                await db.users.update(currentUser._id, {
+                    'preferences.language': lang
+                });
+                console.log("Protocol Language Sync: [SUCCESS]");
+            } catch (err) {
+                console.warn("DB Sync Interrupted: Persistence fallback to LocalStorage");
+            }
+        }
+
+        // ঘ. গ্লোবাল ইভেন্ট ফায়ার করা যাতে অন্য কম্পোনেন্ট রি-রেন্ডার হয়
         window.dispatchEvent(new Event('language-changed'));
     };
 
     // ট্রান্সলেশন ফাংশন
     const t = (key: string): string => {
         const langData = translations[language] as any;
-        return langData[key] || key; // কি খুঁজে না পেলে কি-টাই রিটার্ন করবে
+        // যদি কি খুঁজে না পায়, তবে অরিজিনাল কি-টাই রিটার্ন করবে (Error Proof)
+        return langData?.[key] || key; 
     };
 
     return (
@@ -46,6 +78,7 @@ export const TranslationProvider = ({ children, currentUser }: { children: React
     );
 };
 
+// কাস্টম হুক - এটি শুধু ইন্টারনাল ব্যবহারের জন্য
 export const useTranslation = () => {
     const context = useContext(TranslationContext);
     if (!context) throw new Error("useTranslation must be used within TranslationProvider");

@@ -3,20 +3,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     BookOpen, Check, Loader2, Info, User, 
-    Truck, Settings2, Smartphone, Camera, Plus, X 
+    Truck, Smartphone, Camera, Plus, X 
 } from 'lucide-react';
 import { ModalLayout } from '@/components/Modals';
 
-// --- ১. কাস্টম ইনপুট কম্পোনেন্ট ---
+// Global Engine Hooks & Components
+import { useTranslation } from '@/hooks/useTranslation';
+import { Tooltip } from '@/components/UI/Tooltip';
+
+// --- ১. কাস্টম ইনপুট কম্পোনেন্ট (Language Ready) ---
 const VaultInput = ({ label, value, onChange, placeholder, icon: Icon, type = "text" }: any) => (
-    <div className="space-y-2 group">
+    <div className="space-y-2 group transition-all duration-300">
         <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] ml-1 flex items-center gap-2">
             {Icon && <Icon size={12} className="text-orange-500" />} {label}
         </label>
         <input 
             type={type}
             placeholder={placeholder}
-            className="app-input h-14 text-sm font-black uppercase tracking-widest border-2 border-[var(--border)] bg-[var(--bg-app)] focus:border-orange-500/50 transition-all outline-none px-5" 
+            className="app-input h-14 text-sm font-black uppercase tracking-widest border-2 border-[var(--border-color)] bg-[var(--bg-app)] focus:border-orange-500/50 transition-all outline-none px-5 rounded-2xl w-full" 
             value={value} 
             onChange={e => onChange(e.target.value)} 
         />
@@ -24,17 +28,18 @@ const VaultInput = ({ label, value, onChange, placeholder, icon: Icon, type = "t
 );
 
 export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
+    const { T, t } = useTranslation();
     const [form, setForm] = useState({ 
         name: '', 
         description: '', 
-        type: 'general', // general, customer, supplier
+        type: 'general', 
         phone: '',
         image: ''
     });
     const [isLoading, setIsLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // হাইড্রেশন এবং এডিট ডাটা সিঙ্ক
+    // হাইড্রেশন এবং এডিট ডাটা সিঙ্ক (Preserved Logic)
     useEffect(() => {
         if (initialData) {
             setForm({ 
@@ -49,10 +54,9 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
         }
     }, [initialData, isOpen]);
 
-    // মোবাইল কন্টাক্ট লিস্ট সিঙ্ক লজিক
+    // মোবাইল কন্টাক্ট লিস্ট সিঙ্ক লজিক (Preserved Logic)
     const handleContactSync = async () => {
         try {
-            // @ts-ignore - Web Contact API support check
             if ('contacts' in navigator && 'select' in (navigator as any).contacts) {
                 const props = ['name', 'tel'];
                 const opts = { multiple: false };
@@ -64,8 +68,6 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                         phone: contacts[0].tel[0] || prev.phone
                     }));
                 }
-            } else {
-                alert("Contact Protocol is not supported on this device.");
             }
         } catch (err) {
             console.warn("Contact Sync Interrupted");
@@ -95,24 +97,26 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
 
     return (
         <ModalLayout 
-            title={initialData ? "Protocol: Vault Upgrade" : "Protocol: Initialize Vault"} 
+            title={initialData ? T('title_vault_upgrade') : T('title_initialize_vault')} 
             onClose={onClose}
         >
-            <form onSubmit={handleSubmit} className="space-y-8 py-2">
+            <form onSubmit={handleSubmit} className="space-y-[var(--app-gap,2rem)] py-2 transition-all duration-300">
                 
                 {/* --- ১. ভল্ট ইমেজ সিলেকশন --- */}
                 <div className="flex flex-col items-center justify-center">
                     <div className="relative group">
-                        <div 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="w-24 h-24 rounded-[35px] bg-[var(--bg-app)] border-2 border-dashed border-[var(--border)] flex items-center justify-center cursor-pointer overflow-hidden transition-all group-hover:border-orange-500/50 group-hover:bg-orange-500/5 shadow-inner"
-                        >
-                            {form.image ? (
-                                <img src={form.image} alt="Vault" className="w-full h-full object-cover" />
-                            ) : (
-                                <Camera size={28} className="text-[var(--text-muted)] opacity-30 group-hover:text-orange-500 group-hover:opacity-100 transition-all" />
-                            )}
-                        </div>
+                        <Tooltip text={t('tt_upload_image')}>
+                            <div 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-24 h-24 rounded-[var(--radius-card,35px)] bg-[var(--bg-app)] border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer overflow-hidden transition-all group-hover:border-orange-500/50 group-hover:bg-orange-500/5 shadow-inner"
+                            >
+                                {form.image ? (
+                                    <img src={form.image} alt="Vault" className="w-full h-full object-cover" />
+                                ) : (
+                                    <Camera size={28} className="text-[var(--text-muted)] opacity-30 group-hover:text-orange-500 group-hover:opacity-100 transition-all" />
+                                )}
+                            </div>
+                        </Tooltip>
                         <button 
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
@@ -122,15 +126,17 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                         </button>
                         <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageChange} />
                     </div>
-                    <p className="text-[8px] font-black text-orange-500 uppercase tracking-[3px] mt-4 opacity-60">Vault Visual ID</p>
+                    <p className="text-[8px] font-black text-orange-500 uppercase tracking-[3px] mt-4 opacity-60">
+                        {T('label_visual_id')}
+                    </p>
                 </div>
 
                 {/* --- ২. টাইপ সিলেক্টর (Segmented Control) --- */}
-                <div className="bg-[var(--bg-app)] p-1.5 rounded-[22px] border border-[var(--border)] flex gap-1">
+                <div className="bg-[var(--bg-app)] p-1.5 rounded-[var(--radius-card,22px)] border border-[var(--border-color)] flex gap-1">
                     {[
-                        { id: 'general', label: 'General', icon: BookOpen },
-                        { id: 'customer', label: 'Customer', icon: User },
-                        { id: 'supplier', label: 'Supplier', icon: Truck },
+                        { id: 'general', label: t('type_general'), icon: BookOpen },
+                        { id: 'customer', label: t('type_customer'), icon: User },
+                        { id: 'supplier', label: t('type_supplier'), icon: Truck },
                     ].map((t) => (
                         <button
                             key={t.id}
@@ -145,11 +151,11 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                 </div>
 
                 {/* --- ৩. ডাইনামিক ইনপুট সেকশন --- */}
-                <div className="space-y-6">
+                <div className="space-y-[var(--app-gap,1.5rem)]">
                     {/* লেজার নাম */}
                     <VaultInput 
-                        label={form.type === 'general' ? 'Ledger Name' : 'Identity Name'} 
-                        placeholder={form.type === 'general' ? "E.G. OFFICE RENT" : "E.G. ABDUR RAHMAN"} 
+                        label={form.type === 'general' ? T('label_ledger_name') : T('label_identity_name')} 
+                        placeholder={form.type === 'general' ? t('placeholder_ledger_name') : t('placeholder_identity_name')} 
                         value={form.name} 
                         onChange={(val:string) => setForm({...form, name: val})} 
                         icon={form.type === 'general' ? BookOpen : User}
@@ -166,19 +172,21 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                             >
                                 <div className="space-y-2 group">
                                     <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] ml-1 flex items-center justify-between">
-                                        <span className="flex items-center gap-2"><Smartphone size={12} className="text-orange-500" /> Phone Registry</span>
-                                        <button 
-                                            type="button"
-                                            onClick={handleContactSync}
-                                            className="text-[8px] bg-orange-500/10 text-orange-500 px-2 py-1 rounded-md border border-orange-500/20 active:scale-95 transition-all"
-                                        >
-                                            FETCH IDENTITY
-                                        </button>
+                                        <span className="flex items-center gap-2"><Smartphone size={12} className="text-orange-500" /> {T('label_phone_registry')}</span>
+                                        <Tooltip text={t('tt_fetch_contacts')}>
+                                            <button 
+                                                type="button"
+                                                onClick={handleContactSync}
+                                                className="text-[8px] bg-orange-500/10 text-orange-500 px-2 py-1 rounded-md border border-orange-500/20 active:scale-95 transition-all"
+                                            >
+                                                {T('btn_fetch_identity')}
+                                            </button>
+                                        </Tooltip>
                                     </label>
                                     <input 
                                         type="tel"
                                         placeholder="+880 1XXX-XXXXXX" 
-                                        className="app-input h-14 text-sm font-black tracking-[3px] border-2 border-[var(--border)] bg-[var(--bg-app)] focus:border-orange-500/50 transition-all outline-none px-5" 
+                                        className="app-input h-14 text-sm font-black tracking-[3px] border-2 border-[var(--border-color)] bg-[var(--bg-app)] focus:border-orange-500/50 transition-all outline-none px-5 rounded-2xl w-full" 
                                         value={form.phone} 
                                         onChange={e => setForm({...form, phone: e.target.value})} 
                                     />
@@ -189,8 +197,8 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
 
                     {/* ডেসক্রিপশন */}
                     <VaultInput 
-                        label="Vault Memo" 
-                        placeholder="ADDITIONAL PROTOCOL DETAILS..." 
+                        label={T('label_vault_memo')} 
+                        placeholder={t('placeholder_vault_memo')} 
                         value={form.description} 
                         onChange={(val:string) => setForm({...form, description: val})} 
                         icon={Info}
@@ -198,16 +206,18 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                 </div>
 
                 {/* --- ৪. সাবমিট বাটন --- */}
-                <button 
-                    disabled={isLoading}
-                    className="app-btn-primary w-full h-16 text-[11px] font-black tracking-[4px] shadow-2xl shadow-orange-500/30 mt-4 bg-orange-500 border-none text-white active:scale-95 transition-all"
-                >
-                    {isLoading ? (
-                        <Loader2 className="animate-spin" size={20} />
-                    ) : (
-                        initialData ? "INITIALIZE UPGRADE" : "EXECUTE INITIALIZATION"
-                    )}
-                </button>
+                <Tooltip text={initialData ? t('tt_upgrade_vault') : t('tt_initialize_vault')}>
+                    <button 
+                        disabled={isLoading}
+                        className="app-btn-primary w-full h-16 text-[11px] font-black tracking-[4px] shadow-2xl shadow-orange-500/30 mt-4 bg-orange-500 border-none text-white active:scale-95 transition-all rounded-2xl flex items-center justify-center"
+                    >
+                        {isLoading ? (
+                            <Loader2 className="animate-spin" size={20} />
+                        ) : (
+                            initialData ? T('btn_upgrade') : T('btn_execute')
+                        )}
+                    </button>
+                </Tooltip>
             </form>
         </ModalLayout>
     );
