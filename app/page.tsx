@@ -152,41 +152,85 @@ export default function CashBookApp() {
   }, [currentUser?._id]);
 
 // src/app/page.tsx এর ভেতর hydrateVault ফাংশনটি
+// src/app/page.tsx এর ভেতর hydrateVault ফাংশনটি
+
 const hydrateVault = useCallback(async (user: any) => {
+    // সেফটি চেক: ইউজার আইডি না থাকলে বা হাইড্রেশন শেষ হলে থামাও
     if (!navigator.onLine || !user?._id || hydrationDoneRef.current) return;
     hydrationDoneRef.current = true;
+    
     try {
-      const [booksRes, entriesRes, userSettingsRes] = await Promise.all([ // 🔥 ৩য় কল যোগ করা হলো
+      // 🔥 Promise.allSettled ব্যবহার করা হয়েছে, যাতে একটি কল ফেইল করলেও অন্যগুলো ব্লক না হয়
+      const [booksResult, entriesResult, settingsResult] = await Promise.allSettled([
           fetch(`/api/books?userId=${user._id}`),
           fetch(`/api/entries/all?userId=${user._id}`),
-          fetch(`/api/user/settings?userId=${user._id}`) // 🔥 ইউজারের সেটিংস লোড
+          fetch(`/api/user/settings?userId=${user._id}`) 
       ]);
 
-      // ... বাকি লজিক ...
-
-      if (booksRes.ok && entriesRes.ok && userSettingsRes.ok) {
-          const bData = await booksRes.json();
-          const eData = await entriesRes.json();
-          const settingsData = await userSettingsRes.json(); // 🔥 সেটিংস ডাটা পাওয়া গেল
-
-          // ... লোকাল ডেক্সিবি আপডেট লজিক ...
-
-          // 🔥 লোকাল ইউজার অবজেক্ট আপডেট (নতুন সেটিংস সহ)
-          const fullUser = { 
-              ...user, 
-              categories: settingsData.user?.categories || user.categories,
-              preferences: settingsData.user?.preferences || user.preferences,
-              currency: settingsData.user?.currency || user.currency
-          };
-          
-          setCurrentUser(fullUser);
-          localStorage.setItem('cashbookUser', JSON.stringify(fullUser)); // 🔥 লোকাল স্টোরেজ আপডেট
-
-          setIsHydrated(true);
-          window.dispatchEvent(new Event('vault-updated'));
-          syncOfflineData();
+      // --- ডাটা এক্সট্র্যাকশন লজিক ---
+      
+      let finalBooks = [];
+      let finalEntries = [];
+      let finalSettings = null;
+      
+      // বই লোড (যদি কল সফল হয়)
+      if (booksResult.status === 'fulfilled' && booksResult.value.ok) {
+        const bData = await booksResult.value.json();
+        finalBooks = Array.isArray(bData) ? bData : (bData.books || []);
       }
-    } catch (err) { hydrationDoneRef.current = false; }
+      
+      // এন্ট্রি লোড (যদি কল সফল হয়)
+      if (entriesResult.status === 'fulfilled' && entriesResult.value.ok) {
+        const eData = await entriesResult.value.json();
+        finalEntries = Array.isArray(eData) ? eData : (eData.entries || []);
+      }
+
+      // সেটিংস লোড (যদি কল সফল হয়)
+      if (settingsResult.status === 'fulfilled' && settingsResult.value.ok) {
+        finalSettings = await settingsResult.value.json();
+      }
+
+      // --- লোকাল ডেক্সি ডাটাবেজে ডাটা বসানো ---
+
+      if (finalBooks.length > 0) await db.books.bulkPut(finalBooks);
+      if (finalEntries.length > 0) {
+          // এন্ট্রি সেভ লজিক (অপরিবর্তিত)
+          await db.transaction('rw', db.entries, async () => {
+              for (const item of finalEntries) {
+                  const local = await db.entries.where('_id').equals(item._id).first();
+                  await db.entries.put({
+                      ...item,
+                      localId: local?.localId,
+                      synced: 1,
+                      isDeleted: 0,
+                      status: (item.status || 'completed').toLowerCase(),
+                      type: (item.type || 'expense').toLowerCase()
+                  });
+              }
+          });
+      }
+
+      // --- গ্লোবাল ইউজার স্টেট আপডেট ---
+
+      const fullUser = { 
+          ...user, 
+          categories: finalSettings?.user?.categories || user.categories,
+          preferences: finalSettings?.user?.preferences || user.preferences,
+          currency: finalSettings?.user?.currency || user.currency
+      };
+      
+      setCurrentUser(fullUser);
+      localStorage.setItem('cashbookUser', JSON.stringify(fullUser));
+
+      setIsHydrated(true);
+      window.dispatchEvent(new Event('vault-updated'));
+      syncOfflineData();
+
+    } catch (err) { 
+        console.error("Hydration Protocol Failed:", err);
+        hydrationDoneRef.current = false; // আবার চেষ্টা করার সুযোগ দেওয়া হলো
+        setIsLoading(false); // লোডিং বন্ধ করা হলো
+    }
 }, [syncOfflineData]);
 
   // --- ৫. লাইভ ইভেন্ট মনিটরিং ---
