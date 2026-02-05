@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-    Loader2, ChevronLeft, ChevronRight
+    Loader2, ChevronLeft, ChevronRight, LayoutGrid, Info
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
 
-// Global UI Components & Hooks
+// Global Engine Hooks & Components
 import { useModal } from '@/context/ModalContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
@@ -28,13 +28,13 @@ export const BooksSection = ({
     const { openModal, closeModal } = useModal();
     const { T, t } = useTranslation();
 
-    // ২. লজিক ইঞ্জিন (অপরিবর্তিত)
+    // ২. লজিক ইঞ্জিন (Strict Preservation)
     const {
         books, entries, allEntries, isLoading, stats,
         fetchData, fetchBookEntries, saveEntry, toggleEntryStatus, deleteEntry
     } = useVault(currentUser, currentBook, setCurrentBook);
 
-    // ৩. লোকাল ইউআই স্টেট (অপরিবর্তিত)
+    // ৩. লোকাল ইউআই স্টেট
     const [searchQuery, setSearchQuery] = useState(''); 
     const [sortOption, setSortOption] = useState('Activity');
     const [dashPage, setDashPage] = useState(1);
@@ -42,24 +42,25 @@ export const BooksSection = ({
     const [detailsPage, setDetailsPage] = useState(1);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // --- ৪. অ্যাকশন হ্যান্ডলার্স (লজিক অপরিবর্তিত, শুধু ট্রান্সলেশন ইনজেক্টেড) ---
-
+    // --- ৪. একশন কলব্যাকস (Logic 100% Intact) ---
     const handleSaveBook = async (formData: any, type: 'add' | 'edit') => {
-        const isEdit = type === 'edit';
-        const bookId = currentBook?._id || currentBook?.id;
-        const url = isEdit ? `/api/books/${bookId}` : '/api/books';
+        const bookId = currentBook?._id || currentBook?.id || formData?._id;
+        const isEdit = type === 'edit' && bookId;
 
         try {
-            const res = await fetch(url, { 
-                method: isEdit ? 'PUT' : 'POST', 
+            const res = await fetch(isEdit ? `/api/books/${bookId}` : '/api/books', { 
+                method: isEdit ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ ...formData, userId: currentUser._id }), 
+                body: JSON.stringify({ ...formData, _id: bookId, userId: currentUser._id }), 
             });
+
             if (res.ok) {
                 const result = await res.json();
-                await db.books.put({ ...result.book || result.data, updatedAt: Date.now() });
+                const savedData = result.book || result.data;
+                await db.books.put({ ...savedData, updatedAt: Date.now() });
                 closeModal(); 
                 fetchData();
+                window.dispatchEvent(new Event('vault-updated'));
                 toast.success(isEdit ? t('protocol_updated') : t('ledger_initialized'));
             }
         } catch (err) { toast.error(t('sync_failure')); }
@@ -68,9 +69,9 @@ export const BooksSection = ({
     const handleSaveEntryLogic = async (data: any, editTarget?: any) => { 
         const success = await saveEntry(data, editTarget);
         if (success) { 
-            await fetchData();
+            closeModal();
             window.dispatchEvent(new Event('vault-updated'));
-            closeModal(); 
+            fetchData();
         }
     };
 
@@ -84,12 +85,13 @@ export const BooksSection = ({
                 closeModal();
                 setCurrentBook(null);
                 fetchData();
+                window.dispatchEvent(new Event('vault-updated'));
                 toast.success(t('vault_terminated'));
             }
         } catch (err) { toast.error(t('termination_error')); }
     };
 
-    // --- ৫. স্মার্ট প্রসেসিং ইঞ্জিন (অপরিবর্তিত) ---
+    // --- ৫. স্মার্ট প্রসেসিং ইঞ্জিন ---
     const processedBooks = useMemo(() => {
         const booksWithStats = books.map(book => {
             const bookId = book._id || book.id || book.cid;
@@ -111,11 +113,11 @@ export const BooksSection = ({
         return filtered;
     }, [books, allEntries, searchQuery, sortOption]);
 
-    const ITEMS_PER_PAGE = 15; 
+    const ITEMS_PER_PAGE = 12; 
     const totalPages = Math.ceil(processedBooks.length / ITEMS_PER_PAGE) || 1;
     const currentBooks = processedBooks.slice((dashPage - 1) * ITEMS_PER_PAGE, dashPage * ITEMS_PER_PAGE);
 
-    // --- ৬. সিনক্রোনাইজেশন ইফেক্টস (অপরিবর্তিত) ---
+    // --- ৬. সিনক্রোনাইজেশন ইফেক্টস ---
     useEffect(() => {
         if (externalModalType && externalModalType !== 'none') {
             if (externalModalType === 'addBook') {
@@ -126,7 +128,7 @@ export const BooksSection = ({
             }
             setExternalModalType('none'); 
         }
-    }, [externalModalType, setExternalModalType]);
+    }, [externalModalType]);
 
     useEffect(() => {
         if (!triggerFab) return;
@@ -143,17 +145,24 @@ export const BooksSection = ({
 
     const getCurrencySymbol = () => currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
     
+    // ৭. প্রিমিয়াম লোডিং স্টেট
     if (isLoading && books.length === 0) return (
-        <div className="flex justify-center py-[var(--app-gap,10rem)]">
-            <Loader2 className="animate-spin text-orange-500" size={40} />
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }} className="w-12 h-12 border-4 border-orange-500/20 border-t-orange-500 rounded-full" />
+            <p className="text-[10px] font-black uppercase tracking-[3px] text-orange-500/50">{t('syncing_ledger') || "Syncing Vaults..."}</p>
         </div>
     );
 
     return (
-        <div className="space-y-[var(--app-gap,1.5rem)] transition-all duration-300">
+        <div className="w-full transition-all duration-500">
             <AnimatePresence mode="wait">
                 {!currentBook ? (
-                    <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-[var(--app-gap,2rem)]">
+                    <motion.div 
+                        key="dashboard-list" 
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                        className="space-y-[var(--app-gap,2rem)]"
+                    >
+                        {/* --- ৮. ভল্ট লিস্ট সেকশন --- */}
                         <BooksList 
                             books={currentBooks} 
                             isLoading={isLoading} 
@@ -162,41 +171,42 @@ export const BooksSection = ({
                             sortOption={sortOption}
                             onSortChange={setSortOption}
                             onImportClick={() => fileInputRef.current?.click()}
-                            onAddClick={() => openModal('addBook', { onSubmit: (data: any) => handleSaveBook(data, 'add'), currentUser })} 
+                            onAddClick={() => {
+                                setCurrentBook(null);
+                                openModal('addBook', { onSubmit: (data: any) => handleSaveBook(data, 'add'), currentUser });
+                            }} 
                             onBookClick={(b: any) => { setCurrentBook(b); setDetailsPage(1); }} 
-                            onQuickAdd={(b: any) => { setCurrentBook(b); openModal('addEntry', { currentUser, currentBook: b, onSubmit: handleSaveEntryLogic }); }}
+                            onQuickAdd={(b: any) => { 
+                                setCurrentBook(b); 
+                                setTimeout(() => {
+                                    openModal('addEntry', { currentUser, currentBook: b, onSubmit: handleSaveEntryLogic });
+                                }, 350); // স্মুথ ট্রানজিশনের জন্য ডিলে
+                            }}
                             getBookBalance={(id: any) => processedBooks.find(pb => (pb._id || pb.id || pb.cid) === id)?.stats.balance || 0}
                             currencySymbol={getCurrencySymbol()}
                         />
 
-                        {/* Pagination with Compact & Language Support */}
+                        {/* --- ৯. প্রিমিয়াম প্যানিনেশন --- */}
                         {totalPages > 1 && (
-                            <div className="flex justify-between items-center py-[var(--card-padding,1rem)] px-2 transition-all">
-                                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[3px]">
-                                    {T('protocol_index')}
-                                </p>
-                                <div className="flex gap-2 items-center">
-                                    <Tooltip text={t('tt_prev_page') || "Previous"}>
-                                        <button 
-                                            disabled={dashPage === 1} 
-                                            onClick={() => setDashPage(p => p - 1)} 
-                                            className="p-[var(--card-padding,0.75rem)] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-30 active:scale-95 transition-all"
-                                        >
-                                            <ChevronLeft size={20}/>
+                            <div className="flex flex-col sm:flex-row justify-between items-center py-6 gap-6 border-t border-[var(--border-color)]">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-orange-500/10 rounded-lg flex items-center justify-center text-orange-500">
+                                        <LayoutGrid size={14}/>
+                                    </div>
+                                    <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[3px]">{T('protocol_index')}</p>
+                                </div>
+                                <div className="flex gap-3 items-center">
+                                    <Tooltip text={t('tt_prev_page')}>
+                                        <button disabled={dashPage === 1} onClick={() => setDashPage(p => p - 1)} className="w-12 h-12 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 active:scale-90 transition-all hover:border-orange-500/30">
+                                            <ChevronLeft size={20} strokeWidth={3}/>
                                         </button>
                                     </Tooltip>
-
-                                    <div className="px-6 py-3.5 bg-orange-500 text-white rounded-2xl text-[11px] font-black uppercase tracking-[2px] shadow-lg shadow-orange-500/20">
-                                        {dashPage} / {totalPages}
+                                    <div className="px-8 py-3.5 bg-gradient-to-br from-orange-400 to-orange-600 text-white rounded-[20px] text-[11px] font-black uppercase tracking-[3px] shadow-xl shadow-orange-500/20">
+                                        {dashPage} <span className="opacity-50 mx-2">/</span> {totalPages}
                                     </div>
-
-                                    <Tooltip text={t('tt_next_page') || "Next"}>
-                                        <button 
-                                            disabled={dashPage === totalPages} 
-                                            onClick={() => setDashPage(p => p + 1)} 
-                                            className="p-[var(--card-padding,0.75rem)] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-30 active:scale-95 transition-all"
-                                        >
-                                            <ChevronRight size={20}/>
+                                    <Tooltip text={t('tt_next_page')}>
+                                        <button disabled={dashPage === totalPages} onClick={() => setDashPage(p => p + 1)} className="w-12 h-12 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl disabled:opacity-20 active:scale-90 transition-all hover:border-orange-500/30">
+                                            <ChevronRight size={20} strokeWidth={3}/>
                                         </button>
                                     </Tooltip>
                                 </div>
@@ -204,18 +214,26 @@ export const BooksSection = ({
                         )}
                     </motion.div>
                 ) : (
-                    <motion.div key={currentBook._id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                    <motion.div 
+                        key={`details-${currentBook._id}`} 
+                        initial={{ opacity: 0, scale: 0.98, x: 30 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: 30 }}
+                        transition={{ type: "spring", damping: 30, stiffness: 350 }}
+                    >
+                        {/* --- ১০. ভল্ট ডিটেইলস সেকশন --- */}
                         <BookDetails 
                             currentBook={currentBook} items={entries} stats={stats} currentUser={currentUser} 
                             onBack={() => setCurrentBook(null)}
                             onAdd={() => openModal('addEntry', { currentUser, currentBook, onSubmit: handleSaveEntryLogic })}
                             onEdit={(e: any) => openModal('addEntry', { currentUser, currentBook, entry: e, onSubmit: (data: any) => handleSaveEntryLogic(data, e) })}
-                            onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => deleteEntry(e) })}
+                            onDelete={(e: any) => openModal('deleteConfirm', { 
+                                targetName: e.title, 
+                                onConfirm: () => { deleteEntry(e); closeModal(); window.dispatchEvent(new Event('vault-updated')); }
+                            })}
                             onToggleStatus={toggleEntryStatus}
                             onDeleteBook={() => openModal('deleteBookConfirm', { targetName: currentBook.name, onConfirm: (name: string) => handleDeleteBook(name) })}
                             searchQuery={detailsSearchQuery} 
                             setSearchQuery={setDetailsSearchQuery}
-                            pagination={{ currentPage: detailsPage, totalPages: 1, setPage: setDetailsPage }}
+                            pagination={{ currentPage: detailsPage, totalPages: Math.ceil(entries.length / 10) || 1, setPage: setDetailsPage }}
                         />
                     </motion.div>
                 )}

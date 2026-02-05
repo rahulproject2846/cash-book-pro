@@ -38,7 +38,7 @@ const CustomSelect = ({ label, value, options, onChange, icon: Icon }: any) => {
                         initial={{ opacity: 0, y: 5, scale: 0.95 }} 
                         animate={{ opacity: 1, y: 0, scale: 1 }} 
                         exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                        className="absolute z-[200] left-0 right-0 top-full mt-2 w-full bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl overflow-hidden"
+                        className="absolute top-full left-0 w-full mt-2 glass-heavy border border-[var(--border)] rounded-[22px] shadow-2xl p-2 overflow-hidden"
                     >
                         <div className="max-h-48 overflow-y-auto no-scrollbar p-1">
                             {options.map((opt: string) => (

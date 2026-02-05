@@ -47,22 +47,37 @@ export default function RootLayout({
       suppressHydrationWarning={true} >
         <Providers>
             {/* নোটিফিকেশন সিস্টেম - প্রিমিয়াম স্টাইল */}
-            <Toaster 
-              position="top-center" 
-              toastOptions={{
-                style: {
-                  background: '#1A1A1B',
-                  color: '#F0F0F0',
-                  border: '1px solid #2D2D2D',
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  borderRadius: '16px',
-                  padding: '12px 20px',
-                },
-              }}
-            />
+            <Toaster
+  position="top-center"
+  reverseOrder={false}
+  gutter={12}
+  toastOptions={{
+    duration: 3500,
+    style: {
+      background: 'rgba(25, 25, 25, 0.8)',
+      backdropFilter: 'blur(15px)',
+      WebkitBackdropFilter: 'blur(15px)',
+      color: '#fff',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '24px',
+      padding: '12px 24px',
+      fontSize: '10px',
+      fontWeight: '900',
+      textTransform: 'uppercase',
+      letterSpacing: '2px',
+      boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+    },
+    success: {
+      iconTheme: { primary: '#F97316', secondary: '#fff' },
+    },
+    error: {
+      style: {
+        background: 'rgba(220, 38, 38, 0.9)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+      },
+    }
+  }}
+/>
             {children}
         </Providers>
       </body>

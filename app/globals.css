@@ -2,170 +2,66 @@
 
 @layer base {
   :root {
-    /* --- MASTER VARIABLES --- */
-    --bg-app: #F9FAFB;
-    --bg-card: #FFFFFF;
-    --text-main: #0F172A;
-    --text-muted: #64748B;
-    --border: #E2E8F0;
-    --border-color: #E2E8F0;
+    /* --- APPLE LIGHT (Pure & Soft) --- */
+    --bg-app: #FBFBFD;
+    --bg-card: rgba(255, 255, 255, 0.7);
+    --bg-input: rgba(0, 0, 0, 0.03);
+    --text-main: #1D1D1F;
+    --text-muted: #86868B;
+      --border: #E2E8F0;
+    --border-color: #E2E8F0;/* rgba(0, 0, 0, 0.05);  একদম হালকা বর্ডার */
     --accent: #F97316;
-    
-    /* Layout Variables */
-    --card-padding: 1.5rem; /* Default Padding */
-    --card-radius: 24px;
-    --radius-card: 32px;
-    --card-min-height: 245px;
+    --glass-blur: blur(20px);
   }
 
-  /* --- DARK MODE (Studio Grey) --- */
   .dark {
-    --bg-app: #0F0F0F;
-    --bg-card: #1A1A1B;
-    --text-main: #F0F0F0;
-    --text-muted: #888888;
-    --border: #2D2D2D;
-    --border-color: #2D2D2D;
+    /* --- STUDIO DARK (Pro Grey) --- */
+    --bg-app: #0C0C0C;
+    --bg-card: rgba(28, 28, 30, 0.6);
+    --bg-input: rgba(255, 255, 255, 0.04);
+    --text-main: #F5F5F7;
+    --text-muted: #A1A1A6;
+     --border: transparent;
+    --border-color: transparent; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
+
   }
 
-  /* --- MIDNIGHT MODE (OLED Black) - High Priority --- */
-  html.midnight-mode, 
-  html.midnight-mode .dark {
-    --bg-app: #000000 !important;
-    --bg-card: #0A0A0A !important;
-    --border: #181818 !important;
-    --border-color: #181818 !important;
-  }
-
-  /* --- COMPACT MODE - High Priority --- */
-  html.compact-deck {
-    --card-radius: 16px !important;
-    font-size: 14px;
-    --card-padding: 1rem;
-    --app-gap: 0.75rem;
-    --card-min-height: 200px;
-  }
-
-  * {
-    box-sizing: border-box;
-    -webkit-font-smoothing: antialiased;
+  html.midnight-mode, html.midnight-mode .dark {
+    /* --- MIDNIGHT OLED (Pure Black) --- */
+    --bg-app: #000000;
+    --bg-card: rgba(18, 18, 18, 0.5);
+    --bg-input: #0A0A0A;
+    --border: rgba(255, 255, 255, 0.08);
+    --text-muted: #666666;
   }
 
   body {
     background-color: var(--bg-app);
     color: var(--text-main);
-    overflow-x: hidden;
-    transition: background-color 0.4s ease, color 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
 @layer components {
-  /* --- UNIVERSAL CARD --- */
-  /* প্যাডিং এখন ভেরিয়েবল দিয়ে কন্ট্রোল হবে */
-  .app-card {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--card-radius);
-    padding: var(--card-padding);
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  }
-  
-  .app-card:hover {
-    border-color: rgba(249, 115, 22, 0.3);
-  }
-
-  /* --- STUDIO INPUT --- */
-  .app-input {
-    width: 100%;
-    background-color: var(--bg-app);
-    border: 1.5px solid var(--border);
-    border-radius: 16px;
+  /* লগইন পেজের মত স্মার্ট ইনপুট স্টাইল */
+  .vault-glass-input {
+    @apply w-full h-15 pl-14 font-bold text-xs tracking-widest uppercase rounded-3xl border transition-all outline-none;
+    background-color: var(--bg-input);
+    border-color: var(--border);
     color: var(--text-main);
-    outline: none;
-    transition: all 0.2s ease;
-  }
-  
-  .app-input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
   }
 
-  /* --- ACTION BUTTON --- */
-  .app-btn-primary {
-    background-color: var(--accent);
-    color: white;
-    font-weight: 800;
-    border-radius: 16px;
-    letter-spacing: 0.05em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    transition: transform 0.1s ease;
-  }
-  
-  .app-btn-primary:active {
-    transform: scale(0.96);
+  .vault-glass-input:focus {
+    border-color: rgba(249, 115, 22, 0.4);
+    background-color: rgba(255, 255, 255, 0.06);
   }
 
-  /* --- FINANCE FONT --- */
-  .font-mono-finance {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.03em;
+  /* এলিট বাটন */
+  .vault-btn-elite {
+    @apply w-full py-5 rounded-[24px] font-black text-[11px] uppercase tracking-[4px] transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-xl;
   }
 }
-
-/* --- UTILITIES & OVERRIDES --- */
-
-/* Scrollbar Polish */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-app); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-
-/* Remove Native Pickers Icon */
-input::-webkit-calendar-picker-indicator {
-    display: none !important;
-    -webkit-appearance: none;
-}
-
-/* Modal Lock */
-body:has(.modal-overlay) {
-    overflow: hidden !important;
-}
-
-/* Toast Z-Index Fix */
-#toast-root, .Toastify__toast-container { 
-  z-index: 99999 !important;
-}
-
-
-/* --- MIDNIGHT MODE (Super Priority) --- */
-  html.midnight-mode {
-    --bg-app: #000000 !important;
-    --bg-card: #080808 !important; /* একদম কালো না দিয়ে হালকা শেড */
-    --border: #181818 !important;
-    --border-color: #181818 !important;
-  }
-
-  /* --- COMPACT MODE (Force Layout) --- */
-  html.compact-deck {
-    --card-padding: 1rem !important;
-    --app-gap: 0.75rem !important;
-    --app-padding: 1rem !important;
-    
-    /* হেডার এবং ইনপুটের হাইট কমানো */
-    --input-height: 2.75rem !important; 
-    --header-height: 5rem !important;
-    --radius-card: 20px !important;
-    
-    /* ফন্ট সাইজ সামান্য কমানো */
-    font-size: 14px !important;
-  }
-
-
-
 /* globals.css এর নিচে যোগ করুন 
 :root {
   --header-h: 84px; 
@@ -205,3 +101,70 @@ header {
  
   padding-top: 120px !important;
 } */
+
+
+
+/* --- UTILITIES & OVERRIDES --- */
+
+/* Scrollbar Polish */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-app); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Remove Native Pickers Icon */
+input::-webkit-calendar-picker-indicator {
+    display: none !important;
+    -webkit-appearance: none;
+}
+
+/* Modal Lock */
+body:has(.modal-overlay) {
+    overflow: hidden !important;
+}
+
+/* Toast Z-Index Fix */
+#toast-root, .Toastify__toast-container { 
+  z-index: 99999 !important;
+}
+
+
+.midnight-mode {
+                    --bg-app: #000000 !important;
+                    --bg-card: #080808 !important;
+                    --border-color: #121212 !important;
+                }
+                html.compact-deck {
+                    --card-padding: 0.75rem !important; 
+                    --app-gap: 0.5rem !important;
+                    --app-padding: 1rem !important;
+                    --input-height: 2.75rem !important;
+                    --header-height: 5rem !important;
+                }
+
+/* ড্রপডাউন এবং মডালের জন্য সলিড গ্লাস ইফেক্ট */
+.glass-heavy {
+  background-color: var(--bg-card) !important;
+  /* ডার্ক মোডে এটি যাতে বেশি ট্রান্সপারেন্ট না লাগে */
+  backdrop-filter: blur(30px) saturate(150%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
+  z-index: 9999 !important;
+}
+
+/* ড্রপডাউন ওপেন থাকলে যাতে পেছনের এলিমেন্ট ক্লিক না হয় */
+.select-layer-fix {
+  position: relative;
+  z-index: 1001;
+}
+
+
+  /* Hide scrollbar but keep scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE & Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+ 

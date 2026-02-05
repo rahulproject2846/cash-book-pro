@@ -3,15 +3,15 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { 
     TrendingUp, TrendingDown, Wallet, 
-    ShieldCheck, Activity, Clock 
+    ShieldCheck, Activity, Clock, Zap
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 
 /**
- * VAULT PRO: ELITE STATS GRID (100% STABLE)
+ * VAULT PRO: ELITE STATS GRID (V5.2 POLISH)
  * ----------------------------------------
- * Handles Financial Summaries with Dynamic Scaling and Localization.
+ * Handles Financial Summaries with Dynamic Aura and Bengali Numeral Sync.
  */
 
 interface StatsProps {
@@ -22,6 +22,14 @@ interface StatsProps {
     currency?: string;
 }
 
+// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
+const toBn = (num: any, lang: string) => {
+    const str = String(num);
+    if (lang !== 'bn') return str;
+    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', ',':',', '.':'.' };
+    return str.split('').map(c => bnNums[c] || c).join('');
+};
+
 export const StatsGrid = ({ 
     income = 0, 
     expense = 0, 
@@ -30,120 +38,119 @@ export const StatsGrid = ({
     currency = "BDT (৳)" 
 }: StatsProps) => {
     
-    const { T, t } = useTranslation();
+    const { T, t, language } = useTranslation();
     const symbol = currency.match(/\(([^)]+)\)/)?.[1] || "৳";
     const surplus = income - expense;
 
-    // ডাইনামিক্যালি ল্যাঙ্গুয়েজ ম্যাপ করা হয়েছে
     const cards = [
         { 
             id: 'inflow',
-            label: T('label_inflow') || 'Inflow', 
+            label: T('label_inflow'), 
             value: income, 
             color: 'text-green-500', 
             accent: 'bg-green-500', 
+            glow: 'rgba(34, 197, 94, 0.15)',
             icon: TrendingUp,
-            desc: T('desc_inflow') || "Assets Gained",
-            tt: t('tt_inflow') || "Total incoming assets"
+            desc: T('desc_inflow')
         },
         { 
             id: 'outflow',
-            label: T('label_outflow') || 'Outflow', 
+            label: T('label_outflow'), 
             value: expense, 
             color: 'text-red-500', 
             accent: 'bg-red-500', 
+            glow: 'rgba(239, 68, 68, 0.15)',
             icon: TrendingDown,
-            desc: T('desc_outflow') || "Capital Spent",
-            tt: t('tt_outflow') || "Total outgoing capital"
+            desc: T('desc_outflow')
         },
         { 
             id: 'pending',
-            label: T('label_pending') || 'Pending', 
+            label: T('label_pending'), 
             value: pending, 
             color: 'text-orange-500', 
             accent: 'bg-orange-500', 
+            glow: 'rgba(249, 115, 22, 0.15)',
             icon: Clock,
-            desc: T('desc_pending') || "Protocol Queue",
-            tt: t('tt_pending') || "Transactions awaiting finalization"
+            desc: T('desc_pending')
         },
         { 
             id: 'surplus',
-            label: T('label_surplus') || 'Surplus', 
+            label: T('label_surplus'), 
             value: surplus, 
             color: surplus >= 0 ? 'text-blue-500' : 'text-red-500', 
             accent: surplus >= 0 ? 'bg-blue-500' : 'bg-red-500', 
+            glow: surplus >= 0 ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
             icon: Wallet,
-            desc: T('desc_surplus') || "Net Position",
-            tt: t('tt_surplus') || "Remaining net balance"
+            desc: T('desc_surplus')
         },
     ];
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-[var(--app-gap,0.75rem)] md:gap-[var(--app-gap,1.5rem)] transition-all duration-300">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-[var(--app-gap,0.75rem)] md:gap-[var(--app-gap,1.5rem)] transition-all duration-500">
             {cards.map((card, i) => {
                 const Icon = card.icon;
-                return (
-                    <Tooltip key={card.id} text={card.tt}>
-                        <motion.div 
-                            initial={{ opacity: 0, y: 12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.08 }}
-                            whileHover={{ y: -4 }}
-                            className="app-card group relative p-[var(--card-padding,1rem)] md:p-[var(--card-padding,1.5rem)] overflow-hidden border border-[var(--border-color)] bg-[var(--bg-card)] shadow-lg hover:shadow-2xl transition-all duration-300 h-full"
-                        >
-                            {/* Background Deco */}
-                            <div className="absolute -right-4 -bottom-4 opacity-[0.01] group-hover:opacity-[0.04] transition-opacity duration-500 pointer-events-none">
-                                <Icon size={120} strokeWidth={1} />
-                            </div>
+                const isSurplus = card.id === 'surplus';
 
-                            {/* Top Section */}
-                            <div className="flex items-start justify-between mb-[var(--app-gap,1rem)]">
-                                <div className="flex items-center gap-2 md:gap-3">
-                                    <div className={`p-1.5 md:p-2.5 rounded-xl bg-[var(--bg-app)] border border-[var(--border-color)] group-hover:border-orange-500/20 transition-all shadow-inner`}>
+                return (
+                    <Tooltip key={card.id} text={t(`tt_${card.id}`) || card.label}>
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.1, type: "spring", damping: 25 }}
+                            whileHover={{ y: -5, boxShadow: `0 20px 40px -10px ${card.glow}` }}
+                            className="group relative bg-[var(--bg-card)] rounded-[32px] p-5 md:p-6 border border-[var(--border)] overflow-hidden transition-all duration-500 h-full flex flex-col"
+                        >
+                            {/* --- 1. GLASS AURA (Background Detail) --- */}
+                            <div className={`absolute -right-8 -top-8 w-24 h-24 blur-[50px] opacity-10 group-hover:opacity-30 transition-opacity duration-700 ${card.accent}`} />
+
+                            {/* --- 2. HEADER: METADATA STYLE --- */}
+                            <div className="flex items-center justify-between mb-6 relative z-10">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-xl bg-[var(--bg-app)] border border-[var(--border)] group-hover:border-orange-500/30 transition-all shadow-inner`}>
                                         <Icon size={16} className={card.color} strokeWidth={2.5} />
                                     </div>
                                     <div className="flex flex-col">
-                                        <p className="text-[8px] md:text-[9px] font-black uppercase tracking-[2px] text-[var(--text-muted)] italic leading-none">
-                                            {labelPrefix} {card.label}
-                                        </p>
-                                        <p className="hidden md:block text-[7px] font-bold uppercase tracking-[1px] text-[var(--text-muted)] opacity-30 mt-1">
+                                        <span className="text-[8px] md:text-[9px] font-black uppercase tracking-[2px] text-[var(--text-muted)] italic leading-none flex items-center gap-1.5">
+                                            <Zap size={10} className="text-orange-500" fill="currentColor" strokeWidth={0} />
+                                            {card.label}
+                                        </span>
+                                        <span className="text-[7px] font-bold uppercase tracking-[1px] text-[var(--text-muted)] opacity-30 mt-1 hidden md:block">
                                             {card.desc}
-                                        </p>
+                                        </span>
                                     </div>
                                 </div>
-                                
-                                {card.id === 'surplus' && (
-                                    <div className="p-1 md:p-1.5 bg-orange-500/5 rounded-full border border-orange-500/10">
-                                        <ShieldCheck size={12} className="text-orange-500/40" />
+                                {isSurplus && (
+                                    <div className="w-6 h-6 bg-blue-500/10 rounded-full flex items-center justify-center border border-blue-500/20">
+                                        <ShieldCheck size={12} className="text-blue-500" />
                                     </div>
                                 )}
                             </div>
 
-                            {/* Value Section */}
-                            <div className="relative z-10">
-                                <h3 className={`text-lg md:text-3xl font-mono-finance font-black tracking-tighter ${card.id === 'surplus' ? card.color : 'text-[var(--text-main)]'}`}>
-                                    <span className="text-xs md:text-sm mr-0.5 opacity-50">
-                                        {card.value > 0 ? '+' : (card.value < 0 ? '-' : '')}
+                            {/* --- 3. VALUE: BENGALI SYNCED (Fast Reading) --- */}
+                            <div className="w-100 relative z-10 mt-auto">
+                                <h3 className={`text-xl md:text-3xl font-mono-finance font-black tracking-tighter ${isSurplus ? card.color : 'text-[var(--text-main)]'}`}>
+                                    <span className="text-xs md:text-sm mr-1 opacity-50 font-bold">
+                                        {symbol}
                                     </span>
-                                    {symbol}{Math.abs(card.value).toLocaleString()}
+                                    {toBn(Math.abs(card.value).toLocaleString(), language)}
                                 </h3>
                                 
-                                {/* Status Indicator */}
-                                <div className="flex items-center justify-between mt-3 md:mt-5">
-                                    <div className="flex items-center gap-1.5 md:gap-2">
-                                        <div className="h-0.5 md:h-1 w-6 md:w-10 rounded-full bg-[var(--border-color)] overflow-hidden">
+                                {/* --- 4. OS STATUS BAR (Micro-Detail) --- */}
+                                <div className="flex items-center justify-between mt-5">
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <div className="h-1 flex-1 max-w-[60px] rounded-full bg-[var(--bg-app)] overflow-hidden border border-[var(--border)]">
                                             <motion.div 
-                                                initial={{ x: "-100%" }}
-                                                animate={{ x: "0%" }}
-                                                transition={{ duration: 1, delay: 0.5 }}
-                                                className={`h-full w-full ${card.accent} opacity-60`} 
+                                                initial={{ width: "0%" }}
+                                                animate={{ width: "100%" }}
+                                                transition={{ duration: 1.5, delay: 0.5 + (i * 0.1) }}
+                                                className={`h-full ${card.accent} opacity-60`} 
                                             />
                                         </div>
                                         <span className="text-[7px] md:text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest opacity-30">
                                             {T('label_secured') || "SECURED"}
                                         </span>
                                     </div>
-                                    <Activity size={10} className="text-[var(--text-muted)] opacity-20 group-hover:text-orange-500 group-hover:opacity-40 transition-all" />
+                                    <Activity size={12} className="text-[var(--text-muted)] opacity-20 group-hover:text-orange-500 transition-all animate-pulse" />
                                 </div>
                             </div>
                         </motion.div>
