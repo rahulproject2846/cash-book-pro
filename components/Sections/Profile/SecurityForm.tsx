@@ -1,141 +1,158 @@
 "use client";
-import React, { useState } from 'react';
-import { KeyRound, Loader2, ShieldCheck, Moon, Sun, Lock } from 'lucide-react';
-import { Chrome } from 'lucide-react';
+import React from 'react';
+import { 
+    KeyRound, Loader2, ShieldCheck, Lock, Chrome, 
+    Zap, Fingerprint, MailCheck, User, ShieldAlert 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 
 /**
- * VAULT PRO: SECURITY FORM (AUTH-AWARE REFACTOR)
+ * VAULT PRO: SECURITY FORM (V5.2 ELITE)
  * --------------------------------------------
- * Credentials: Full access with mandatory current password.
- * Google: Locked/Blurred password fields with specific guidance.
+ * Handles identity and key rotation protocols.
+ * Smart awareness for Google Managed vs. Standard Credentials.
  */
-export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, isLoading }: any) => {
-    const { T, t } = useTranslation();
-    const [isMidnight, setIsMidnight] = useState(false);
 
+// --- 🛠️ SUB-COMPONENT: SMART SECURITY INPUT ---
+const SecurityInput = ({ label, value, onChange, placeholder, icon: Icon, type = "text", required = false, disabled = false }: any) => (
+    <div className="space-y-2 group/input w-full">
+        <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] ml-1 flex items-center gap-2">
+            {Icon && <Icon size={12} className="text-orange-500/60" />} {label}
+        </span>
+        <div className={`relative h-14 rounded-[22px] border-2 transition-all duration-500 flex items-center px-5 bg-[var(--bg-app)] 
+            ${disabled ? 'opacity-40 border-[var(--border)]' : 'border-[var(--border)] focus-within:border-orange-500/50 shadow-inner'}`}
+        >
+            <input 
+                type={type} value={value} onChange={onChange} required={required} disabled={disabled}
+                placeholder={placeholder}
+                className="w-full bg-transparent border-none outline-none text-[13px] font-black uppercase tracking-widest text-[var(--text-main)] placeholder:opacity-20"
+            />
+        </div>
+    </div>
+);
+
+export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, isLoading }: any) => {
+    const { T, t, language } = useTranslation();
     const isGoogleUser = currentUser?.authProvider !== 'credentials';
 
-    const toggleMidnight = () => {
-        setIsMidnight(!isMidnight);
-        const root = document.documentElement;
-        if (!isMidnight) {
-            root.style.setProperty('--bg-app', '#000000');
-            root.style.setProperty('--bg-card', '#080808');
-            root.classList.add('midnight-mode');
-        } else {
-            root.style.setProperty('--bg-app', '#0F0F0F');
-            root.style.setProperty('--bg-card', '#1A1A1B');
-            root.classList.remove('midnight-mode');
-        }
-    };
-
     return (
-        <div className="app-card p-[var(--card-padding,2rem)] bg-[var(--bg-card)] shadow-2xl border border-[var(--border-color)] transition-all duration-300">
-            <div className="flex justify-between items-center mb-[var(--app-gap,2rem)]">
-                <h4 className="text-xs font-black text-[var(--text-main)] uppercase tracking-[3px] italic flex items-center gap-3">
-                    <ShieldCheck size={18} className="text-orange-500" /> {T('security_protocol_title')}
-                </h4>
-                
-                {/* AMOLED Midnight Toggle */}
-                <Tooltip text={t('tt_midnight_toggle')}>
-                    <button 
-                        type="button"
-                        onClick={toggleMidnight}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all active:scale-95 ${isMidnight ? 'bg-orange-500 border-orange-500 text-white shadow-lg' : 'bg-transparent border-[var(--border-color)] text-[var(--text-muted)]'}`}
-                    >
-                        {isMidnight ? <Moon size={12} fill="currentColor" /> : <Sun size={12} />}
-                        <span className="text-[8px] font-black uppercase tracking-widest">
-                            {isMidnight ? T('midnight_on') : T('midnight_off')}
-                        </span>
-                    </button>
-                </Tooltip>
-            </div>
+        <div className="relative bg-[var(--bg-card)] rounded-[32px] border border-[var(--border)] p-[var(--card-padding,2.5rem)] overflow-hidden shadow-xl transition-all duration-500 group">
             
-            <form onSubmit={updateProfile} className="space-y-[var(--app-gap,2rem)]">
-                {/* 1. Identity Name Field - Available for all */}
-                <div className="space-y-3">
-                    <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">
-                        {T('identity_name_label')}
-                    </label>
-                    <input 
-                        type="text" 
-                        required
-                        className="app-input w-full h-14 font-black uppercase text-sm tracking-widest bg-[var(--bg-app)] border-2 border-[var(--border-color)] focus:border-orange-500/40 outline-none px-6 rounded-2xl transition-all" 
-                        value={formData.name} 
-                        onChange={(e) => setForm({...formData, name: e.target.value})} 
-                    />
-                </div>
+            {/* Background Branding Decor */}
+            <div className="absolute -right-10 -bottom-10 opacity-[0.02] rotate-12 pointer-events-none group-hover:opacity-[0.04] transition-opacity">
+                <ShieldCheck size={300} strokeWidth={1} />
+            </div>
 
-                {/* 2. Key Management Section (Logic Switch) */}
-                <div className="relative">
-                    {/* Google User Overlay / Red Alert */}
-                    {isGoogleUser && (
-                        <div className="absolute inset-0 z-20 flex items-center justify-center">
-                            <Tooltip text={t('tt_google_pass_locked')}>
-                                <div className="bg-red-500/10 backdrop-blur-[2px] border border-red-500/20 px-6 py-3 rounded-2xl flex items-center gap-3 shadow-xl cursor-not-allowed">
-                                    <Lock size={14} className="text-red-500" />
-                                    <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">
-                                        {T('google_locked_label') || "Google Identity Locked"}
-                                    </span>
-                                </div>
-                            </Tooltip>
-                        </div>
-                    )}
-
-                    <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-[var(--border-color)]/30 transition-all ${isGoogleUser ? 'opacity-20 blur-sm pointer-events-none' : 'opacity-100'}`}>
-                        {/* Current Password Field */}
-                        <div className="space-y-3">
-                            <label className="text-[9px] font-black text-orange-500 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <KeyRound size={12} /> {T('current_key_label')}
-                            </label>
-                            <input 
-                                type="password" 
-                                placeholder="••••••••" 
-                                required={!isGoogleUser} // Credentials এর জন্য Required
-                                className="app-input w-full h-14 font-mono border-2 border-orange-500/20 focus:border-orange-500 bg-[var(--bg-app)] px-6 rounded-2xl outline-none transition-all" 
-                                value={formData.currentPassword || ''} 
-                                onChange={(e) => setForm({...formData, currentPassword: e.target.value})} 
-                            />
-                        </div>
-
-                        {/* New Password Field */}
-                        <div className="space-y-3">
-                            <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1">
-                                {T('new_key_label')}
-                            </label>
-                            <input 
-                                type="password" 
-                                placeholder="••••••••" 
-                                className="app-input w-full h-14 font-mono bg-[var(--bg-app)] border-2 border-[var(--border-color)] focus:border-orange-500/40 px-6 rounded-2xl outline-none transition-all" 
-                                value={formData.newPassword || ''} 
-                                onChange={(e) => setForm({...formData, newPassword: e.target.value})} 
-                            />
-                        </div>
+            {/* --- 🏷️ HEADER SECTION --- */}
+            <div className="flex justify-between items-start mb-10 relative z-10">
+                <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-orange-500/10 rounded-2xl text-orange-500 border border-orange-500/20 shadow-inner">
+                        <ShieldCheck size={22} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-black text-[var(--text-main)] uppercase tracking-[4px] italic leading-none">
+                            {T('security_protocol_title') || "SECURITY PROTOCOL"}
+                        </h4>
+                        <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-1.5 opacity-40">
+                            Identity & Access Configuration
+                        </p>
                     </div>
                 </div>
 
-                {/* 3. Submit Action with Google Awareness */}
-                <Tooltip text={isGoogleUser ? t('tt_save_google') : t('tt_save_security')}>
-                    <button 
-                        disabled={isLoading} 
-                        className={`app-btn-primary w-full py-5 text-[10px] font-black tracking-[4px] uppercase border-none text-white shadow-2xl rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center
-                            ${isGoogleUser ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-500 hover:bg-orange-600'}
-                        `}
-                    >
-                        {isLoading ? (
-                            <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                            <div className="flex items-center gap-3">
-                                {isGoogleUser && <Chrome size={14} />}
-                                {T('action_save_security')}
-                            </div>
+                {/* Managed Status Badge */}
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-app)] border border-[var(--border)] rounded-xl opacity-60">
+                    <Zap size={10} className="text-orange-500" fill="currentColor" />
+                    <span className="text-[8px] font-black uppercase tracking-widest">{T('status_master') || "MASTER LEVEL"}</span>
+                </div>
+            </div>
+            
+            <form onSubmit={updateProfile} className="space-y-8 relative z-10">
+                
+                {/* 1. IDENTITY REGISTRY (Name Field) */}
+                <div className="p-1 bg-[var(--bg-app)] ">
+                    <SecurityInput 
+                        label={T('identity_name_label') || "IDENTITY REGISTRY NAME"}
+                        placeholder={t('placeholder_identity')}
+                        value={formData.name}
+                        onChange={(e: any) => setForm({...formData, name: e.target.value})}
+                        icon={User}
+                        required
+                    />
+                </div>
+
+                {/* 2. KEY MANAGEMENT (Managed Protection) */}
+                <div className="relative">
+                    <AnimatePresence>
+                        {isGoogleUser && (
+                            <motion.div 
+                                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                className="absolute inset-0 z-20 flex flex-col items-center justify-center backdrop-blur-[2px] bg-red-500/[0.02] rounded-[30px] border border-red-500/10"
+                            >
+                                <Tooltip text={t('tt_google_pass_locked')}>
+                                    <div className="bg-[var(--bg-card)] border border-red-500/20 px-6 py-3 rounded-2xl flex items-center gap-4 shadow-2xl group/lock cursor-not-allowed active:scale-95 transition-all">
+                                        <Lock size={16} className="text-red-500 animate-pulse" />
+                                        <div className="text-left">
+                                            <p className="text-[9px] font-black text-red-500 uppercase tracking-widest leading-none">
+                                                {T('google_locked_label') || "IDENTITY MANAGED BY GOOGLE"}
+                                            </p>
+                                            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mt-1 opacity-60">Key Rotation Restricted</p>
+                                        </div>
+                                    </div>
+                                </Tooltip>
+                            </motion.div>
                         )}
-                    </button>
-                </Tooltip>
+                    </AnimatePresence>
+
+                    <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 p-1 transition-all duration-700 ${isGoogleUser ? 'blur-md opacity-20 pointer-events-none' : 'opacity-100'}`}>
+                        {/* Current Security Key */}
+                        <SecurityInput 
+                            label={T('current_key_label') || "CURRENT SECURITY KEY"}
+                            placeholder="••••••••"
+                            type="password"
+                            value={formData.currentPassword || ''}
+                            onChange={(e: any) => setForm({...formData, currentPassword: e.target.value})}
+                            icon={KeyRound}
+                            required={!isGoogleUser}
+                        />
+
+                        {/* New Security Key */}
+                        <SecurityInput 
+                            label={T('new_key_label') || "NEW ACCESS KEY"}
+                            placeholder="••••••••"
+                            type="password"
+                            value={formData.newPassword || ''}
+                            onChange={(e: any) => setForm({...formData, newPassword: e.target.value})}
+                            icon={Fingerprint}
+                        />
+                    </div>
+                </div>
+
+                {/* 3. EXECUTION CONTROL */}
+                <div className="pt-4">
+                    <Tooltip text={isGoogleUser ? t('tt_save_google') : t('tt_save_security')}>
+                        <button 
+                            disabled={isLoading} 
+                            className={`w-full h-16 rounded-[24px] font-black text-[11px] uppercase tracking-[5px] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-4 border-none group/btn
+                                ${isGoogleUser 
+                                    ? 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-700' 
+                                    : 'bg-orange-500 text-white shadow-orange-500/20 hover:bg-orange-600'}
+                            `}
+                        >
+                            {isLoading ? (
+                                <Loader2 size={20} className="animate-spin" />
+                            ) : (
+                                <div className="flex items-center gap-4">
+                                    {isGoogleUser ? <Chrome size={20} strokeWidth={2.5} /> : <Fingerprint size={20} strokeWidth={2.5} className="group-hover/btn:rotate-12 transition-transform" />}
+                                    <span>{T('action_save_security') || "EXECUTE IDENTITY UPDATE"}</span>
+                                </div>
+                            )}
+                        </button>
+                    </Tooltip>
+                </div>
             </form>
         </div>
     );

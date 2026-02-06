@@ -68,7 +68,7 @@ export const BookDetails = ({
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             className="w-full pb-36 transition-all duration-500"
         >
-            <div className="px-4 md:px-8 lg:px-10 space-y-8">
+            <div className=" md:px-8 lg:px-10 space-y-2 sm:space-y-4 lg:space-y-8">
                 
                 {/* ১. এনালিটিক্যাল স্ট্যাটাস গ্রিড */}
                 <StatsGrid 
@@ -140,8 +140,8 @@ export const BookDetails = ({
                 </div>
 
                 {/* ৬. স্মার্ট প্যানিনেশন কন্ট্রোল */}
-                <div className="flex flex-col md:flex-row justify-between items-center py-6 gap-6 border-t border-[var(--border)] opacity-80">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-col md:flex-row justify-between items-center py-6 gap-6 opacity-80">
+                    <div className=" hidden md:flex items-center gap-3">
                         <div className="w-8 h-8 bg-orange-500/10 rounded-lg flex items-center justify-center text-orange-500">
                              <LayoutGrid size={14} />
                         </div>

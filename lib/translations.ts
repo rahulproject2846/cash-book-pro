@@ -491,12 +491,17 @@ auth_err_vault_engine: "Vault Engine not ready",
     btn_extract: "EXECUTE EXTRACTION",
     extracting_status: "ENCRYPTING...",
     success_archive_exported: "Archive Successfully Exported",
-    err_no_archive_records: "No archive records found"
+    err_no_archive_records: "No archive records found",
 
 
 
 
-
+category_all: "ALL CATEGORIES",
+category_food: "FOOD",
+category_salary: "SALARY",
+category_rent: "RENT",
+category_transport: "TRANSPORT",
+category_medical: "MEDICAL",
 
 
 
@@ -1013,11 +1018,16 @@ label_inflow: "প্রাপ্তি",
     btn_extract: "এক্সট্রাকশন সম্পন্ন করুন",
     extracting_status: "এনক্রিপ্ট হচ্ছে...",
     success_archive_exported: "আর্কাইভ সফলভাবে এক্সপোর্ট হয়েছে",
-    err_no_archive_records: "আর্কাইভে কোনো তথ্য পাওয়া যায়নি"
+    err_no_archive_records: "আর্কাইভে কোনো তথ্য পাওয়া যায়নি",
 
 
 
-
+category_all: "সব ক্যাটাগরি",
+category_food: "খাবার",
+category_salary: "বেতন",
+category_rent: "ভাড়া",
+category_transport: "যাতায়াত",
+category_medical: "চিকিৎসা",
 
 
 

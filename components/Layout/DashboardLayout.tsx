@@ -232,7 +232,11 @@ export const DashboardLayout = (props: DashboardLayoutProps) => {
                 <DynamicHeader {...props} collapsed={collapsed} theme={theme} setTheme={setTheme} />
 
                 {/* --- Content Area with "Leaf" Transition --- */}
-                <div className={`w-full max-w-[1920px] mx-auto transition-all duration-300 px-[var(--app-padding,1.25rem)] md:px-[var(--app-padding,2.5rem)] ${currentBook && activeSection === 'books' ? 'pt-[var(--header-height,7.5rem)] px-0' : 'pt-[var(--header-height,7rem)]'} pb-36`}>
+                <div className={`w-full max-w-[1920px] mx-auto transition-all duration-300 px-[var(--app-padding,1.25rem)] md:px-[var(--app-padding,2.5rem)]  ${currentBook && activeSection === 'books' 
+        ? 'pt-[6.5rem] md:pt-[7.5rem] px-0'  // মোবাইলে ৫.৫rem, ডেক্সটপে ৭.৫rem
+        : 'pt-[5rem] md:pt-[7rem]'          // মোবাইলে ৫rem, ডেক্সটপে ৭rem
+    } pb-36`}
+>
                     <AnimatePresence mode="wait">
                         <motion.div 
                             key={activeSection + (currentBook?._id || '')}

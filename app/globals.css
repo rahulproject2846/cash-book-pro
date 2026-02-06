@@ -4,24 +4,29 @@
   :root {
     /* --- APPLE LIGHT (Pure & Soft) --- */
     --bg-app: #FBFBFD;
-    --bg-card: rgba(255, 255, 255, 0.7);
+    --bg-card: rgba(255, 255, 255, 06);
     --bg-input: rgba(0, 0, 0, 0.03);
-    --text-main: #1D1D1F;
-    --text-muted: #86868B;
-      --border: #E2E8F0;
+  /*  --text-main: #1D1D1F;*/
+   /* --text-muted: #8E8E93;*/
+   /*   --border: #E5E5EA; */
     --border-color: #E2E8F0;/* rgba(0, 0, 0, 0.05);  একদম হালকা বর্ডার */
     --accent: #F97316;
     --glass-blur: blur(20px);
+      --text-main: #1D1D1F;
+  --text-muted: #6E6E73;
+  --text-placeholder: #8E8E93;
+  --border: #E5E5EA;
+  --border-soft: #F2F2F7;
   }
 
   .dark {
     /* --- STUDIO DARK (Pro Grey) --- */
     --bg-app: #0C0C0C;
-    --bg-card: rgba(28, 28, 30, 0.6);
+    --bg-card: rgba(28, 28, 30, 1);
     --bg-input: rgba(255, 255, 255, 0.04);
     --text-main: #F5F5F7;
-    --text-muted: #A1A1A6;
-     --border: transparent;
+    --text-muted: #8E8E93;
+     --border: #1f1f1f; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
     --border-color: transparent; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
 
   }
@@ -168,3 +173,11 @@ body:has(.modal-overlay) {
   scrollbar-width: none;     /* Firefox */
 }
  
+
+
+input::placeholder,
+textarea::placeholder {
+  color: #8E8E93; /* Apple-style placeholder */
+  font-size: 0.775rem; /* 14px */
+  opacity: .8; /* Safari fix */
+}

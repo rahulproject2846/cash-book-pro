@@ -1,7 +1,10 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Download, ShieldCheck, Activity } from 'lucide-react';
+import { 
+    Loader2, Download, ShieldCheck, Activity, 
+    BarChart3, Zap, Fingerprint, ShieldAlert, Cpu
+} from 'lucide-react';
 import { db } from '@/lib/offlineDB';
 import { AdvancedExportModal } from '@/components/Modals/AdvancedExportModal';
 
@@ -9,19 +12,21 @@ import { AdvancedExportModal } from '@/components/Modals/AdvancedExportModal';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 
-// Modular Components
+// Modular Components (v5.2 Refined)
 import { AnalyticsHeader } from './AnalyticsHeader';
 import { AnalyticsStats } from './AnalyticsStats';
 import { AnalyticsVisuals } from './AnalyticsVisuals';
 
-/**
- * VAULT PRO: MASTER REPORTS SECTION (STABILIZED)
- * --------------------------------------------
- * Orchestrates Financial Analytics, Visualizations, and Global Exports.
- * Fully integrated with Global Spacing, Language, and Guidance engines.
- */
+// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
+const toBn = (num: any, lang: string) => {
+    const str = String(num);
+    if (lang !== 'bn') return str;
+    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', '.':'.' };
+    return str.split('').map(c => bnNums[c] || c).join('');
+};
+
 export const ReportsSection = ({ currentUser }: any) => {
-    const { T, t } = useTranslation();
+    const { T, t, language } = useTranslation();
     const [allEntries, setAllEntries] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [timeRange, setTimeRange] = useState('30');
@@ -29,7 +34,7 @@ export const ReportsSection = ({ currentUser }: any) => {
 
     const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
-    // Data Fetching Logic (Preserved Protocol)
+    // --- 🧬 ১. DATA PROTOCOL (Logic Preserved) ---
     const fetchLocalAnalytics = async () => {
         try {
             if (!db.isOpen()) await db.open();
@@ -48,7 +53,7 @@ export const ReportsSection = ({ currentUser }: any) => {
         return () => window.removeEventListener('vault-updated', fetchLocalAnalytics);
     }, []);
 
-    // Memory-Optimized Analytics Engine (Preserved Protocol)
+    // --- 🧬 ২. ANALYTICS ENGINE (Logic Preserved) ---
     const processed = useMemo(() => {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - parseInt(timeRange));
@@ -90,28 +95,34 @@ export const ReportsSection = ({ currentUser }: any) => {
         };
     }, [allEntries, timeRange]);
 
-    if (loading) return (
-        <div className="flex flex-col items-center justify-center h-[60vh] gap-4 transition-all">
-            <Loader2 className="animate-spin text-orange-500" size={44} strokeWidth={1.5} />
-            <span className="text-[10px] font-black uppercase tracking-[6px] text-[var(--text-muted)] animate-pulse">
-                {t('syncing_intel') || "Syncing Intel"}
+if (loading) return (
+        <div className="flex flex-col items-center justify-center h-[60vh] gap-6 transition-all duration-500">
+            <div className="relative">
+                <Loader2 className="animate-spin text-orange-500" size={48} />
+                <BarChart3 className="absolute inset-0 m-auto text-orange-500/40" size={20} />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-[5px] text-orange-500/40 animate-pulse">
+                {t('syncing_intel') || "Compiling Intelligence"}
             </span>
         </div>
     );
 
     return (
         <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            className="space-y-[var(--app-gap,1.5rem)] md:space-y-[var(--app-gap,2.5rem)] pb-32 max-w-6xl mx-auto px-[var(--app-padding,1rem)] md:px-[var(--app-padding,1.5rem)] transition-all duration-300"
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-[1400px] mx-auto space-y-[var(--app-gap,2.5rem)] pb-40 px-[var(--app-padding,1.25rem)] md:px-8 transition-all duration-500"
         >
-            {/* Header: Range Selector & Performance Title */}
-            <AnalyticsHeader timeRange={timeRange} setTimeRange={setTimeRange} count={processed.filtered.length} />
+            {/* --- ১. MASTER HEADER (Fixed: No Duplication) --- */}
+            <AnalyticsHeader 
+                timeRange={timeRange} 
+                setTimeRange={setTimeRange} 
+                count={processed.filtered.length} 
+            />
             
-            {/* 4-Card Summary Grid */}
+            {/* --- ২. SUMMRY GRID --- */}
             <AnalyticsStats stats={processed.stats} symbol={currencySymbol} />
 
-            {/* Visual Charts: Area, Pie, and Liquidity Cards */}
+            {/* --- ৩. VISUAL LAYERING (Charts) --- */}
             <AnalyticsVisuals 
                 areaData={processed.areaData} 
                 pieData={processed.pieData} 
@@ -120,45 +131,57 @@ export const ReportsSection = ({ currentUser }: any) => {
                 symbol={currencySymbol}
             />
 
-            {/* --- CONSOLIDATED REGISTRY: MASTER EXPORT CTA --- */}
-            <div className="app-card p-[var(--card-padding,1.5rem)] md:p-[var(--card-padding,2rem)] bg-orange-500 rounded-[var(--radius-card,35px)] flex flex-col md:flex-row items-center justify-between gap-[var(--app-gap,1.5rem)] shadow-2xl relative overflow-hidden group transition-all">
-                <div className="flex items-center gap-5 md:gap-7 relative z-10 text-center md:text-left flex-col md:flex-row">
-                    <div className="hidden md:flex w-16 h-16 bg-white/20 backdrop-blur-xl rounded-[24px] items-center justify-center text-white border border-white/20 shadow-xl group-hover:rotate-6 transition-transform duration-500">
-                        <Download size={28} strokeWidth={2.5} />
+            {/* --- ৪. MASTER EXPORT CTA (OS Component Style) --- */}
+            <div className="relative bg-orange-500 rounded-[40px] p-8 md:p-12 overflow-hidden shadow-[0_30px_60px_-15px_rgba(249,115,22,0.3)] group transition-all duration-500">
+                {/* Visual Background Decoration */}
+                <div className="absolute -right-10 -top-10 opacity-[0.1] rotate-12 pointer-events-none group-hover:scale-110 transition-transform duration-700">
+                    <Cpu size={300} strokeWidth={1} className="text-white" />
+                </div>
+                
+                <div className="flex flex-col lg:flex-row items-center justify-between gap-10 relative z-10">
+                    <div className="flex items-center gap-6 text-center lg:text-left flex-col lg:flex-row max-w-2xl">
+                        <div className="w-20 h-20 bg-white/20 backdrop-blur-2xl rounded-[30px] flex items-center justify-center text-white border border-white/30 shadow-2xl group-hover:rotate-6 transition-transform">
+                            <Download size={32} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter italic leading-tight">
+                                {T('execute_report_title') || "EXECUTE ARCHIVE PROTOCOL"}
+                            </h3>
+                            <p className="text-[10px] md:text-[12px] font-bold text-white/80 uppercase tracking-[2px] mt-3 leading-relaxed opacity-80">
+                                {t('execute_report_desc') || "Compile and unseal consolidated financial intelligence into a secure offline extraction format."}
+                            </p>
+                        </div>
                     </div>
-                    <div className="max-w-[320px]">
-                        <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tighter italic leading-none">
-                            {T('execute_report_title') || "Execute Report"}
-                        </h3>
-                        <p className="text-[9px] md:text-[10px] font-bold text-white/70 uppercase tracking-[2px] mt-2 leading-relaxed">
-                            {t('execute_report_desc') || "Prepare and download consolidated financial protocol archive"}
-                        </p>
+
+                    <Tooltip text={t('tt_execute_report')}>
+                        <button 
+                            onClick={() => setShowExportModal(true)} 
+                            className="w-full lg:w-auto px-12 h-16 bg-black text-white rounded-[24px] text-[11px] font-black uppercase tracking-[4px] hover:scale-[1.03] active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-4 group/btn"
+                        >
+                            <Fingerprint size={20} className="text-orange-500 group-hover/btn:rotate-12 transition-transform" strokeWidth={3} />
+                            {T('btn_execute_archive') || "EXECUTE EXTRACTION"}
+                        </button>
+                    </Tooltip>
+                </div>
+            </div>
+
+            {/* --- ৫. OS IDENTITY FOOTER --- */}
+            <div className="flex flex-col items-center gap-4 py-20">
+                <div className="h-px w-24 bg-gradient-to-r from-transparent via-[var(--border)] to-transparent opacity-30 mb-2" />
+                <div className="flex items-center gap-6 opacity-20 hover:opacity-50 transition-opacity duration-500 cursor-default">
+                    <ShieldCheck size={32} strokeWidth={1.5} />
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-[8px] leading-none">
+                            {T('vault_pro_split_1')} {T('vault_pro_split_2')}
+                        </span>
+                        <span className="text-[8px] font-bold uppercase tracking-[3px] mt-2">
+                            {T('intel_env_version') || "INTELLIGENCE ENGINE V5.2"}
+                        </span>
                     </div>
                 </div>
-
-                <Tooltip text={t('tt_execute_report')}>
-                    <button 
-                        onClick={() => setShowExportModal(true)} 
-                        className="w-full md:w-auto px-10 h-14 bg-black text-white rounded-2xl text-[10px] font-black uppercase tracking-[3px] hover:scale-105 active:scale-95 transition-all shadow-2xl relative z-10 border-none flex items-center justify-center gap-3"
-                    >
-                        <Activity size={16} className="animate-pulse text-orange-500" />
-                        {T('btn_execute_archive') || "EXECUTE ARCHIVE"}
-                    </button>
-                </Tooltip>
             </div>
 
-            {/* OS Signature Footer */}
-            <div className="flex flex-col items-center gap-4 opacity-10 py-10 transition-all">
-                <Tooltip text={t('tt_verified_os')}>
-                    <div className="flex flex-col items-center gap-4">
-                        <ShieldCheck size={28} className="text-[var(--text-main)]" />
-                        <p className="text-[9px] font-black uppercase tracking-[8px] text-[var(--text-main)] text-center">
-                            {T('intel_env_version') || "Intelligence Environment v4.8"}
-                        </p>
-                    </div>
-                </Tooltip>
-            </div>
-
+            {/* Modals Interface */}
             <AnimatePresence>
                 {showExportModal && (
                     <AdvancedExportModal 

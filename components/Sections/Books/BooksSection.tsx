@@ -154,7 +154,7 @@ export const BooksSection = ({
     );
 
     return (
-        <div className="w-full transition-all duration-500">
+        <div className="w-full relative overflow-visible transition-all duration-500">
             <AnimatePresence mode="wait">
                 {!currentBook ? (
                     <motion.div 
@@ -188,7 +188,7 @@ export const BooksSection = ({
 
                         {/* --- ৯. প্রিমিয়াম প্যানিনেশন --- */}
                         {totalPages > 1 && (
-                            <div className="flex flex-col sm:flex-row justify-between items-center py-6 gap-6 border-t border-[var(--border-color)]">
+                            <div className="flex flex-col sm:flex-row md:px-8 lg:px-10 justify-between items-center py-6 gap-6 border border-[var(--border-color)]">
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 bg-orange-500/10 rounded-lg flex items-center justify-center text-orange-500">
                                         <LayoutGrid size={14}/>
