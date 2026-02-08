@@ -1,23 +1,38 @@
 @import "tailwindcss";
 
 @layer base {
-  :root {
-    /* --- APPLE LIGHT (Pure & Soft) --- */
-    --bg-app: #FBFBFD;
-    --bg-card: rgba(255, 255, 255, 06);
-    --bg-input: rgba(0, 0, 0, 0.03);
-  /*  --text-main: #1D1D1F;*/
-   /* --text-muted: #8E8E93;*/
-   /*   --border: #E5E5EA; */
-    --border-color: #E2E8F0;/* rgba(0, 0, 0, 0.05);  একদম হালকা বর্ডার */
-    --accent: #F97316;
-    --glass-blur: blur(20px);
-      --text-main: #1D1D1F;
+:root {
+  /* --- APPLE LIGHT (Glass & Calm) --- */
+
+  /* App background (never pure white) */
+  --bg-app: #F5F5F7;
+
+  /* Glass cards */
+  --bg-card: rgba(255, 255, 255, 0.75);
+
+  /* Inputs / subtle fills */
+  --bg-input: rgba(0, 0, 0, 0.025);
+
+  /* Text */
+  --text-main: #1D1D1F;
   --text-muted: #6E6E73;
   --text-placeholder: #8E8E93;
-  --border: #E5E5EA;
-  --border-soft: #F2F2F7;
-  }
+
+  /* Borders (Apple NEVER uses solid gray) */
+  --border-color: rgba(0, 0, 0, 0.06);
+  --border-soft: rgba(0, 0, 0, 0.03);
+
+  /* Accent */
+  --accent: #F97316;
+
+  /* Glass */
+  --glass-blur: blur(20px);
+
+  /* Shadow = primary separator in white */
+  --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  --dropdown-main: #F5F5F7;
+}
+
 
   .dark {
     /* --- STUDIO DARK (Pro Grey) --- */
@@ -27,7 +42,9 @@
     --text-main: #F5F5F7;
     --text-muted: #8E8E93;
      --border: #1f1f1f; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
-    --border-color: transparent; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
+    /*--border-color: transparent; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
+    --border-color: rgba(255, 255, 255, 0.04); /* ডার্ক মোডে হালকা বর্ডার */
+     --dropdown-main: rgba(28, 28, 30, 1);
 
   }
 
@@ -245,4 +262,50 @@ html {
 }
 .midnight-mode ::-webkit-scrollbar-thumb:hover {
   background-color: var(--accent);
+}
+
+
+* {
+  border-color: var(--border-color);
+}
+
+/*
+.tooltip {
+  position: absolute;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity .15s ease, transform .15s ease;
+}
+.tooltip-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+
+*/
+
+/* globals.css */
+.full-blur {
+  @apply rounded-2xl border shadow-2xl;
+
+  /* Apple-style glass */
+  background-color: rgba(255, 255, 255, 0.25); /* Light theme default */
+  backdrop-filter: blur(30px) !important;       /* strong blur */
+  -webkit-backdrop-filter: blur(30px) !important;
+
+  /* Force stacking context */
+  isolation: isolate;
+
+  /* Optional border & shadow */
+  border: 1px solid rgba(0,0,0,0.05);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+
+  /* Smooth transition */
+  transition: background-color 0.2s ease, backdrop-filter 0.2s ease, border-color 0.2s ease;
+}
+
+/* Dark theme */
+.dark .full-blur {
+  background-color: rgba(28, 28, 30, 0.55); /* Dark glass */
+  border-color: rgba(255, 255, 255, 0.08);
 }

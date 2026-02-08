@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
+import { toBn } from '@/lib/utils/helpers';
 
 // --- 🛠️ INTERNAL PORTAL (Universal Bypass) ---
 const ModalPortal = ({ children }: { children: React.ReactNode }) => {
@@ -18,13 +19,7 @@ const ModalPortal = ({ children }: { children: React.ReactNode }) => {
   return mounted ? createPortal(children, document.body) : null;
 };
 
-// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
-const toBn = (num: any, lang: string) => {
-    const str = String(num);
-    if (lang !== 'bn') return str;
-    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', '.':'.' };
-    return str.split('').map(c => bnNums[c] || c).join('');
-};
+
 
 export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any) => {
     const { T, t, language } = useTranslation();

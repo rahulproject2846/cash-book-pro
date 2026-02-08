@@ -39,7 +39,7 @@ const EliteDropdown = ({ label, current, options, onChange, icon: Icon }: any) =
                 <span className="hidden lg:block text-[var(--text-main)] truncate max-w-[100px]">
                      {getTranslatedLabel(current)}
                 </span>
-                <ChevronDown size={12} className={`opacity-30 transition-transform duration-500 ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={12} className={`hidden lg:block opacity-30 transition-transform duration-500 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             <AnimatePresence>
@@ -48,7 +48,7 @@ const EliteDropdown = ({ label, current, options, onChange, icon: Icon }: any) =
                         initial={{ opacity: 0, y: 5 }} 
                         animate={{ opacity: 1, y: 0 }} 
                         exit={{ opacity: 0, y: 5 }} 
-                        className="absolute right-0 mt-3 w-56 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[28px] p-2 z-[1000] shadow-2xl"
+                        className="absolute right-0 mt-3 w-56 bg-[var(--dropdown-main)] backdrop-blur-3xl border border-[var(--border)] rounded-[28px] p-2 z-[1000] shadow-2xl"
                     >
                         <div className="px-4 py-2 border-b border-[var(--border)] mb-1 opacity-40">
                             <span className="text-[8px] font-black uppercase tracking-[3px]">{label}</span>

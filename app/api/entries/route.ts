@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       note: note?.trim() || "",
       date: new Date(date),
       time: time || "", 
-      status: status || "Completed"
+      status: status || "completed"
     });
 
     return NextResponse.json({ success: true, entry: newEntry }, { status: 201 });

@@ -2,68 +2,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-    Calendar, CreditCard, Layers, Info, Loader2, Clock, X, 
+    Calendar, CreditCard, Layers, Info, Loader2, Clock, Delete, 
     ArrowDownLeft, ArrowUpRight, Check, SlidersHorizontal, 
-    ChevronDown, PlusCircle, Fingerprint
+    ChevronDown, PlusCircle, Fingerprint,X
 } from 'lucide-react';
+import { OSInput, ModalEliteDropdown } from '@/components/UI/FormComponents';
+import { toBn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
 
-// --- 🛠️ SUB-COMPONENT: OS INPUT ---
-const OSInput = ({ label, value, onChange, placeholder, icon: Icon, type = "text", autoFocus = false }: any) => {
-    const inputRef = useRef<HTMLInputElement>(null);
-    return (
-        <div className="w-full space-y-2 group transition-all duration-300">
-            <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] ml-1 flex items-center gap-2">
-                {Icon && <Icon size={12} className="text-orange-500 opacity-60" />} {label}
-            </label>
-            <div className="relative group/input">
-                <input 
-                    ref={inputRef} type={type} value={value} onChange={e => onChange(e.target.value)} 
-                    placeholder={placeholder} autoFocus={autoFocus}
-                    className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-[22px] px-6 py-4 text-[14px] font-bold text-[var(--text-main)] outline-none focus:border-orange-500/40 transition-all placeholder:text-[var(--text-muted)]/20 shadow-inner"
-                />
-            </div>
-        </div>
-    );
-};
-
-// --- 🔘 SUB-COMPONENT: ELITE DROPDOWN ---
-const ModalEliteDropdown = ({ label, current, options, onChange, icon: Icon }: any) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        const handler = (e: any) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false); };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, []);
-    return (
-        <div className="flex-1 space-y-2" ref={dropdownRef}>
-            <div className="flex items-center gap-2 px-1">
-                {Icon && <Icon size={12} className="text-orange-500 opacity-60" />}
-                <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px]">{label}</label>
-            </div>
-            <div className="relative">
-                <button type="button" onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-[22px] px-5 py-4 text-[11px] font-black uppercase tracking-widest text-[var(--text-main)] flex items-center justify-between transition-all ${isOpen ? 'border-orange-500/40' : ''}`}>
-                    <span className="truncate">{current}</span>
-                    <ChevronDown size={14} className={`opacity-30 transition-transform duration-500 ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-                <AnimatePresence>
-                    {isOpen && (
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-full mb-3 left-0 w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-[28px] p-2 z-[999] shadow-2xl backdrop-blur-xl">
-                            <div className="max-h-[220px] overflow-y-auto no-scrollbar py-1">
-                                {options.map((opt: string) => (
-                                    <button key={opt} type="button" onClick={() => { onChange(opt); setIsOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 last:mb-0 ${current.toLowerCase() === opt.toLowerCase() ? 'bg-orange-500 text-white shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-input)]'}`}>
-                                        {opt} {current.toLowerCase() === opt.toLowerCase() && <Check size={14} />}
-                                    </button>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-        </div>
-    );
-};
 
 export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
     const { T, t, language } = useTranslation();
@@ -133,12 +79,6 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
     };
 
     if (!isOpen) return null;
-
-    const toBn = (num: any) => {
-        if (language !== 'bn') return num;
-        const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', '.':'.' };
-        return String(num).split('').map(c => bnNums[c] || c).join('');
-    };
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center overflow-hidden">
@@ -226,26 +166,31 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                 </div>
 
                 {isMobile && (
-                    <div className="bg-[var(--bg-input)] p-3 grid grid-cols-4 gap-2 border-t border-[var(--border)] shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
-                        {[1, 2, 3, 'del', 4, 5, 6, '.', 7, 8, 9, '00', 0].map((key: any) => (
-                            <motion.button 
-                                key={key} type="button" whileTap={{ scale: 0.94 }} onClick={() => handleKeypad(key.toString())} 
-                                className={`h-15 rounded-[22px] font-mono-finance text-xl font-bold flex items-center justify-center transition-all shadow-sm ${key === 'del' ? 'bg-red-500/10 text-red-500 border border-red-500/10' : 'bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border)]'}`}
-                            >
-                                {key === 'del' ? <X size={22} strokeWidth={3} /> : toBn(key)}
-                            </motion.button>
-                        ))}
-                        <button 
-                            disabled={isLoading} 
-                            className={`col-span-2 rounded-[22px] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center ${isLoading ? 'bg-zinc-800 text-zinc-500' : 'bg-orange-500 text-white'}`}
-                            onClick={handleSubmit}
-                        >
-                            {isLoading ? <Loader2 className="animate-spin" size={16} /> : T('btn_execute')}
-                        </button>
-                    </div>
+                    // EntryModal.tsx এর NumPad সেকশনটি
+<div className="bg-[var(--bg-input)] p-3 grid grid-cols-4 gap-2 border-t border-[var(--border)] shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
+    {[1, 2, 3, 'del', 4, 5, 6, '.', 7, 8, 9, '00', 0].map((key: any, index) => (
+        <motion.button 
+            // 🔥 ফিক্স ১: key হিসেবে 'key' এবং 'index' এর কম্বিনেশন ব্যবহার
+            key={`keypad-${key}-${index}`} 
+            type="button" 
+            whileTap={{ scale: 0.94 }} 
+            onClick={() => handleKeypad(key.toString())} 
+            className={`h-15 rounded-[22px] font-mono-finance text-xl font-bold flex items-center justify-center transition-all shadow-sm ${key === 'del' ? 'bg-red-500/10 text-red-500 border border-red-500/10' : 'bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border)]'}`}
+        >
+            {key === 'del' ? <Delete size={22} strokeWidth={3} /> : toBn(key, language)} {/* 🔥 ফিক্স ২: toBn ফাংশনে language পাস করা */}
+        </motion.button>
+    ))}
+    <button 
+        disabled={isLoading} 
+        className={`col-span-2 rounded-[22px] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center ${isLoading ? 'bg-zinc-800 text-zinc-500' : 'bg-orange-500 text-white'}`}
+        onClick={handleSubmit}
+    >
+        {isLoading ? <Loader2 className="animate-spin" size={16} /> : T('btn_execute')}
+    </button>
+</div>
                 )}
 
-                <div className="p-8 border-t border-[var(--border)] shrink-0 hidden md:block bg-[var(--bg-card)]">
+                <div className="p-8 border-t border-[var(--border)] shrink-0 hidden md:block bg-[var(--bg-card)]/10">
                     <button 
                         onClick={handleSubmit} 
                         disabled={isLoading} 

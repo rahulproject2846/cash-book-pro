@@ -7,13 +7,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
-
-// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
-const toBn = (num: any, lang: string) => {
-    if (lang !== 'bn') return num;
-    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯' };
-    return String(num).split('').map(c => bnNums[c] || c).join('');
-};
+import { toBn } from '@/lib/utils/helpers';
 
 export const BookModal = ({ isOpen, onClose, onSubmit, initialData, currentUser }: any) => {
     const { T, t, language } = useTranslation();
@@ -128,7 +122,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData, currentUser 
                                 { id: 'customer', label: t('type_customer'), icon: User },
                                 { id: 'supplier', label: t('type_supplier'), icon: Truck },
                             ].map((type) => (
-                                <button key={type.id} type="button" onClick={() => setForm({...form, type: type.id})} className={`flex-1 flex items-center justify-center gap-2 rounded-[20px] transition-all duration-500 ${form.type === type.id ? 'bg-[var(--bg-card)] text-orange-500 shadow-xl border border-[var(--border)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                                <button key={type.id} type="button" onClick={() => setForm({...form, type: type.id})} className={`flex-1 flex items-center justify-center gap-2 rounded-[20px] border border-transparent transition-all duration-500 ${form.type === type.id ? 'bg-[var(--bg-card)] text-orange-500 shadow-xl border border-[var(--border)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                                     <type.icon size={14} strokeWidth={2.5} />
                                     <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">{type.label}</span>
                                 </button>

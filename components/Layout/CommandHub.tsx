@@ -1,63 +1,117 @@
+// src/components/Sections/CommandHub.tsx
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Search, Command, Zap, PlusCircle, Settings2, 
-    Moon, Smartphone, Layout, ArrowRight, User
+    ArrowRight, User, Layout
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { db } from '@/lib/offlineDB';
 
-/**
- * VAULT PRO: GLOBAL COMMAND HUB (V1)
- * ---------------------------------
- * Spotlight-style command palette for instant navigation and actions.
- * Trigger: Ctrl + K or Cmd + K
- */
-export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUser, setActiveSection }: any) => {
+interface CommandItem {
+    id: string;
+    label: string;
+    icon: React.ElementType;
+    action: () => void;
+    type: 'command' | 'book';
+    key: string | number;
+    color?: string;
+    book?: any;
+}
+
+export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUser, setActiveSection, setCurrentBook }: any) => {
     const { T, t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [books, setBooks] = useState<any[]>([]);
+    const [activeIndex, setActiveIndex] = useState(0); 
     const inputRef = useRef<HTMLInputElement>(null);
+    const resultsRef = useRef<HTMLDivElement>(null); 
 
-    // ১. কিবোর্ড শর্টকাট লিসেনার (Ctrl + K)
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
+    const fetchVaults = async () => {
+        const data = await db.books.where('isDeleted').equals(0).toArray();
+        setBooks(data.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+    };
+
+    const allItems = useMemo<CommandItem[]>(() => { 
+        const bookItems: CommandItem[] = books.map(b => ({
+            id: String(b.localId),
+            label: b.name,
+            icon: Layout,
+            action: () => {onAction('selectBook', b);},
+            type: 'book',
+            key: String(b._id || b.localId),
+            book: b
+        }));
+        
+        const systemCommands: CommandItem[] = [ 
+            { id: 'new_vault', label: t('btn_create_vault'), icon: PlusCircle, action: () => onAction('addBook'), type: 'command', color: 'text-orange-500', key: 'new_vault' },
+            { id: 'go_settings', label: t('nav_system'), icon: Settings2, action: () => setActiveSection('settings'), type: 'command', color: 'text-blue-500', key: 'go_settings' },
+            { id: 'go_profile', label: t('action_manage_profile'), icon: User, action: () => setActiveSection('profile'), type: 'command', color: 'text-purple-500', key: 'go_profile' },
+        ];
+        
+        const combinedList = [...systemCommands, ...bookItems];
+        const q = query.toLowerCase().trim();
+        if (!q) return combinedList;
+        return combinedList.filter(item => item.label.toLowerCase().includes(q));
+    }, [books, query, t, onAction, setActiveSection, setCurrentBook]);
+
+    const handleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (!isOpen) {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
-                setIsOpen(prev => !prev);
+                setIsOpen(true);
+                return;
             }
-            if (e.key === 'Escape') setIsOpen(false);
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
-
-    // ২. মডাল ওপেন হলে ইনপুটে অটো-ফোকাস
+        }
+        if (!isOpen) return;
+        switch (e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                setActiveIndex(prev => prev > 0 ? prev - 1 : allItems.length - 1);
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                setActiveIndex(prev => prev < allItems.length - 1 ? prev + 1 : 0);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (allItems[activeIndex]) {
+                    allItems[activeIndex].action();
+                    setIsOpen(false);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                setIsOpen(false);
+                break;
+        }
+    }, [isOpen, allItems, activeIndex]);
+    
     useEffect(() => {
         if (isOpen) {
+            document.body.style.overflow = 'hidden';
             setTimeout(() => inputRef.current?.focus(), 100);
             fetchVaults();
         } else {
+            document.body.style.overflow = 'unset';
             setQuery('');
+            setActiveIndex(0);
         }
     }, [isOpen]);
-
-    const fetchVaults = async () => {
-        const data = await db.books.toArray();
-        setBooks(data);
-    };
-
-    // ৩. কমান্ড লিস্ট (Static + Dynamic)
-    const systemCommands = [
-        { id: 'new_vault', label: T('btn_create_vault'), icon: PlusCircle, action: () => onAction('addBook'), color: 'text-orange-500' },
-        { id: 'go_settings', label: T('nav_system'), icon: Settings2, action: () => setActiveSection('settings'), color: 'text-blue-500' },
-        { id: 'go_profile', label: T('action_manage_profile'), icon: User, action: () => setActiveSection('profile'), color: 'text-purple-500' },
-    ];
-
-    const filteredBooks = books.filter(b => b.name.toLowerCase().includes(query.toLowerCase()));
-    const filteredCommands = systemCommands.filter(c => c.label.toLowerCase().includes(query.toLowerCase()));
+    
+    useEffect(() => {
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleKeyDown]); 
+    
+    useEffect(() => {
+        const activeElement = resultsRef.current?.children[activeIndex];
+        if (activeElement) {
+            activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [activeIndex]);
 
     if (!isOpen) return null;
 
@@ -65,101 +119,95 @@ export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUse
         <AnimatePresence>
             {isOpen && (
                 <div className="fixed inset-0 z-[10000] flex items-start justify-center pt-[15vh] px-4">
-                    {/* Backdrop */}
+                    {/* Overlay with Backdrop Blur */}
                     <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         onClick={() => setIsOpen(false)}
-                        className="fixed inset-0 bg-[#000000]/60 backdrop-blur-xl"
+                        className="fixed inset-0 bg-black/5 backdrop-blur-sm"
                     />
 
-                    {/* Command Palette Card */}
+                    {/* Main Command Palette Card */}
                     <motion.div 
-                        initial={{ opacity: 0, scale: 0.95, y: -20 }}
+                        initial={{ opacity: 0, scale: 0.98, y: -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                        className="w-full max-w-2xl bg-[#0F0F0F]/90 border border-white/10 rounded-[32px] shadow-[0_32px_120px_-20px_rgba(0,0,0,0.8)] overflow-hidden relative z-10"
+                        exit={{ opacity: 0, scale: 0.98, y: -10 }}
+                        style={{ 
+                            backgroundColor: 'var(--bg-card)', 
+                            backdropFilter: 'var(--glass-blur)',
+                            WebkitBackdropFilter: 'var(--glass-blur)',
+                            boxShadow: 'var(--card-shadow)',
+                            borderColor: 'var(--border-color)'
+                        }}
+                        className="w-full max-w-2xl border rounded-[28px] overflow-hidden relative z-10"
                     >
                         {/* Search Input Area */}
-                        <div className="p-6 border-b border-white/5 flex items-center gap-4">
-                            <Search size={22} className="text-orange-500" />
+                        <div className="p-5 border-b flex items-center gap-4" style={{ borderColor: 'var(--border-soft)' }}>
+                            <Search size={20} className="text-orange-500" />
                             <input 
                                 ref={inputRef}
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                placeholder={t('placeholder_command') || "Type a command or vault name..."}
-                                className="flex-1 bg-transparent border-none outline-none text-xl font-black uppercase tracking-widest text-white placeholder:text-white/10"
+                                placeholder={t('placeholder_command') || "Search protocols..."}
+                                style={{ color: 'var(--text-main)' }}
+                                className="flex-1 bg-transparent border-none outline-none text-lg font-medium placeholder:text-[#8E8E93]"
                             />
-                            <div className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 flex items-center gap-1.5">
-                                <Command size={10} className="text-white/40" />
-                                <span className="text-[10px] font-black text-white/40">ESC</span>
+                            <div className="px-2 py-1 rounded-md bg-black/5 border flex items-center gap-1" style={{ borderColor: 'var(--border-soft)' }}>
+                                <Command size={10} className="opacity-40" />
+                                <span className="text-[10px] font-bold opacity-40 uppercase">ESC</span>
                             </div>
                         </div>
 
-                        {/* Result Area */}
-                        <div className="max-h-[450px] overflow-y-auto p-4 no-scrollbar">
+                        {/* Results Area */}
+                        <div ref={resultsRef} className="max-h-[400px] overflow-y-auto p-3 no-scrollbar">
+                            {allItems.length > 0 && allItems.map((item, index) => {
+                                const isActive = index === activeIndex;
+                                return (
+                                    <button 
+                                        key={item.key || item.id}
+                                        onClick={() => { item.action(); setIsOpen(false); }}
+                                        onMouseEnter={() => setActiveIndex(index)} 
+                                        style={{ 
+                                            backgroundColor: isActive ? 'rgba(0,0,0,0.04)' : 'transparent',
+                                            borderColor: isActive ? 'var(--border-color)' : 'transparent'
+                                        }}
+                                        className={`w-full flex items-center justify-between p-3.5 rounded-2xl transition-all duration-200 border group mb-1 last:mb-0`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className={`p-2.5 rounded-xl transition-colors ${isActive ? 'bg-white shadow-sm text-orange-500' : 'bg-black/5 text-gray-400'} ${item.color || ''}`}>
+                                                <item.icon size={18} />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-[13px] font-semibold tracking-tight" style={{ color: 'var(--text-main)' }}>{item.label}</p>
+                                                <p className="text-[10px] font-medium opacity-50 uppercase tracking-wider mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                                    {item.type === 'book' ? 'Vault Protocol' : 'System Command'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <ArrowRight size={14} className={`shrink-0 transition-all ${isActive ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0'}`} style={{ color: 'var(--text-muted)' }} />
+                                    </button>
+                                );
+                            })}
                             
-                            {/* Section: Quick Actions */}
-                            {filteredCommands.length > 0 && (
-                                <div className="mb-6">
-                                    <p className="px-4 text-[9px] font-black text-white/20 uppercase tracking-[4px] mb-3">System Actions</p>
-                                    <div className="space-y-1">
-                                        {filteredCommands.map(cmd => (
-                                            <button 
-                                                key={cmd.id}
-                                                onClick={() => { cmd.action(); setIsOpen(false); }}
-                                                className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-all group"
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`p-2 rounded-xl bg-white/5 ${cmd.color}`}><cmd.icon size={18} /></div>
-                                                    <span className="text-sm font-black uppercase tracking-widest text-white/80 group-hover:text-white">{cmd.label}</span>
-                                                </div>
-                                                <ArrowRight size={14} className="text-white/10 group-hover:translate-x-1 group-hover:text-orange-500 transition-all" />
-                                            </button>
-                                        ))}
+                            {/* Empty State */}
+                            {allItems.length === 0 && (
+                                <div className="py-16 text-center flex flex-col items-center gap-3">
+                                    <div className="p-4 rounded-full bg-black/5 text-gray-300">
+                                        <Zap size={32} />
                                     </div>
-                                </div>
-                            )}
-
-                            {/* Section: Vaults / Ledgers */}
-                            {filteredBooks.length > 0 && (
-                                <div>
-                                    <p className="px-4 text-[9px] font-black text-white/20 uppercase tracking-[4px] mb-3">Active Vaults</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        {filteredBooks.map(book => (
-                                            <button 
-                                                key={book._id}
-                                                onClick={() => { onAction('selectBook', book); setIsOpen(false); }}
-                                                className="flex items-center gap-4 p-4 rounded-2xl hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20 transition-all group text-left"
-                                            >
-                                                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-all">
-                                                    <Layout size={18} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs font-black uppercase tracking-widest text-white truncate">{book.name}</p>
-                                                    <p className="text-[8px] font-bold text-white/20 uppercase tracking-widest mt-0.5">Jump to Ledger</p>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* No Results State */}
-                            {filteredCommands.length === 0 && filteredBooks.length === 0 && (
-                                <div className="py-20 text-center opacity-20 flex flex-col items-center gap-4">
-                                    <Zap size={40} />
-                                    <p className="text-[10px] font-black uppercase tracking-[4px]">No Protocol Matches Query</p>
+                                    <p className="text-[11px] font-bold uppercase tracking-widest opacity-30" style={{ color: 'var(--text-main)' }}>
+                                        {t('no_match_found') || "No Protocols Found"}
+                                    </p>
                                 </div>
                             )}
                         </div>
 
-                        {/* Footer Tips */}
-                        <div className="p-4 bg-white/[0.02] border-t border-white/5 flex justify-center gap-6">
-                            <div className="flex items-center gap-2 text-[8px] font-black text-white/20 uppercase tracking-widest">
-                                <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">↑↓</span> Navigate
+                        {/* Footer Hints */}
+                        <div className="px-6 py-3 border-t flex items-center gap-6" style={{ backgroundColor: 'rgba(0,0,0,0.02)', borderColor: 'var(--border-soft)' }}>
+                            <div className="flex items-center gap-1.5 text-[9px] font-bold opacity-40 uppercase tracking-tighter" style={{ color: 'var(--text-main)' }}>
+                                <span className="px-1 py-0.5 rounded border bg-white" style={{ borderColor: 'var(--border-soft)' }}>↑↓</span> Navigate
                             </div>
-                            <div className="flex items-center gap-2 text-[8px] font-black text-white/20 uppercase tracking-widest">
-                                <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">ENTER</span> Execute
+                            <div className="flex items-center gap-1.5 text-[9px] font-bold opacity-40 uppercase tracking-tighter" style={{ color: 'var(--text-main)' }}>
+                                <span className="px-1 py-0.5 rounded border bg-white" style={{ borderColor: 'var(--border-soft)' }}>ENTER</span> Execute
                             </div>
                         </div>
                     </motion.div>

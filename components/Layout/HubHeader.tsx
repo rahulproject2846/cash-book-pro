@@ -44,7 +44,7 @@ export const HubHeader = ({
     const appPaddingNegativeX = 'mx-[-1.25rem] md:mx-[-2.5rem]';
 
     return (
-        <div className={`sticky top-[4.5rem] md:top-20 z-[300] bg-[var(--bg-app)]/80 backdrop-blur-xl transition-all duration-300 w-auto ${appPaddingNegativeX} mb-4 ${isScrolled ? 'shadow-xl border-b border-[var(--border)]' : 'border-b border-transparent'}`}>
+        <div className={`sticky top-[4.5rem] md:top-20 z-[300] bg-[var(--bg-app)]/80 backdrop-blur-xl transition-all duration-300 w-auto ${appPaddingNegativeX} mb-4 ${isScrolled ? 'shadow-xl border-b border-[var(--border)]' : ''}`}>
             
             <div className={`py-4 ${appPaddingX}`}>
                 <div className="flex items-center justify-between gap-3 h-12 relative w-full">

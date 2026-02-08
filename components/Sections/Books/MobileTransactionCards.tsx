@@ -6,14 +6,8 @@ import {
     ArrowUpRight, ArrowDownLeft, X 
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import { toBn, getTimeAgo } from '@/lib/utils/helpers'; 
 
-// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
-const toBn = (num: any, lang: string) => {
-    const str = String(num);
-    if (lang !== 'bn') return str;
-    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', ',':',', '.':'.' };
-    return str.split('').map(c => bnNums[c] || c).join('');
-};
 
 // --- 🔘 COMPONENT: SMART SWIPE ROW ---
 const TransactionRow = ({ e, onEdit, onDelete, activeId, setActiveId, currencySymbol, lang }: any) => {
@@ -69,7 +63,7 @@ const TransactionRow = ({ e, onEdit, onDelete, activeId, setActiveId, currencySy
                 animate={controls}
                 dragConstraints={{ left: -100, right: 100 }}
                 onDragEnd={onDragEnd}
-                className="bg-[var(--bg-card)] px-6 py-5 flex items-center justify-between gap-4 border-b border-[var(--border)]/10 last:border-b-0 relative z-10 cursor-grab active:cursor-grabbing"
+                className="bg-[var(--bg-card)] backdrop-blur-3xl px-6 py-5 flex items-center justify-between gap-4 border-[var(--bg-card)] last:border-b-0 relative z-10 cursor-grab active:cursor-grabbing"
             >
                 <div className="flex items-center gap-4 min-w-0 pointer-events-none">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isIncome ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>

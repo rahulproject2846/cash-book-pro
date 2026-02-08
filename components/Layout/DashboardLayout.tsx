@@ -9,8 +9,7 @@ import {
 import { DynamicHeader } from './DynamicHeader';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip'; 
-import { useGuidance } from '@/hooks/useGuidance'; 
-import { CommandHub } from './CommandHub';
+import { useGuidance } from '@/hooks/useGuidance';
 
 // --- Types ---
 interface DashboardLayoutProps {
@@ -253,7 +252,6 @@ export const DashboardLayout = (props: DashboardLayoutProps) => {
             
             <BottomNav active={activeSection} setActive={setActiveSection} onFabClick={onFabClick} onResetBook={onBack} activeGuidanceStep={activeGuidanceStep} />
 
-            <CommandHub currentUser={currentUser} setActiveSection={setActiveSection} onAction={handleHubAction} />
 
             {/* --- Session Shield (Apple Style) --- */}
             <AnimatePresence>

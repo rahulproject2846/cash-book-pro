@@ -19,10 +19,10 @@ export async function PUT(
     }
 
     // ২. এনাম ভ্যালিডেশন: ভুল কোনো স্ট্যাটাস যাতে ডাটাবেসে না যায়
-    const validStatuses = ['Completed', 'Pending'];
+    const validStatuses = ['completed', 'pending'];
     if (!validStatuses.includes(status)) {
         return NextResponse.json(
-            { message: "Invalid status protocol. Must be 'Completed' or 'Pending'" }, 
+            { message: "Invalid status protocol. Must be 'completed' or 'pending'" }, 
             { status: 400 }
         );
     }
