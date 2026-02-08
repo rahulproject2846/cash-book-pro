@@ -7,16 +7,10 @@ import {
     ChevronDown, PlusCircle, Fingerprint
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Tooltip } from '@/components/UI/Tooltip';
 
-const OSInput = ({ label, value, onChange, placeholder, icon: Icon, type = "text" }: any) => {
+// --- 🛠️ SUB-COMPONENT: OS INPUT ---
+const OSInput = ({ label, value, onChange, placeholder, icon: Icon, type = "text", autoFocus = false }: any) => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const handleIconClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (inputRef.current && 'showPicker' in HTMLInputElement.prototype) {
-            try { inputRef.current.showPicker(); } catch (err) { inputRef.current.focus(); }
-        } else { inputRef.current?.focus(); }
-    };
     return (
         <div className="w-full space-y-2 group transition-all duration-300">
             <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] ml-1 flex items-center gap-2">
@@ -24,19 +18,16 @@ const OSInput = ({ label, value, onChange, placeholder, icon: Icon, type = "text
             </label>
             <div className="relative group/input">
                 <input 
-                    ref={inputRef} type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-                    className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-[20px] px-6 py-4 text-[14px] font-bold text-[var(--text-main)] outline-none focus:border-orange-500/40 transition-all placeholder:text-[var(--text-muted)]/20 shadow-inner"
+                    ref={inputRef} type={type} value={value} onChange={e => onChange(e.target.value)} 
+                    placeholder={placeholder} autoFocus={autoFocus}
+                    className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-[22px] px-6 py-4 text-[14px] font-bold text-[var(--text-main)] outline-none focus:border-orange-500/40 transition-all placeholder:text-[var(--text-muted)]/20 shadow-inner"
                 />
-                {(type === 'date' || type === 'time') && (
-                    <button type="button" onClick={handleIconClick} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-xl text-[var(--text-muted)] hover:text-orange-500 transition-all active:scale-90">
-                        {type === 'date' ? <Calendar size={18} /> : <Clock size={18} />}
-                    </button>
-                )}
             </div>
         </div>
     );
 };
 
+// --- 🔘 SUB-COMPONENT: ELITE DROPDOWN ---
 const ModalEliteDropdown = ({ label, current, options, onChange, icon: Icon }: any) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -52,16 +43,16 @@ const ModalEliteDropdown = ({ label, current, options, onChange, icon: Icon }: a
                 <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px]">{label}</label>
             </div>
             <div className="relative">
-                <button type="button" onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-[20px] px-5 py-4 text-[11px] font-black uppercase tracking-widest text-[var(--text-main)] flex items-center justify-between transition-all ${isOpen ? 'border-orange-500/40' : ''}`}>
+                <button type="button" onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-[22px] px-5 py-4 text-[11px] font-black uppercase tracking-widest text-[var(--text-main)] flex items-center justify-between transition-all ${isOpen ? 'border-orange-500/40' : ''}`}>
                     <span className="truncate">{current}</span>
-                    <ChevronDown size={14} className={`opacity-30 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={14} className={`opacity-30 transition-transform duration-500 ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <AnimatePresence>
                     {isOpen && (
-                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute bottom-full mb-2 left-0 w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-[22px] p-2 z-[999] shadow-2xl backdrop-blur-xl">
-                            <div className="max-h-[200px] overflow-y-auto no-scrollbar">
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-full mb-3 left-0 w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-[28px] p-2 z-[999] shadow-2xl backdrop-blur-xl">
+                            <div className="max-h-[220px] overflow-y-auto no-scrollbar py-1">
                                 {options.map((opt: string) => (
-                                    <button key={opt} type="button" onClick={() => { onChange(opt); setIsOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-[10px] font-black uppercase transition-all mb-1 ${current.toLowerCase() === opt.toLowerCase() ? 'bg-orange-500 text-white shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-input)]'}`}>
+                                    <button key={opt} type="button" onClick={() => { onChange(opt); setIsOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 last:mb-0 ${current.toLowerCase() === opt.toLowerCase() ? 'bg-orange-500 text-white shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-input)]'}`}>
                                         {opt} {current.toLowerCase() === opt.toLowerCase() && <Check size={14} />}
                                     </button>
                                 ))}
@@ -75,7 +66,7 @@ const ModalEliteDropdown = ({ label, current, options, onChange, icon: Icon }: a
 };
 
 export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
-    const { T, t } = useTranslation();
+    const { T, t, language } = useTranslation();
     const [isExpanded, setIsExpanded] = useState(false);
     const [inflowAmount, setInflowAmount] = useState('');
     const [outflowAmount, setOutflowAmount] = useState('');
@@ -86,7 +77,9 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
 
     const userCategories = currentUser?.categories || ['GENERAL', 'SALARY', 'FOOD', 'RENT', 'TRANSPORT'];
 
-    useEffect(() => { setIsMobile(window.innerWidth < 768); }, []);
+    useEffect(() => { 
+        setIsMobile(window.innerWidth < 768);
+    }, []);
 
     useEffect(() => {
         if (isOpen) {
@@ -128,57 +121,88 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.amount || form.amount <= 0) return;
+        if (isLoading || !form.amount || form.amount <= 0) return;
         setIsLoading(true);
         localStorage.setItem('last_category', form.category);
         localStorage.setItem('last_via', form.paymentMethod);
-        await onSubmit(form); 
-        setIsLoading(false);
+        try {
+            await onSubmit(form); 
+        } finally {
+            // Loading state will reset when component unmounts or parent updates
+        }
     };
 
     if (!isOpen) return null;
 
+    const toBn = (num: any) => {
+        if (language !== 'bn') return num;
+        const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', '.':'.' };
+        return String(num).split('').map(c => bnNums[c] || c).join('');
+    };
+
     return (
         <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center overflow-hidden">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/60 backdrop-blur-xl" />
-            <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 30, stiffness: 300 }} className="bg-[var(--bg-card)] w-full md:max-w-lg h-[96vh] md:h-auto md:max-h-[92vh] rounded-t-[40px] md:rounded-[40px] border-t md:border border-[var(--border)] shadow-2xl relative z-10 flex flex-col overflow-hidden">
+            
+            <motion.div 
+                drag={isMobile ? "y" : false}
+                dragConstraints={{ top: 0, bottom: 0 }}
+                onDragEnd={(_, info) => { if (info.offset.y > 100) onClose(); }}
+                initial={isMobile ? { y: "100%" } : { y: 20, opacity: 0 }} 
+                animate={{ y: 0, opacity: 1 }} 
+                exit={isMobile ? { y: "100%" } : { y: 20, opacity: 0 }} 
+                transition={{ type: "spring", damping: 30, stiffness: 400 }} 
+                className="bg-[var(--bg-card)] w-full md:max-w-lg h-[95vh] md:h-auto md:max-h-[92vh] rounded-t-[45px] md:rounded-[40px] border-t md:border border-[var(--border)] shadow-2xl relative z-10 flex flex-col overflow-hidden"
+            >
                 <div className="w-12 h-1.5 bg-[var(--border)] rounded-full mx-auto mt-4 shrink-0 opacity-20" />
+                
                 <div className="px-8 py-5 flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20 overflow-hidden text-orange-500">
+                    <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-[20px] bg-orange-500/10 flex items-center justify-center border border-orange-500/20 overflow-hidden text-orange-500">
                             {currentBook?.image ? <img src={currentBook.image} alt="V" className="w-full h-full object-cover" /> : <PlusCircle size={22} />}
                         </div>
                         <div className="min-w-0">
-                            <h2 className="text-[11px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic truncate leading-none">{currentBook?.name || T('protocol_entry')}</h2>
-                            <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-1 opacity-70 truncate">{T('sync_ready')}</p>
+                            <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic truncate leading-none">{currentBook?.name || T('protocol_entry')}</h2>
+                            <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-1.5 opacity-70 truncate">{T('sync_ready')}</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="w-10 h-10 rounded-full bg-[var(--bg-input)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-sm"><X size={20} /></button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto no-scrollbar px-6 md:px-8 pt-2 pb-6">
+                <div className="flex-1 overflow-y-auto no-scrollbar px-6 md:px-10 pt-2 pb-6">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-2 gap-3">
-                            <div onClick={() => setActiveInput('out')} className={`p-5 rounded-[30px] border-2 transition-all duration-500 cursor-pointer ${activeInput === 'out' ? 'bg-red-500/5 border-red-500/40 shadow-xl shadow-red-500/5' : 'bg-[var(--bg-input)] border-transparent opacity-30 scale-95'}`}>
+                            <div onClick={() => setActiveInput('out')} className={`p-5 rounded-[32px] border-2 transition-all duration-500 cursor-pointer ${activeInput === 'out' ? 'bg-red-500/5 border-red-500/40 shadow-xl shadow-red-500/5' : 'bg-[var(--bg-input)] border-transparent opacity-30 scale-95 grayscale'}`}>
                                 <span className="text-[8px] font-black uppercase tracking-[3px] text-red-500 mb-4 block">{T('outflow')}</span>
                                 <div className="flex items-center gap-2">
                                     <ArrowDownLeft size={16} className="text-red-500" />
-                                    <input type="number" readOnly={isMobile} value={outflowAmount} onChange={e => handleAmountChange(e.target.value, 'out')} className="bg-transparent border-none p-0 text-xl font-mono font-bold text-[var(--text-main)] w-full outline-none" placeholder="0.00" />
+                                    <input 
+                                        type="number" step="any" inputMode="decimal"
+                                        readOnly={isMobile}
+                                        autoFocus={!isMobile} 
+                                        value={outflowAmount} onChange={e => handleAmountChange(e.target.value, 'out')} 
+                                        className="bg-transparent border-none p-0 text-xl font-mono font-bold text-[var(--text-main)] w-full outline-none" placeholder="0.00" 
+                                    />
                                 </div>
                             </div>
-                            <div onClick={() => setActiveInput('in')} className={`p-5 rounded-[30px] border-2 transition-all duration-500 cursor-pointer ${activeInput === 'in' ? 'bg-green-500/5 border-green-500/30 shadow-xl shadow-green-500/5' : 'bg-[var(--bg-input)] border-transparent opacity-30 scale-95'}`}>
+                            <div onClick={() => setActiveInput('in')} className={`p-5 rounded-[32px] border-2 transition-all duration-500 cursor-pointer ${activeInput === 'in' ? 'bg-green-500/5 border-green-500/40 shadow-xl shadow-green-500/5' : 'bg-[var(--bg-input)] border-transparent opacity-30 scale-95 grayscale'}`}>
                                 <span className="text-[8px] font-black uppercase tracking-[3px] text-green-500 mb-4 block">{T('inflow')}</span>
                                 <div className="flex items-center gap-2">
                                     <ArrowUpRight size={16} className="text-green-500" />
-                                    <input type="number" readOnly={isMobile} value={inflowAmount} onChange={e => handleAmountChange(e.target.value, 'in')} className="bg-transparent border-none p-0 text-xl font-mono font-bold text-[var(--text-main)] w-full outline-none" placeholder="0.00" />
+                                    <input 
+                                        type="number" step="any" inputMode="decimal"
+                                        readOnly={isMobile} 
+                                        value={inflowAmount} onChange={e => handleAmountChange(e.target.value, 'in')} 
+                                        className="bg-transparent border-none p-0 text-xl font-mono font-bold text-[var(--text-main)] w-full outline-none" placeholder="0.00" 
+                                    />
                                 </div>
                             </div>
                         </div>
 
-                        <OSInput label={T('protocol_identity')} placeholder={t('placeholder_entry_title')} value={form.title} onChange={(val:any) => setForm({...form, title: val})} />
+                        <OSInput label={T('protocol_identity')} placeholder={t('placeholder_entry_title')} value={form.title} onChange={(val:any) => setForm({...form, title: val})} icon={CreditCard} />
 
                         <div className="space-y-4">
-                            <button type="button" onClick={() => setIsExpanded(!isExpanded)} className={`w-full flex items-center justify-between px-6 py-4 rounded-[22px] border transition-all duration-500 ${isExpanded ? 'bg-orange-500/5 border-orange-500/30 text-orange-500' : 'bg-[var(--bg-input)] border-transparent text-[var(--text-muted)]'}`}>
+                            <button type="button" onClick={() => setIsExpanded(!isExpanded)} className={`w-full h-14 flex items-center justify-between px-6 rounded-[22px] border transition-all duration-500 ${isExpanded ? 'bg-orange-500/5 border-orange-500/30 text-orange-500 shadow-inner' : 'bg-[var(--bg-input)] border-transparent text-[var(--text-muted)]'}`}>
                                 <span className="text-[10px] font-black uppercase tracking-[3px] flex items-center gap-3"><SlidersHorizontal size={14} /> {isExpanded ? T('hide_config') : T('more_options')}</span>
                                 <ChevronDown size={16} className={`transition-transform duration-500 ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
@@ -202,18 +226,31 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                 </div>
 
                 {isMobile && (
-                    <div className="bg-[var(--bg-input)] p-3 grid grid-cols-4 gap-2 border-t border-[var(--border)] shrink-0">
+                    <div className="bg-[var(--bg-input)] p-3 grid grid-cols-4 gap-2 border-t border-[var(--border)] shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
                         {[1, 2, 3, 'del', 4, 5, 6, '.', 7, 8, 9, '00', 0].map((key: any) => (
-                            <motion.button key={key} type="button" whileTap={{ scale: 0.9 }} onClick={() => handleKeypad(key.toString())} className={`h-14 rounded-2xl font-mono text-xl font-bold flex items-center justify-center transition-all shadow-sm ${key === 'del' ? 'bg-red-500/10 text-red-500' : 'bg-[var(--bg-card)] text-[var(--text-main)]'}`}>
-                                {key === 'del' ? <X size={20} /> : key}
+                            <motion.button 
+                                key={key} type="button" whileTap={{ scale: 0.94 }} onClick={() => handleKeypad(key.toString())} 
+                                className={`h-15 rounded-[22px] font-mono-finance text-xl font-bold flex items-center justify-center transition-all shadow-sm ${key === 'del' ? 'bg-red-500/10 text-red-500 border border-red-500/10' : 'bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border)]'}`}
+                            >
+                                {key === 'del' ? <X size={22} strokeWidth={3} /> : toBn(key)}
                             </motion.button>
                         ))}
-                        <button className="col-span-2 bg-orange-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-500/20" onClick={handleSubmit}>{T('btn_execute')}</button>
+                        <button 
+                            disabled={isLoading} 
+                            className={`col-span-2 rounded-[22px] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center ${isLoading ? 'bg-zinc-800 text-zinc-500' : 'bg-orange-500 text-white'}`}
+                            onClick={handleSubmit}
+                        >
+                            {isLoading ? <Loader2 className="animate-spin" size={16} /> : T('btn_execute')}
+                        </button>
                     </div>
                 )}
 
-                <div className="p-8 border-t border-[var(--border)] shrink-0 hidden md:block">
-                    <button onClick={handleSubmit} disabled={isLoading} className="w-full h-16 bg-orange-500 rounded-[24px] text-white font-black text-[11px] uppercase tracking-[5px] shadow-2xl shadow-orange-500/30 active:scale-95 transition-all flex items-center justify-center gap-3">
+                <div className="p-8 border-t border-[var(--border)] shrink-0 hidden md:block bg-[var(--bg-card)]">
+                    <button 
+                        onClick={handleSubmit} 
+                        disabled={isLoading} 
+                        className={`w-full h-16 rounded-[28px] font-black text-[12px] uppercase tracking-[5px] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 ${isLoading ? 'bg-zinc-800 text-zinc-500' : 'bg-orange-500 text-white shadow-orange-500/30'}`}
+                    >
                         {isLoading ? <Loader2 className="animate-spin" /> : <><Fingerprint size={18} /> {T('execute_protocol')}</>}
                     </button>
                 </div>

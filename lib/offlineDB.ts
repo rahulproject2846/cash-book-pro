@@ -1,10 +1,10 @@
 "use client";
 import Dexie, { Table } from 'dexie';
 
-// --- ১. ইন্টারফেসেস (Strict Type Definitions) ---
+// --- ১. ইন্টারফেসেস (Fixed for Dexie Error) ---
 
 export interface LocalUser {
-  _id: string;          // MongoDB ID
+  _id: string;          
   username: string;
   email: string;
   preferences: {
@@ -41,28 +41,45 @@ export interface LocalEntry {
 
 export interface LocalBook {
   _id: string;
+  localId?: number; 
   name: string;
   description?: string;
   isPublic?: boolean;
   shareToken?: string;
   updatedAt: number;
-  synced?: 0 | 1;
+  synced: 0 | 1; // 🔥 ফিক্স: synced স্টেটটি ডিক্লেয়ার করা হয়েছে
+  type?: string;
+  phone?: string;
+  image?: string;
 }
 
-// --- ২. ডাটাবেজ ইঞ্জিন ---
+// --- ২. ডাটাবেজ ইঞ্জিন (Version 7 for Stability) ---
 
 export class VaultProLocalDB extends Dexie {
   books!: Table<LocalBook>;
   entries!: Table<LocalEntry>;
-  users!: Table<LocalUser>; // 🔥 রেড লাইন ফিক্স: ইউজার টেবিল যোগ করা হলো
+  users!: Table<LocalUser>; 
 
   constructor() {
     super('VaultPro_Storage_v3'); 
     
-    this.version(4).stores({ // ভলিউম ৪ (স্কিমা আপডেট)
-      books: '_id, updatedAt',
-      entries: '++localId, _id, cid, bookId, userId, synced, isDeleted',
-      users: '_id' // 🔥 ইউজারের প্রোফাইল সেভ করার জন্য
+    // Version 7 (Previous State)
+    this.version(7).stores({
+      books: '_id, updatedAt, synced', // (Previous Primary Key)
+      entries: '++localId, _id, &cid, bookId, userId, synced, isDeleted',
+      users: '_id'
+    });
+
+    /**
+     * 🔥 VERSION 8: THE RESET & FINAL LOCKDOWN
+     * এটি ডাটাবেজকে আনলক করে প্রাইমারি কি কনফ্লিক্ট ঠিক করবে।
+     */
+    this.version(8).stores({
+      // বইয়ের প্রাইমারি কি আবার '_id' তে ফিরিয়ে আনা হলো এবং synced যোগ করা হলো
+      books: '_id, updatedAt, synced', 
+      // entries টেবিলের ++localId এখানে ঠিক আছে
+      entries: '++localId, _id, &cid, bookId, userId, synced, isDeleted',
+      users: '_id'
     });
   }
 }
@@ -87,7 +104,6 @@ export const saveEntryToLocal = async (entryData: any) => {
       createdAt: entryData.createdAt || timestamp,
       updatedAt: timestamp
     };
-
     return await db.entries.put(newEntry);
   } catch (error) {
     console.error("❌ DB Error [saveEntryToLocal]:", error);

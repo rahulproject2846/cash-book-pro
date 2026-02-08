@@ -2,21 +2,23 @@ import connectDB from "@/lib/db";
 import Entry from "@/models/Entry";
 import { NextResponse } from "next/server";
 
-// GET: একটি নির্দিষ্ট লেজারের (Book) সব ট্রানজেকশন লিস্ট দেখা
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const bookId = searchParams.get('bookId');
-    
-    // সেফটি চেক: bookId না থাকলে ডাটাবেসে কল না করে খালি লিস্ট পাঠানো
-    if (!bookId || bookId === 'undefined' || bookId === 'null') {
+    const userId = searchParams.get('userId'); // অনেক সময় ইউজার আইডি দিয়েও সব আনতে হয়
+
+    if (!bookId && !userId) {
       return NextResponse.json({ success: true, entries: [] });
     }
 
     await connectDB();
     
-    // সর্টিং লজিক: লেটেস্ট তারিখের ট্রানজেকশন সবার আগে আসবে
-    const entries = await Entry.find({ bookId }).sort({ date: -1, createdAt: -1 }); 
+    // কুয়েরি বিল্ডার
+    const query = bookId ? { bookId } : {}; 
+    
+    // 🔥 cid সহ সব ডাটা ফেরত পাঠানো হচ্ছে
+    const entries = await Entry.find(query).sort({ date: -1, createdAt: -1 });
     
     return NextResponse.json({
         success: true,
@@ -25,70 +27,55 @@ export async function GET(req: Request) {
     }, { status: 200 });
 
   } catch (error: any) {
-    console.error("GET_ENTRIES_ERROR:", error.message);
-    return NextResponse.json({ message: "Failed to fetch transactions" }, { status: 500 });
+    return NextResponse.json({ message: "Fetch failed" }, { status: 500 });
   }
 }
 
-// POST: নতুন ট্রানজেকশন (Entry) তৈরি করা (With Time Support)
+// src/app/api/entries/route.ts এর POST ফাংশনটি এভাবে আপডেট করুন
+
 export async function POST(req: Request) {
   try {
     const data = await req.json();
     const { 
-        bookId, title, amount, type, category, 
-        paymentMethod, note, date, time, status 
+        cid, bookId, userId, title, amount, type, 
+        category, paymentMethod, note, date, time, status 
     } = data;
 
-    // ১. ভ্যালিডেশন
-    if (!bookId || !title || amount === undefined) {
-        return NextResponse.json({ message: "Mandatory fields (Book, Title, Amount) are missing" }, { status: 400 });
+    // 🔥 ১. ফ্লেক্সিবল ভ্যালিডেশন (টাইটেল আর রিকোয়ার্ড নয়)
+    if (!bookId || !userId || amount === undefined || !date) {
+        return NextResponse.json({ 
+            message: "Mandatory fields (Book, User, Amount) missing" 
+        }, { status: 400 });
     }
 
     await connectDB();
 
-    // ২. ডুপ্লিকেট চেক (Data Integrity Protocol)
-    // একই বইতে, একই দিনে, একই পরিমাণ টাকা এবং একই টাইটেলের এন্ট্রি আছে কি না চেক করা
-    const entryDate = new Date(date);
-    const startOfDay = new Date(entryDate.setHours(0,0,0,0));
-    const endOfDay = new Date(entryDate.setHours(23,59,59,999));
-
-    const isDuplicate = await Entry.findOne({
-        bookId,
-        title: title.trim(),
-        amount: Number(amount),
-        type,
-        date: { $gte: startOfDay, $lte: endOfDay }
-    });
-
-    if (isDuplicate) {
-        return NextResponse.json({ 
-            message: "A matching transaction already exists for this date. Potential duplicate blocked.",
-            duplicate: true 
-        }, { status: 409 });
+    // ২. ডুপ্লিকেট চেক (CID দিয়ে)
+    if (cid) {
+        const existingEntry = await Entry.findOne({ cid });
+        if (existingEntry) return NextResponse.json({ message: "Synced", entry: existingEntry }, { status: 409 });
     }
 
-    // ৩. ডাটা স্যানিটাইজ এবং সেভ করা (Time ফিল্ড সহ)
+    // ৩. সেভ প্রোটোকল
     const newEntry = await Entry.create({
+      cid: cid || `server_${Date.now()}`,
       bookId,
-      title: title.trim(),
+      userId,
+      // 🔥 যদি টাইটেল না থাকে, তবে ক্যাটাগরির নাম বা 'UNNAMED' বসবে
+      title: title?.trim() || `${category || 'GENERAL'} PROTOCOL`, 
       amount: Number(amount),
-      type,
+      type: type?.toLowerCase() || 'expense',
       category: category || "General",
       paymentMethod: paymentMethod || "Cash",
       note: note?.trim() || "",
       date: new Date(date),
-      time: time || "", // 🔥 এখানে টাইম প্রটোকল যোগ করা হয়েছে
+      time: time || "", 
       status: status || "Completed"
     });
 
-    return NextResponse.json({
-        success: true,
-        message: "Transaction secured in vault",
-        entry: newEntry
-    }, { status: 201 });
+    return NextResponse.json({ success: true, entry: newEntry }, { status: 201 });
 
   } catch (error: any) {
-    console.error("CREATE_ENTRY_ERROR:", error.message);
-    return NextResponse.json({ message: "Failed to synchronize transaction" }, { status: 500 });
+    return NextResponse.json({ message: "Sync Error" }, { status: 500 });
   }
 }

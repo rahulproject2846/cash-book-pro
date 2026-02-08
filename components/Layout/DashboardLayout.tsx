@@ -80,7 +80,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
             </div>
 
             {/* Nav Menu */}
-            <div className="flex-1 py-10 px-4 space-y-2 overflow-y-auto no-scrollbar">
+            <div className="flex-1 py-10 px-4 space-y-2  no-scrollbar">
                 {NAV_ITEMS.map((item) => {
                     const isActive = active === item.id;
                     const navBtn = (
@@ -221,7 +221,7 @@ export const DashboardLayout = (props: DashboardLayoutProps) => {
     };
 
     return (
-        <div className="flex min-h-screen bg-[var(--bg-app)] text-[var(--text-main)] overflow-x-hidden transition-colors duration-500">
+        <div className="flex min-h-screen bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-500">
             <Sidebar 
                 active={activeSection} setActive={setActiveSection} onLogout={onLogout} 
                 collapsed={collapsed} setCollapsed={setCollapsed} onResetBook={onBack}

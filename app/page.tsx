@@ -11,7 +11,7 @@ import AuthScreen from '@/components/Auth/AuthScreen';
 // UI Shell & Layout
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
 
-// Domain-Driven Sections (Updated Structure)
+// Domain-Driven Sections
 import { BooksSection } from '@/components/Sections/Books/BooksSection';
 import { ReportsSection } from '@/components/Sections/Reports/ReportsSection';
 import { TimelineSection } from '@/components/Sections/Timeline/TimelineSection';
@@ -21,7 +21,7 @@ import { ProfileSection } from '@/components/Sections/Profile/ProfileSection';
 // Global Modal Engine
 import { useModal } from '@/context/ModalContext';
 
-// --- Define Strict Type for Navigation ---
+// --- Types ---
 type NavSection = 'books' | 'reports' | 'timeline' | 'settings' | 'profile';
 
 export default function CashBookApp() {
@@ -39,26 +39,22 @@ export default function CashBookApp() {
   const isSyncingRef = useRef(false);
   const hydrationDoneRef = useRef(false);
 
-  // --- MODAL DATA STATES ---
-  const [bookForm, setBookForm] = useState({ name: '', description: '' });
-  const [triggerFab, setTriggerFab] = useState(false);
-
-  // --- ১. ব্যাকগ্রাউন্ড সিঙ্ক ইঞ্জিন (Restored Logic with 409 Fix) ---
+  // --- ১. ব্যাকগ্রাউন্ড সিঙ্ক ইঞ্জিন (Smart Conflict Handling) ---
   const syncOfflineData = useCallback(async () => {
     if (!navigator.onLine || isSyncingRef.current || !currentUser?._id) return;
     
+    // শুধু আন-সিঙ্কড ডাটা খুঁজবে
     const pending = await db.entries.where('synced').equals(0).toArray();
     if (pending.length === 0) return;
 
     isSyncingRef.current = true;
     try {
-      for (const entry of pending) {
-        // ডিলিট প্রোটোকল
-        if (entry.isDeleted === 1 && entry._id) {
-          await fetch(`/api/entries/${entry._id}`, { method: 'DELETE' });
-          await db.entries.delete(entry.localId!);
-          continue;
-        }
+for (const entry of pending) {
+    // 🔥 ফিক্স: এখন শুধু এমাউন্ট না থাকলে ডিলিট করবে, টাইটেল না থাকলেও সমস্যা নেই
+    if (entry.amount === undefined || entry.amount === null) {
+        await db.entries.delete(entry.localId!);
+        continue;
+    }
 
         const { localId, synced, isDeleted, ...payload } = entry;
         
@@ -66,14 +62,15 @@ export default function CashBookApp() {
         const res = await fetch(entry._id ? `/api/entries/${entry._id}` : '/api/entries', {
           method: entry._id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, userId: currentUser._id }),
+          body: JSON.stringify({ ...payload, userId: currentUser._id,cid: entry.cid }),
         });
 
-        // 409 Conflict Handling
+        // 🔥 409 Conflict Handling: ডাটা অলরেডি সার্ভারে থাকলে আপডেট করে নাও
         if (res.ok || res.status === 409) {
           const serverData = await res.json();
           const serverId = serverData.data?._id || serverData.entry?._id || entry._id;
           
+          // লোকাল ডাটাকে সিঙ্কড মার্ক করা
           await db.entries.update(entry.localId!, {
             synced: 1,
             _id: serverId
@@ -82,93 +79,101 @@ export default function CashBookApp() {
       }
       window.dispatchEvent(new Event('vault-updated'));
     } catch (err) { 
-        console.warn("Sync Int."); 
+        console.warn("Sync Paused: Network instability"); 
     } finally { 
         isSyncingRef.current = false; 
+        window.dispatchEvent(new Event('vault-synced'));
     }
   }, [currentUser?._id]);
 
-  // --- ২. মডাল কলব্যাক লজিক (RESTORED: Full Logic with editTarget Support) ---
-  
-  const handleSaveEntryLogic = async (data: any, editTarget?: any, vaultInstance?: any) => {
-    // এখানে vaultInstance থেকে saveEntry এবং fetchData কল করা হবে
-    if (!vaultInstance) return toast.error("Vault Engine not ready");
+  // --- ২. গ্লোবাল এন্ট্রি সেভ লজিক (CID Guard Added) ---
+  const handleSaveEntryLogic = async (data: any) => {
+    if (!currentBook?._id) return toast.error("Vault reference missing");
     
     try {
-        const success = await vaultInstance.saveEntry(data, editTarget);
-        if (success) {
-            await vaultInstance.fetchData(); // ড্যাশবোর্ড ডাটা রিফ্রেশ
-            closeModal(); // মডাল ক্লোজ
-            window.dispatchEvent(new Event('vault-updated')); // ইউআই সিঙ্ক
-            toast.success("Entry Secured");
-            if (navigator.onLine) syncOfflineData();
-        }
+        const timestamp = Date.now();
+        // 🔥 CID জেনারেশন: এটি ডুপ্লিকেট আটকাবে
+        const cid = data.cid || `cid_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        const payload = { 
+            ...data, 
+            cid, // এই ইউনিক আইডিটি গার্ড হিসেবে কাজ করবে
+            userId: currentUser._id, 
+            bookId: currentBook._id,
+            synced: 0,
+            updatedAt: timestamp
+        };
+
+        // লোকাল ডেক্সিতে সেভ (নতুন স্কিমা অনুযায়ী)
+        await db.entries.put(payload);
+        
+        closeModal();
+        window.dispatchEvent(new Event('vault-updated'));
+        toast.success("Entry Secured Locally");
+
+        if (navigator.onLine) syncOfflineData();
     } catch (err) {
-        toast.error("Protocol Sync Failure");
+        toast.error("Local Save Failed");
     }
   };
 
-  const handleDeleteEntryLogic = async (entry: any, vaultInstance?: any) => {
-    if (!vaultInstance) return;
+  // --- ৩. গ্লোবাল ডিলিট লজিক ---
+  const handleDeleteEntryLogic = async (entry: any) => {
     try {
-        await vaultInstance.deleteEntry(entry);
+        const id = entry.localId || entry._id;
+        // সফট ডিলিট: সার্ভারকে জানানোর জন্য মার্ক করা হলো
+        await db.entries.update(id, { isDeleted: 1, synced: 0 });
+        
         closeModal();
         window.dispatchEvent(new Event('vault-updated'));
-        toast.success("Entry Terminated");
+        toast.success("Entry Marked for Deletion");
+
         if (navigator.onLine) syncOfflineData();
     } catch (err) {
         toast.error("Termination Failed");
     }
   };
 
-  // --- ৩. গ্লোবাল বুক সেভ লজিক (RESTORED) ---
-const handleSaveBookGlobal = async (formData: any) => {
-    // 🔥 সিলেকশন আইডি ইজ দ্য আল্টিমেট ট্রুথ
+  // --- ৪. গ্লোবাল বুক সেভ লজিক ---
+  const handleSaveBookGlobal = async (formData: any) => {
     const targetId = currentBook?._id || currentBook?.id || formData?._id;
     const isEditMode = !!targetId; 
 
     try {
-        const res = await fetch('/api/books', { // সবসময় মেইন এপিআই রুট
+        const res = await fetch('/api/books', { 
             method: isEditMode ? 'PUT' : 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ 
-                ...formData, 
-                _id: targetId, // আইডি বডির ভেতরে পাঠানো হচ্ছে
-                userId: currentUser._id 
-            }), 
+            body: JSON.stringify({ ...formData, _id: targetId, userId: currentUser._id }), 
         });
         
         if (res.ok) {
             const result = await res.json();
+            // বইয়ের ডাটা ডেক্সিতে আপডেট
             await db.books.put({ ...(result.book || result.data), updatedAt: Date.now() });
             
             closeModal();
             if (!isEditMode) setCurrentBook(null); 
             
             window.dispatchEvent(new Event('vault-updated'));
-            toast.success(isEditMode ? "Protocol Updated" : "Ledger Initialized");
+            toast.success(isEditMode ? "Protocol Updated" : "Vault Initialized");
         } else {
             const errorData = await res.json();
             toast.error(errorData.message || "Protocol Rejected");
         }
-    } catch (err) { toast.error("Sync failure"); }
-};
+    } catch (err) { toast.error("Network Error"); }
+  };
 
-  // --- ৪. স্মার্ট বাটন ক্লিক এবং মডাল হ্যান্ডলারস ---
-  const handleFabClick = () => {
+  // --- ৫. স্মার্ট বাটন ক্লিক ---
+  const handleFabClick = (e?: any) => {
+    if (e && e.stopPropagation) e.stopPropagation();
     if (currentBook) {
-        // BooksSection এর useEffect যাতে ডাবল ফায়ার না করে, সিগন্যাল পাঠানো হচ্ছে
-        setTriggerFab(true); 
+        openModal('addEntry', { currentUser, currentBook, onSubmit: handleSaveEntryLogic });
     } else if (activeSection === 'books') {
         setCurrentBook(null);
         openModal('addBook', { onSubmit: handleSaveBookGlobal, currentUser });
     } else {
         openModal('shortcut', { 
-            onInitialize: () => {
-                setActiveSection('books');
-                setCurrentBook(null);
-                openModal('addBook', { onSubmit: handleSaveBookGlobal, currentUser });
-            }
+            onInitialize: () => { setActiveSection('books'); setCurrentBook(null); openModal('addBook', { onSubmit: handleSaveBookGlobal, currentUser }); }
         });
     }
   };
@@ -181,8 +186,9 @@ const handleSaveBookGlobal = async (formData: any) => {
     }
   };
 
-  // --- ৫. ক্লাউড হাইড্রেশন (RESTORED: Full Promise.allSettled Protocol) ---
-  const hydrateVault = useCallback(async (user: any) => {
+  // --- ৬. ক্লাউড হাইড্রেশন (Pro Level) ---
+// --- ৬. ক্লাউড হাইড্রেশন (Smart Merge Protocol) ---
+const hydrateVault = useCallback(async (user: any) => {
     if (!navigator.onLine || !user?._id || hydrationDoneRef.current) return;
     hydrationDoneRef.current = true;
     
@@ -193,19 +199,43 @@ const handleSaveBookGlobal = async (formData: any) => {
           fetch(`/api/user/settings?userId=${user._id}`) 
       ]);
 
-      if (booksResult.status === 'fulfilled' && booksResult.value.ok) {
-        const bData = await booksResult.value.json();
-        await db.books.bulkPut(Array.isArray(bData) ? bData : (bData.books || []));
-      }
+      // ১. বই আপডেট
+     // hydrateVault ফাংশনের ভেতরের আপডেট
+if (booksResult.status === 'fulfilled' && booksResult.value.ok) {
+    const bData = await booksResult.value.json();
+    const serverBooks = Array.isArray(bData) ? bData : (bData.books || []);
+    
+    // 🔥 ফিক্স: bulkPut এর বদলে লুপ ব্যবহার করে ডাটাবেজ লক হওয়া কমানো হয়েছে
+    for (const book of serverBooks) {
+        await db.books.put(book);
+    }
+}
 
-      if (entriesResult.status === 'fulfilled' && entriesResult.value.ok) {
-        const eData = await entriesResult.value.json();
-        const entries = Array.isArray(eData) ? eData : (eData.entries || []);
-        for (const item of entries) {
-            await db.entries.put({ ...item, synced: 1, isDeleted: 0 });
+if (entriesResult.status === 'fulfilled' && entriesResult.value.ok) {
+    const eData = await entriesResult.value.json();
+    const serverEntries = Array.isArray(eData) ? eData : (eData.entries || []);
+    
+    await db.transaction('rw', db.entries, async () => {
+        for (const item of serverEntries) {
+            // 🔥 ফিক্স: ID এবং CID চেক করে মার্জ লজিক
+            const existing = await db.entries
+                .where('_id').equals(item._id)
+                .or('cid').equals(item.cid || "")
+                .first();
+
+            await db.entries.put({
+                ...item,
+                localId: existing?.localId,
+                synced: 1,
+                isDeleted: 0,
+                status: (item.status || 'completed').toLowerCase(),
+                type: (item.type || 'expense').toLowerCase()
+            });
         }
-      }
+    });
+}
 
+      // ৩. সেটিংস আপডেট
       let finalUser = user;
       if (settingsResult.status === 'fulfilled' && settingsResult.value.ok) {
           const sData = await settingsResult.value.json();
@@ -224,7 +254,6 @@ const handleSaveBookGlobal = async (formData: any) => {
     }
   }, [syncOfflineData]);
 
-  // --- ৬. লাইভ ইভেন্ট মনিটরিং (RESTORED) ---
   useEffect(() => {
     const savedUser = localStorage.getItem('cashbookUser');
     if (savedUser) {
@@ -236,14 +265,36 @@ const handleSaveBookGlobal = async (formData: any) => {
     const timer = setTimeout(() => setIsLoading(false), 1000);
     const handleNetwork = () => { if (navigator.onLine) syncOfflineData(); };
     window.addEventListener('online', handleNetwork);
-    window.addEventListener('offline', () => setIsOnline(false));
-    return () => {
-        clearTimeout(timer);
-        window.removeEventListener('online', handleNetwork);
-    };
+    return () => window.removeEventListener('online', handleNetwork);
   }, [hydrateVault, syncOfflineData, isHydrated]);
 
+
+
+
+
+
+
+useEffect(() => {
+    console.log("COMPONENT_MOUNTED: BooksSection");
+    return () => console.log("COMPONENT_UNMOUNTED: BooksSection");
+}, []);
+
+
+
+
+
+  // --- ৭. লগআউট গার্ড (Data Safety) ---
   const handleLogout = async () => {
+    // 🔥 Guard Logic: চেক করো আন-সিঙ্কড ডাটা আছে কি না
+    const unsyncedCount = await db.entries.where('synced').equals(0).count();
+    
+    if (unsyncedCount > 0) {
+        if (!confirm(`WARNING: ${unsyncedCount} records are not synced with the cloud yet. Logging out will lose this data. Continue?`)) {
+            // ইউজার না বললে লগআউট বাতিল
+            return;
+        }
+    }
+
     localStorage.removeItem('cashbookUser');
     await Promise.all([db.books.clear(), db.entries.clear()]);
     window.location.reload();
@@ -267,11 +318,9 @@ const handleSaveBookGlobal = async (formData: any) => {
   const sectionMap: Record<NavSection, React.ReactNode> = {
     books: <BooksSection 
               currentUser={currentUser} currentBook={currentBook} setCurrentBook={setCurrentBook} 
-              triggerFab={triggerFab} setTriggerFab={setTriggerFab}
               onGlobalSaveBook={handleSaveBookGlobal} 
-              // এন্ট্রি লজিক এখন সরাসরি BooksSection থেকে ডাইভার্ট হবে
-              onSaveEntry={handleSaveEntryLogic} 
-              onDeleteEntry={handleDeleteEntryLogic}
+              onEditEntry={(e: any) => openModal('addEntry', { entry: e, currentBook, currentUser, onSubmit: handleSaveEntryLogic })}
+              onDeleteEntry={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => handleDeleteEntryLogic(e) })}
            />,
     reports: <ReportsSection currentUser={currentUser} />,
     timeline: <TimelineSection currentUser={currentUser} onBack={() => setActiveSection('books')} />,

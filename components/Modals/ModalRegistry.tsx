@@ -30,7 +30,7 @@ export const ModalRegistry = () => {
   const { T, t } = useTranslation();
 
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence mode="popLayout" initial={false}>
       {/* ১. বুক অ্যাড / এডিট মডাল */}
       {(view === 'addBook' || view === 'editBook') && (
         <BookModal 
