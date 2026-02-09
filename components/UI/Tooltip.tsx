@@ -1,55 +1,69 @@
 "use client";
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils/helpers'; // তোর নতুন cn utility
 
 interface TooltipProps {
     text: string;
     children: React.ReactNode;
     position?: 'top' | 'bottom' | 'left' | 'right';
-    visible?: boolean;
+    className?: string;
 }
 
-export const Tooltip = ({ text, children, position = 'top' }: TooltipProps) => {
+export const Tooltip = ({ text, children, position = 'top', className }: TooltipProps) => {
     const [isVisible, setIsVisible] = useState(false);
 
-    // পজিশন লজিক
-   // const positionClasses = {
-      //  top: "-top-10 left-1/2 -translate-x-1/2",
-     //   bottom: "-bottom-10 left-1/2 -translate-x-1/2",
-    //    left: "-left-2 right-full top-1/2 -translate-y-1/2 mr-2",
-     //   right: "-right-2 left-full top-1/2 -translate-y-1/2 ml-2",
- //   };
-const positionClasses = {
-  top: "bottom-full left-1/2 -translate-x-1/2 mb-2",
-  bottom: "top-full left-1/2 -translate-x-1/2 mt-2",
-  left: "right-full top-1/2 -translate-y-1/2 mr-2",
-  right: "left-full top-1/2 -translate-y-1/2 ml-2",
-};
+    // যদি টেক্সট না থাকে, তবে শুধু চিলড্রেন রেন্ডার করবে
+    if (!text) return <>{children}</>;
+
+    // পজিশন অনুযায়ী ডাইনামিক ক্লাস (Pill Logic)
+    const positionClasses = {
+        top: "bottom-full left-1/2 -translate-x-1/2 mb-3",
+        bottom: "top-full left-1/2 -translate-x-1/2 mt-3",
+        left: "right-full top-1/2 -translate-y-1/2 mr-3",
+        right: "left-full top-1/2 -translate-y-1/2 ml-3",
+    };
+
+    // অ্যারো (Arrow) পজিশন লজিক
+    const arrowClasses = {
+        top: "-bottom-1 left-1/2 -translate-x-1/2 border-r border-b",
+        bottom: "-top-1 left-1/2 -translate-x-1/2 border-l border-t",
+        left: "-right-1 top-1/2 -translate-y-1/2 border-r border-t",
+        right: "-left-1 top-1/2 -translate-y-1/2 border-l border-b",
+    };
+
     return (
         <div 
-            className="relative flex items-center justify-center z-[50]"
+            className={cn("relative inline-flex items-center justify-center", className)}
             onMouseEnter={() => setIsVisible(true)}
             onMouseLeave={() => setIsVisible(false)}
-            onClick={() => setIsVisible(false)} // ক্লিক করলে টুলটিপ সরবে
+            onClick={() => setIsVisible(false)}
         >
             {children}
             
             <AnimatePresence>
                 {isVisible && (
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.8, y: position === 'top' ? 5 : -5 }}
+                        initial={{ opacity: 0, scale: 0.9, y: position === 'top' ? 10 : -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ duration: 0.15 }}
-                        className={`absolute ${positionClasses[position]} z-[1000] pointer-events-none`}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                        className={cn("absolute z-[9999] pointer-events-none", positionClasses[position])}
                     >
-                        <div className="bg-[var(--bg-card)]  text-[var(--text-main)] text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border border-white/10 shadow-xl whitespace-nowrap">
-                            {text}
-                            {/* Tiny Arrow */}
-                            <div className={`absolute w-2 h-2 bg-[var(--bg-card)] border-r border-b border-[var(--border)] rotate-45 
-                                ${position === 'top' ? '-bottom-1 left-1/2 -translate-x-1/2' : ''}
-                                ${position === 'bottom' ? '-top-1 left-1/2 -translate-x-1/2 rotate-[225deg]' : ''}
-                            `} />
+                        <div className={cn(
+                            "relative bg-black/90 text-white backdrop-blur-xl",
+                            "px-4 py-2 rounded-full border border-white/10 shadow-2xl",
+                            "whitespace-nowrap flex items-center justify-center"
+                        )}>
+                            <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">
+                                {text}
+                            </span>
+
+                            {/* Apple Style Tiny Arrow */}
+                            <div className={cn(
+                                "absolute w-2.5 h-2.5 bg-black/90 border-white/10 rotate-45",
+                                arrowClasses[position]
+                            )} />
                         </div>
                     </motion.div>
                 )}

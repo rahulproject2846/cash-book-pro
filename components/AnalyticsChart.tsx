@@ -2,30 +2,24 @@
 import React, { useMemo } from 'react';
 import { 
     PieChart, Pie, Cell, ResponsiveContainer, 
-    Tooltip as ChartTooltip, Legend 
+    Tooltip as ChartTooltip 
 } from 'recharts';
-import { PieChart as PieIcon, Activity, Zap, ShieldCheck } from 'lucide-react';
+import { PieChart as PieIcon, Zap, ShieldCheck, GitCommit } from 'lucide-react';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
-
-// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
-const toBn = (num: any, lang: string) => {
-    const str = String(num);
-    if (lang !== 'bn') return str;
-    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', ',':',', '.':'.' };
-    return str.split('').map(c => bnNums[c] || c).join('');
-};
+import { Tooltip } from '@/components/UI/Tooltip';
+import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 
 export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
     const { T, t, language } = useTranslation();
     
-    // --- 🧬 ১. MEMOIZED LOGIC (Performance Optimized) ---
+    // --- 🧬 ১. MEMOIZED LOGIC (Standardized) ---
     const { categoryData, totalValue } = useMemo(() => {
         const data = entries
             .filter(e => 
-                (e.type || '').toLowerCase() === 'expense' && 
-                (e.status || '').toLowerCase() === 'completed'
+                String(e.type).toLowerCase() === 'expense' && 
+                String(e.status).toLowerCase() === 'completed'
             )
             .reduce((acc: any, curr) => {
                 const catName = (curr.category || 'GENERAL').toUpperCase();
@@ -42,18 +36,18 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
 
     const COLORS = ['#F97316', '#3B82F6', '#10B981', '#EF4444', '#8B5CF6', '#06B6D4', '#FACC15'];
 
-    // --- 🎨 ২. CUSTOM ELITE TOOLTIP ---
+    // --- 🎨 ২. CUSTOM ELITE GLASS TOOLTIP ---
     const CustomTooltip = ({ active, payload }: any) => {
         if (active && payload && payload.length) {
             return (
-                <div className="bg-[var(--bg-card)]/90 border border-[var(--border)] p-4 rounded-2xl shadow-2xl backdrop-blur-xl">
-                    <p className="text-[8px] font-black uppercase tracking-[3px] text-[var(--text-muted)] mb-2">{payload[0].name}</p>
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: payload[0].fill }} />
-                        <p className="text-[13px] font-mono-finance font-bold text-[var(--text-main)] tracking-tighter">
-                             {toBn(payload[0].value.toLocaleString(), language)}
-                        </p>
+                <div className="bg-black/80 border border-white/10 p-4 rounded-[20px] shadow-2xl backdrop-blur-2xl">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: payload[0].fill }} />
+                        <p className="text-[8px] font-black uppercase tracking-[3px] text-white/40">{payload[0].name}</p>
                     </div>
+                    <p className="text-[14px] font-mono-finance font-black text-white tracking-tighter">
+                         {toBn(payload[0].value.toLocaleString(), language)}
+                    </p>
                 </div>
             );
         }
@@ -62,12 +56,12 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
 
     if (categoryData.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-24 opacity-20 gap-6">
-                <div className="w-20 h-20 rounded-[35px] bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center shadow-inner">
-                    <PieIcon size={32} strokeWidth={1} />
+            <div className="flex flex-col items-center justify-center py-24 opacity-20 gap-6 grayscale">
+                <div className="w-24 h-24 rounded-[40px] bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center shadow-inner">
+                    <PieIcon size={40} strokeWidth={1} />
                 </div>
                 <div className="text-center">
-                    <p className="text-[11px] font-black uppercase tracking-[5px]">{T('awaiting_intel') || "NO ANALYTICS DATA"}</p>
+                    <p className="text-[10px] font-black uppercase tracking-[5px]">{T('awaiting_intel') || "NO ANALYTICS DATA"}</p>
                     <p className="text-[8px] font-bold uppercase tracking-[2px] mt-2">Registry is currently empty</p>
                 </div>
             </div>
@@ -82,13 +76,13 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                         <Pie
                             data={categoryData}
                             cx="50%" cy="50%"
-                            innerRadius={70}
-                            outerRadius={95}
+                            innerRadius={75}
+                            outerRadius={100}
                             paddingAngle={8}
                             dataKey="value"
                             stroke="none"
                             animationBegin={0}
-                            animationDuration={1500}
+                            animationDuration={1200}
                         >
                             {categoryData.map((entry: any, index: number) => (
                                 <Cell 
@@ -102,15 +96,15 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                     </PieChart>
                 </ResponsiveContainer>
 
-                {/* --- 🎯 ৩. CENTER LABEL (The Apple Standard) --- */}
+                {/* --- 🎯 ৩. CENTER LABEL (The Apple Identity Node) --- */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[3px] opacity-40">
+                    <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] opacity-30">
                         {T('total_expense') || "TOTAL"}
                     </span>
-                    <h3 className="text-xl md:text-2xl font-mono-finance font-black text-[var(--text-main)] tracking-tighter mt-1">
+                    <h3 className="text-2xl font-mono-finance font-black text-[var(--text-main)] tracking-tighter mt-1">
                         {toBn(totalValue.toLocaleString(), language)}
                     </h3>
-                    <div className="flex items-center gap-1.5 mt-2">
+                    <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-app)] border border-[var(--border)] shadow-inner">
                         <ShieldCheck size={10} className="text-orange-500" />
                         <span className="text-[7px] font-black text-orange-500 uppercase tracking-widest">Protocol Sync</span>
                     </div>
@@ -118,24 +112,40 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
             </div>
 
             {/* --- 📊 ৪. ELITE LEGEND GRID --- */}
-            <div className="mt-8 grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="mt-10 grid grid-cols-2 md:grid-cols-3 gap-3">
                 {categoryData.map((item: any, i: number) => (
-                    <div key={i} className="flex items-center gap-3 p-3 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] group hover:border-orange-500/30 transition-all active:scale-95">
-                        <div className="w-2 h-2 rounded-full shrink-0 shadow-lg" style={{backgroundColor: COLORS[i % COLORS.length]}} />
-                        <div className="flex flex-col min-w-0">
-                            <span className="text-[9px] font-black uppercase text-[var(--text-main)] truncate tracking-wider">{item.name}</span>
-                            <span className="text-[8px] font-bold text-[var(--text-muted)] opacity-40">
-                                {toBn(Math.round((item.value / totalValue) * 100), language)}% WEIGHT
-                            </span>
+                    <Tooltip key={i} text={`${item.name}: ${toBn(item.value.toLocaleString(), language)}`}>
+                        <div className={cn(
+                            "flex items-center gap-3 p-4 bg-[var(--bg-app)] rounded-[22px] border border-[var(--border)]",
+                            "group hover:border-orange-500/30 transition-all active:scale-[0.98] cursor-help"
+                        )}>
+                            <div 
+                                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-lg group-hover:scale-125 transition-transform" 
+                                style={{backgroundColor: COLORS[i % COLORS.length]}} 
+                            />
+                            <div className="flex flex-col min-w-0">
+                                <span className="text-[9px] font-black uppercase text-[var(--text-main)] truncate tracking-wider leading-none mb-1">
+                                    {item.name}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-mono-finance font-bold text-orange-500">
+                                        {toBn(Math.round((item.value / (totalValue || 1)) * 100), language)}%
+                                    </span>
+                                    <span className="text-[7px] font-black text-[var(--text-muted)] uppercase opacity-30">WEIGHT</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    </Tooltip>
                 ))}
             </div>
 
-            {/* System Info Footer */}
-            <div className="mt-8 pt-4 border-t border-[var(--border)] opacity-20 flex justify-between items-center">
-                 <span className="text-[7px] font-black uppercase tracking-[4px]">Visual Intelligence v5.2</span>
-                 <Zap size={10} className="text-orange-500" fill="currentColor" />
+            {/* OS Identity Footer */}
+            <div className="mt-12 pt-6 border-t border-[var(--border)]/50 opacity-20 group-hover:opacity-50 flex justify-between items-center transition-opacity duration-1000">
+                 <div className="flex items-center gap-2">
+                    <GitCommit size={12} strokeWidth={3} className="text-orange-500" />
+                    <span className="text-[8px] font-black uppercase tracking-[4px]">Visual Intelligence V11.5</span>
+                 </div>
+                 <Zap size={12} className="text-orange-500" fill="currentColor" strokeWidth={0} />
             </div>
         </div>
     );

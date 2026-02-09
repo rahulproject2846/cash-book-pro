@@ -1,124 +1,90 @@
 "use client";
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Globe, Languages, ChevronDown, Check, Coins, Zap } from 'lucide-react';
+import { Globe, Languages, ChevronDown, Coins, Zap, BadgeCheck, MapPin } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
+import { cn } from '@/lib/utils/helpers';
 
-/**
- * VAULT PRO: REGION MODULE (ELITE EDITION)
- * ---------------------------------------
- * Handles System Language and Base Currency localization.
- * Optimized for OS-level consistency and Midnight Protocol.
- */
 export const RegionModule = ({ currency, updateCurrency }: any) => {
     const { language, setLanguage, T, t } = useTranslation();
 
     return (
-        <div className="relative bg-[var(--bg-card)] rounded-[32px] border border-[var(--border)] p-[var(--card-padding,2rem)] overflow-hidden shadow-xl transition-all duration-500 group">
-            
-            {/* Background Decor (World Blueprint) */}
-            <div className="absolute -right-10 -top-10 opacity-[0.02] rotate-12 pointer-events-none group-hover:opacity-[0.05] transition-opacity duration-700">
-                <Globe size={280} strokeWidth={1} />
+        <div className={cn(
+            "relative bg-[var(--bg-card)] rounded-[40px] border border-[var(--border)]",
+            "p-6 md:p-10 overflow-hidden shadow-2xl transition-all duration-500 group"
+        )}>
+            {/* Background Decor */}
+            <div className="absolute -right-10 -top-10 opacity-[0.02] rotate-12 pointer-events-none group-hover:opacity-[0.04] transition-opacity">
+                <Globe size={320} className="text-blue-500" />
             </div>
 
-            {/* Header: OS Section Style */}
-            <div className="flex items-center gap-4 mb-8 relative z-10">
-                <div className="p-2.5 bg-blue-500/10 rounded-2xl text-blue-500 border border-blue-500/20 shadow-inner">
-                    <Globe size={22} strokeWidth={2.5} />
-                </div>
-                <div>
-                    <h4 className="text-sm font-black text-[var(--text-main)] uppercase tracking-[4px] italic leading-none">
-                        {T('regional_protocol') || "REGIONAL PROTOCOL"}
-                    </h4>
-                    <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-1.5 opacity-40">
-                        Localization & Currency Gateway
-                    </p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--app-gap,2rem)] relative z-10">
+            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
                 
-                {/* --- ১. LANGUAGE SELECTOR (Elite Pills) --- */}
-                <div className="space-y-4">
-                    <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1 flex items-center gap-2">
-                        <Languages size={12} className="text-orange-500/60" /> {T('system_language')}
-                    </label>
-                    <div className="grid grid-cols-2 gap-3 bg-[var(--bg-app)] p-1.5 rounded-[22px] border border-[var(--border)]">
-                        {/* English Selector */}
+                {/* --- ১. LANGUAGE SECTION --- */}
+                <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-500/10 rounded-[20px] text-blue-500 border border-blue-500/20 shadow-inner">
+                            <Languages size={22} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                                {T('system_language') || "IDENTITY LANGUAGE"}
+                            </h4>
+                            <p className="text-[8px] font-bold text-blue-500 uppercase tracking-[2px] mt-2 opacity-60">Localization Protocol</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex bg-[var(--bg-app)] p-1.5 rounded-[22px] border border-[var(--border)] shadow-inner w-full">
                         <button 
                             onClick={() => setLanguage('en')}
-                            className={`relative h-14 rounded-[18px] flex flex-col items-center justify-center transition-all duration-500 active:scale-95 overflow-hidden ${
-                                language === 'en' 
-                                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' 
-                                : 'text-[var(--text-muted)] hover:bg-[var(--bg-card)]'
-                            }`}
-                        >
-                            <span className="text-[12px] font-black uppercase tracking-widest z-10">English</span>
-                            {language === 'en' && (
-                                <motion.span 
-                                    initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-                                    className="text-[7px] font-bold uppercase opacity-60 z-10"
-                                >
-                                    {T('active_label') || "ACTIVE"}
-                                </motion.span>
+                            className={cn(
+                                "flex-1 h-14 rounded-[18px] flex flex-col items-center justify-center transition-all duration-500 active:scale-95",
+                                language === 'en' ? "bg-orange-500 text-white shadow-xl" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
                             )}
+                        >
+                            <span className="text-[12px] font-black uppercase tracking-widest">English</span>
                         </button>
-
-                        {/* Bengali Selector */}
                         <button 
                             onClick={() => setLanguage('bn')}
-                            className={`relative h-14 rounded-[18px] flex flex-col items-center justify-center transition-all duration-500 active:scale-95 overflow-hidden ${
-                                language === 'bn' 
-                                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' 
-                                : 'text-[var(--text-muted)] hover:bg-[var(--bg-card)]'
-                            }`}
-                        >
-                            <span className="text-[12px] font-bold z-10">বাংলা</span>
-                            {language === 'bn' && (
-                                <motion.span 
-                                    initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-                                    className="text-[7px] font-black uppercase opacity-70 z-10"
-                                >
-                                    {t('active_label') || "সক্রিয়"}
-                                </motion.span>
+                            className={cn(
+                                "flex-1 h-14 rounded-[18px] flex flex-col items-center justify-center transition-all duration-500 active:scale-95",
+                                language === 'bn' ? "bg-orange-500 text-white shadow-xl" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
                             )}
+                        >
+                            <span className="text-[14px] font-bold">বাংলা</span>
                         </button>
                     </div>
                 </div>
 
-                {/* --- ২. CURRENCY SELECTOR (The Glass Select) --- */}
-                <div className="space-y-4">
-                    <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1 flex items-center gap-2">
-                        <Coins size={12} className="text-orange-500/60" /> {T('base_currency')}
-                    </label>
-                    <Tooltip text={t('tt_currency_select')}>
-                        <div className="relative group/select">
-                            <select 
-                                value={currency}
-                                onChange={(e) => updateCurrency(e.target.value)}
-                                className="w-full h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[22px] px-6 text-[11px] font-black uppercase tracking-widest appearance-none cursor-pointer focus:border-orange-500/50 hover:bg-[var(--bg-card)] transition-all outline-none text-[var(--text-main)] shadow-inner"
-                            >
-                                <option value="BDT (৳)">BDT (৳) - Bangladesh Taka</option>
-                                <option value="USD ($)">USD ($) - US Dollar</option>
-                                <option value="EUR (€)">EUR (€) - Euro</option>
-                                <option value="INR (₹)">INR (₹) - Indian Rupee</option>
-                            </select>
-                            
-                            {/* Native Style Chevron */}
-                            <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)] group-hover/select:text-orange-500 transition-colors">
-                                <ChevronDown size={18} strokeWidth={2.5} className="opacity-40 group-hover/select:opacity-100 transition-opacity" />
-                            </div>
+                {/* --- ২. CURRENCY SECTION --- */}
+                <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-orange-500/10 rounded-[20px] text-orange-500 border border-orange-500/20 shadow-inner">
+                            <Coins size={22} strokeWidth={2.5} />
                         </div>
-                    </Tooltip>
+                        <div>
+                            <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                                {T('base_currency') || "FINANCIAL SYMBOL"}
+                            </h4>
+                            <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-2 opacity-60">Currency Registry</p>
+                        </div>
+                    </div>
+
+                    <div className="relative group/select">
+                        <select 
+                            value={currency}
+                            onChange={(e) => updateCurrency(e.target.value)}
+                            className="w-full h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[22px] px-6 text-[11px] font-black uppercase tracking-widest appearance-none cursor-pointer focus:border-blue-500/40 transition-all outline-none text-[var(--text-main)] shadow-inner"
+                        >
+                            <option value="BDT (৳)">BDT (৳) - Bangladesh Taka</option>
+                            <option value="USD ($)">USD ($) - US Dollar</option>
+                            <option value="EUR (€)">EUR (€) - Euro</option>
+                            <option value="INR (₹)">INR (₹) - Indian Rupee</option>
+                        </select>
+                        <ChevronDown size={18} className="absolute right-6 top-1/2 -translate-y-1/2 text-[var(--text-muted)] opacity-30 pointer-events-none" />
+                    </div>
                 </div>
-
-            </div>
-
-            {/* Bottom Indicator (Detailing) */}
-            <div className="mt-8 flex items-center gap-2 px-2 opacity-20 group-hover:opacity-40 transition-opacity">
-                <Zap size={10} className="text-orange-500" fill="currentColor" />
-                <span className="text-[8px] font-black uppercase tracking-[3px]">Global Synchronization Protocol Active</span>
             </div>
         </div>
     );

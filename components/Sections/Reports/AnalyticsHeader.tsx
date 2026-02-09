@@ -1,17 +1,10 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Filter, Check, ChevronDown, BarChart3, ShieldCheck, Clock } from 'lucide-react';
+import { Check, ChevronDown, BarChart3, Clock, Zap } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
-
-// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
-const toBn = (num: any, lang: string) => {
-    const str = String(num);
-    if (lang !== 'bn') return str;
-    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯' };
-    return str.split('').map(c => bnNums[c] || c).join('');
-};
+import { toBn, cn } from '@/lib/utils/helpers'; // cn utility অ্যাড করা হয়েছে
 
 export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
     const { T, t, language } = useTranslation();
@@ -37,9 +30,11 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
             
             {/* --- LEFT SECTION: SYSTEM IDENTITY --- */}
             <div className="flex items-center gap-4">
-                <div className="w-12 h-12 md:w-14 md:h-14 bg-orange-500 rounded-[22px] flex items-center justify-center text-white shadow-xl shadow-orange-500/30 shrink-0">
-                    <BarChart3 size={28} strokeWidth={2.5} />
-                </div>
+                <Tooltip text={t('tt_analytics_node') || "Analytics Engine Active"}>
+                    <div className="w-12 h-12 md:w-14 md:h-14 bg-orange-500 rounded-[22px] flex items-center justify-center text-white shadow-xl shadow-orange-500/30 shrink-0">
+                        <BarChart3 size={28} strokeWidth={2.5} />
+                    </div>
+                </Tooltip>
 
                 <div>
                     <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[var(--text-main)] leading-none">
@@ -54,7 +49,7 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                             </span>
                         </div>
                         <span className="text-[9px] font-bold text-[var(--text-muted)] opacity-30 uppercase tracking-[3px] ml-1">
-                            ENV V5.2
+                            ENV V11.0
                         </span>
                     </div>
                 </div>
@@ -62,20 +57,24 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
 
             {/* --- RIGHT SECTION: RANGE SELECTOR --- */}
             <div className="relative" ref={menuRef}>
-                <Tooltip text={t('tt_range_selector')}>
+                <Tooltip text={t('tt_change_range') || "Change Time Cycle"}>
                     <button 
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        className={`h-12 md:h-14 px-5 md:px-7 rounded-[22px] bg-[var(--bg-card)] border border-[var(--border)] flex items-center gap-4 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm 
-                            ${isMenuOpen ? 'border-orange-500 text-orange-500 shadow-xl ring-4 ring-orange-500/5' : 'text-[var(--text-muted)] hover:border-orange-500/30'}`}
+                        className={cn(
+                            "h-12 md:h-14 px-5 md:px-7 rounded-[22px] bg-[var(--bg-card)] border border-[var(--border)] flex items-center gap-4 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm",
+                            isMenuOpen 
+                                ? "border-orange-500 text-orange-500 shadow-xl ring-4 ring-orange-500/5" 
+                                : "text-[var(--text-muted)] hover:border-orange-500/30"
+                        )}
                     >
-                        <Clock size={18} strokeWidth={2.5} className={isMenuOpen ? 'text-orange-500' : 'opacity-60'} />
+                        <Clock size={18} strokeWidth={2.5} className={cn(isMenuOpen ? "text-orange-500" : "opacity-60")} />
                         <div className="flex flex-col items-start leading-none">
                             <span className="text-[8px] opacity-40 mb-1 tracking-[2px]">{T('range_selector') || "RANGE"}</span>
                             <span className="text-[11px] font-bold text-[var(--text-main)] tracking-widest">
                                 {toBn(timeRange, language)}{T('label_days_short') || "D"}
                             </span>
                         </div>
-                        <ChevronDown size={14} className={`opacity-30 transition-transform duration-500 ${isMenuOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown size={14} className={cn("opacity-30 transition-transform duration-500", isMenuOpen && "rotate-180")} />
                     </button>
                 </Tooltip>
 
@@ -97,10 +96,12 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                                         <button
                                             key={r.value}
                                             onClick={() => { setTimeRange(r.value); setIsMenuOpen(false); }}
-                                            className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 last:mb-0
-                                                ${isSelected 
-                                                    ? 'text-orange-500 bg-orange-500/10 shadow-sm' 
-                                                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--text-main)]'}`}
+                                            className={cn(
+                                                "w-full flex items-center justify-between px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 last:mb-0",
+                                                isSelected 
+                                                    ? "text-orange-500 bg-orange-500/10 shadow-sm" 
+                                                    : "text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--text-main)]"
+                                            )}
                                         >
                                             <div className="flex items-center gap-3">
                                                 {isSelected ? <Zap size={14} fill="currentColor" /> : <Clock size={14} />}

@@ -1,134 +1,108 @@
 "use client";
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { History, Loader2, ArrowDownUp, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { History, Loader2, ArrowDownUp, Filter, Zap } from 'lucide-react';
 import { db } from '@/lib/offlineDB';
-import toast from 'react-hot-toast';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { HubHeader } from '@/components/Layout/HubHeader';
+import { EliteDropdown } from '@/components/UI/EliteDropdown';
+import { StatsGrid } from '@/components/UI/StatsGrid';
 import { useModal } from '@/context/ModalContext';
 import { useVault } from '@/hooks/useVault';
+import { cn, toBn } from '@/lib/utils/helpers';
 
-// Local Components
+// Unified UI Components
 import { TimelineFeed } from './TimelineFeed';
-import { TimelineMobileCards } from './TimelineMobileCards'; // 🔥 নতুন মোবাইল কার্ড ইন্টিগ্রেশন
-
-// --- 🛠️ HELPER: BENGALI NUMBER CONVERTER ---
-const toBn = (num: any, lang: string) => {
-    const str = String(num);
-    if (lang !== 'bn') return str;
-    const bnNums: any = { '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪', '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯', ',':',', '.':'.' };
-    return str.split('').map(c => bnNums[c] || c).join('');
-};
+import { MobileLedgerCards } from '@/components/UI/MobileLedgerCards';
 
 export const TimelineSection = ({ currentUser }: any) => {
     const { T, t, language } = useTranslation();
     const { openModal, closeModal } = useModal();
-    
-    // ১. ভল্ট ইঞ্জিন ইন্টিগ্রেশন
     const { saveEntry, deleteEntry, toggleEntryStatus } = useVault(currentUser);
 
-    const [entries, setEntries] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [isSwitchingPage, setIsSwitchingPage] = useState(false);
-    
+    // ১. রিঅ্যাক্টিভ ডাটা ইঞ্জিন (LiveQuery: অটো-আপডেট এনসিওর করে)
+    const entries = useLiveQuery(
+        () => db.entries.where('isDeleted').equals(0).toArray(),
+        []
+    ) || [];
+
     // কন্ট্রোল স্টেটস
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [sortOption, setSortOption] = useState('date');
     const [currentPage, setCurrentPage] = useState(1);
+    const [isSwitchingPage, setIsSwitchingPage] = useState(false);
 
     const ITEMS_PER_PAGE = 10;
     const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
-    // ২. ডাটা লোড প্রোটোকল
-    const fetchLocalTimeline = useCallback(async () => {
-        try {
-            if (!db.isOpen()) await db.open();
-            const data = await db.entries.where('isDeleted').equals(0).toArray();
-            setEntries(data);
-        } catch (err) { 
-            console.error("Timeline Load Error:", err); 
-        } finally { 
-            setLoading(false); 
-        }
-    }, []);
-
-    useEffect(() => { fetchLocalTimeline(); }, [fetchLocalTimeline]);
-
-    // ৩. অ্যাকশন হ্যান্ডলার্স (Elite Logic Injection)
-    
-    // এন্ট্রি সেভ লজিক (Add/Edit)
-    const handleSaveEntryLogic = async (data: any, editTarget?: any) => {
-        const success = await saveEntry(data, editTarget);
-        if (success) {
-            closeModal();
-            fetchLocalTimeline(); // ডাটা রিফ্রেশ
-            window.dispatchEvent(new Event('vault-updated')); // গ্লোবাল সিঙ্ক
-            toast.success(t('protocol_secured') || "Protocol Secured");
-        }
-    };
-
-    // এডিট মডাল কল
+    // ২. অ্যাকশন হ্যান্ডলার্স (Surgical Clean-up)
     const handleEdit = (entry: any) => {
         openModal('addEntry', { 
             entry, 
             currentUser, 
-            onSubmit: (data: any) => handleSaveEntryLogic(data, entry) 
-        });
-    };
-
-    // ডিলিট প্রোটোকল
-    const handleDelete = (entry: any) => {
-        openModal('deleteConfirm', {
-            targetName: entry.title,
-            onConfirm: async () => {
-                await deleteEntry(entry);
-                closeModal();
-                fetchLocalTimeline();
-                window.dispatchEvent(new Event('vault-updated'));
-                toast.success(t('entry_terminated') || "Entry Terminated");
+            onSubmit: async (data: any) => {
+                const success = await saveEntry(data, entry);
+                if (success) closeModal();
             }
         });
     };
 
-    // স্ট্যাটাস টগল
-    const handleToggleStatus = async (entry: any) => {
-        await toggleEntryStatus(entry);
-        fetchLocalTimeline();
-        window.dispatchEvent(new Event('vault-updated'));
+    const handleDelete = (entry: any) => {
+        openModal('deleteConfirm', {
+            targetName: entry.title,
+            title: "TERMINATE RECORD",
+            onConfirm: async () => {
+                await deleteEntry(entry);
+                closeModal();
+            }
+        });
     };
 
-    // ৪. ফিল্টারিং ও সর্টিং ইঞ্জিন (Memoized)
-    const { grouped, totalPages } = useMemo(() => {
+    // ৩. মাস্টার ফিল্টারিং ও ক্যালকুলেশন ইঞ্জিন
+    const { grouped, totalPages, filteredStats } = useMemo(() => {
+        // ক. ফিল্টারিং
         let filtered = entries.filter(e => {
             const matchesSearch = (e.title || "").toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesType = filterType === 'all' || e.type === filterType;
+            const matchesType = filterType === 'all' || e.type.toLowerCase() === filterType.toLowerCase();
             return matchesSearch && matchesType;
         });
 
+        // খ. সর্টিং
         filtered.sort((a, b) => {
-            if (sortOption === 'date') return new Date(b.date).getTime() - new Date(a.date).getTime();
             if (sortOption === 'amount') return b.amount - a.amount;
-            return (a.title || "").localeCompare(b.title || "");
+            if (sortOption === 'title') return (a.title || "").localeCompare(b.title || "");
+            return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
 
+        // গ. স্ট্যাটাস ক্যালকুলেশন
+        const inF = filtered.filter(e => e.type === 'income' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
+        const outF = filtered.filter(e => e.type === 'expense' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
+
+        // ঘ. প্যাজিনেশন ও গ্রুপিং
         const totalPagesCount = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
         const start = (currentPage - 1) * ITEMS_PER_PAGE;
         const pageData = filtered.slice(start, start + ITEMS_PER_PAGE);
 
         const groupedData: { [key: string]: any[] } = {};
         pageData.forEach(entry => {
-            const dateStr = new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            const dateStr = new Date(entry.date).toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-GB', { 
+                day: '2-digit', month: 'short', year: 'numeric' 
+            });
             if (!groupedData[dateStr]) groupedData[dateStr] = [];
             groupedData[dateStr].push(entry);
         });
 
-        return { grouped: groupedData, totalPages: totalPagesCount };
-    }, [entries, searchQuery, filterType, sortOption, currentPage]);
+        return { 
+            grouped: groupedData, 
+            totalPages: totalPagesCount,
+            filteredStats: { inF, outF, count: filtered.length }
+        };
+    }, [entries, searchQuery, filterType, sortOption, currentPage, language]);
 
     const handlePageChange = (newPage: number) => {
         setIsSwitchingPage(true);
@@ -136,68 +110,85 @@ export const TimelineSection = ({ currentUser }: any) => {
             setCurrentPage(newPage);
             setIsSwitchingPage(false);
             window.scrollTo({ top: 0, behavior: 'smooth' });
-        }, 350);
+        }, 300);
     };
 
-    if (loading) return (
-        <div className="h-[60vh] flex flex-col items-center justify-center gap-6">
-            <Loader2 className="animate-spin text-orange-500" size={48} />
-            <span className="text-[10px] font-black uppercase tracking-[5px] text-orange-500/40 animate-pulse">{t('syncing_protocol')}</span>
-        </div>
-    );
-
     return (
-        <div className="w-full max-w-[1920px] mx-auto pb-40">
+        <div className="w-full max-w-[1440px] mx-auto pb-40">
             
-            {/* --- ১. MASTER HUB HEADER --- */}
+            {/* --- ১. MASTER HUB HEADER (Consistent UI) --- */}
             <HubHeader 
-                title={T('nav_timeline')} 
-                subtitle={`${toBn(entries.length, language)} ${T('active_protocols')}`}
+                title={T('nav_timeline') || "LIFE LOG"} 
+                subtitle={`${toBn(filteredStats.count, language)} ${T('records_found') || "ENTRIES DISCOVERED"}`}
                 icon={History}
-                showSearch={true}
                 searchQuery={searchQuery}
                 onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
             >
-                <div className="flex items-center gap-2">
-                    {/* সর্ট ড্রপডাউন (সিঙ্ক্রোনাইজড) */}
-                    <select value={sortOption} onChange={(e) => setSortOption(e.target.value)} className="h-11 px-4 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl text-[10px] font-black uppercase outline-none focus:border-orange-500/50 cursor-pointer text-[var(--text-main)] appearance-none hidden md:block">
-                        <option value="date">{t('sort_date')}</option>
-                        <option value="amount">{t('sort_amount')}</option>
-                        <option value="title">{t('sort_title')}</option>
-                    </select>
-
-                    <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-11 px-4 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl text-[10px] font-black uppercase outline-none focus:border-orange-500/50 cursor-pointer text-[var(--text-main)] appearance-none hidden md:block">
-                        <option value="all">{t('all')}</option>
-                        <option value="income">{t('income')}</option>
-                        <option value="expense">{t('expense')}</option>
-                    </select>
+                <div className="flex items-center gap-3">
+                    <EliteDropdown 
+                        label={T('sort_by')}
+                        current={sortOption}
+                        options={['date', 'amount', 'title']}
+                        onChange={setSortOption}
+                        icon={ArrowDownUp}
+                    />
+                    <EliteDropdown 
+                        label={T('filter_type')}
+                        current={filterType}
+                        options={['all', 'income', 'expense']}
+                        onChange={setFilterType}
+                        icon={Filter}
+                    />
                 </div>
             </HubHeader>
 
-            {/* --- ২. FEED AREA (Desktop Table & Mobile Cards) --- */}
-            <div className="px-[var(--app-padding,1.25rem)] md:px-8 mt-4">
+            <div className={cn(
+                "px-[1.25rem] md:px-8 space-y-10 mt-6 transition-all duration-500",
+                isSwitchingPage && "opacity-20 blur-sm pointer-events-none"
+            )}>
                 
-                {/* ১. ডেস্কটপ টেবিল ভিউ */}
-                <TimelineFeed 
-                    groupedEntries={grouped} 
-                    currencySymbol={currencySymbol} 
-                    isEmpty={entries.length === 0}
-                    isSwitchingPage={isSwitchingPage}
-                    pagination={{ currentPage, totalPages, onPageChange: handlePageChange }}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onToggleStatus={handleToggleStatus}
+                {/* --- ২. DYNAMIC STATS GRID (Replacing TotalStats) --- */}
+                <StatsGrid 
+                    income={filteredStats.inF}
+                    expense={filteredStats.outF}
+                    currency={currentUser?.currency}
                 />
 
-                {/* ২. মোবাইল কার্ড ভিউ */}
-                <TimelineMobileCards 
-                    groupedEntries={grouped}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onToggleStatus={handleToggleStatus}
-                    currencySymbol={currencySymbol}
-                />
+                {/* --- ৩. FEED AREA (Adaptive Rendering) --- */}
+                <div className="relative">
+                    {/* Desktop View */}
+                    <div className="hidden md:block">
+                        <TimelineFeed 
+                            groupedEntries={grouped} 
+                            currencySymbol={currencySymbol} 
+                            isEmpty={entries.length === 0}
+                            pagination={{ currentPage, totalPages, onPageChange: handlePageChange }}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            onToggleStatus={toggleEntryStatus}
+                        />
+                    </div>
 
+                    {/* Mobile View */}
+                    <div className="block md:hidden">
+                        <MobileLedgerCards 
+                            isGrouped={true}
+                            groupedEntries={grouped}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            onToggleStatus={toggleEntryStatus}
+                            currencySymbol={currencySymbol}
+                        />
+                    </div>
+
+                    {/* Empty State Overlay */}
+                    {entries.length === 0 && (
+                        <div className="py-40 flex flex-col items-center justify-center opacity-20 gap-4 text-[var(--text-muted)]">
+                            <Zap size={60} strokeWidth={1} />
+                            <p className="text-[10px] font-black uppercase tracking-[5px]">{T('empty_ledger')}</p>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

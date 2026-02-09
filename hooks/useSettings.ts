@@ -1,160 +1,131 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
 
-/**
- * VAULT ENGINE: SETTINGS CONTROLLER (STABILIZED V7)
- * ------------------------------------------------
- * Fix: Removed redundant JS styling. Relies purely on CSS classes.
- * Fix: Instant LocalStorage update before Server Sync.
- */
-
 export const useSettings = (currentUser: any, setCurrentUser: any) => {
     const { theme, setTheme } = useTheme();
-    const [isLoading, setIsLoading] = useState(false);
     const [isCleaning, setIsCleaning] = useState(false);
-    
-    // লোকাল স্টেট ইনিশিয়ালাইজেশন (সেফ চেক সহ)
-    const [preferences, setPreferences] = useState({
-        language: 'en',
-        compactMode: false,
-        isMidnight: false,
-        autoLock: false,
-        dailyReminder: false,
-        expenseLimit: 0,
-        ...currentUser?.preferences // মার্জ করা হলো
-    });
-
-    const [categories, setCategories] = useState<string[]>(currentUser?.categories || []);
-    const [currency, setCurrency] = useState(currentUser?.currency || 'BDT (৳)');
     const [dbStats, setDbStats] = useState({ storageUsed: '0 KB', totalEntries: 0 });
+    const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // ১. ডাটাবেজ হেলথ চেক
+    // ১. ইউজার ডাটা থেকে সলিড স্টেট জেনারেট (Derived States)
+    const preferences = currentUser?.preferences || {};
+    const categories = currentUser?.categories || [];
+    const currency = currentUser?.currency || 'BDT (৳)';
+
+    // ২. DOM side-effects (এটি রিলোড দিলেও Compact/Midnight ধরে রাখবে)
+    useEffect(() => {
+        if (!currentUser) return;
+        
+        const root = document.documentElement;
+        const prefs = currentUser.preferences || {};
+
+        // Compact Mode Apply
+        prefs.compactMode ? root.classList.add('compact-deck') : root.classList.remove('compact-deck');
+
+        // Midnight Mode Apply
+        if (prefs.isMidnight) {
+            root.classList.add('midnight-mode');
+            if (theme !== 'dark') setTheme('dark');
+        } else {
+            root.classList.remove('midnight-mode');
+        }
+
+        // Language apply
+        if (prefs.language) {
+            localStorage.setItem('vault_lang', prefs.language);
+        }
+    }, [currentUser, setTheme, theme]);
+
+    // ৩. ডাটাবেজ স্ট্যাটস ক্যালকুলেশন
     const calculateStorage = useCallback(async () => {
-        if (!db.isOpen()) await db.open();
-        const count = await db.entries.count();
-        const estimate = await navigator.storage?.estimate();
-        const used = estimate?.usage ? (estimate.usage / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown';
-        setDbStats({ storageUsed: used, totalEntries: count });
+        try {
+            const count = await db.entries.count();
+            const estimate = await navigator.storage?.estimate();
+            const used = estimate?.usage ? (estimate.usage / 1024 / 1024).toFixed(2) + ' MB' : '0.1 MB';
+            setDbStats({ storageUsed: used, totalEntries: count });
+        } catch (e) { console.warn("Storage check skipped"); }
     }, []);
 
-// src/hooks/useSettings.ts এর ভেতর ওই useEffect (লাইন ৪৩)
-useEffect(() => {
-    if (currentUser) {
-        setCategories(currentUser.categories || []);
-        setCurrency(currentUser.currency || 'BDT (৳)');
-        
-        // 🔥 FIX: ফাংশন দিয়ে আপডেট না করে সরাসরি অবজেক্ট দিয়ে আপডেট করুন
-        setPreferences({ 
-            ...preferences, 
-            ...currentUser.preferences 
-        });
-        
-        calculateStorage();
-    }
-}, [currentUser, calculateStorage]); // <--- এখানে 'preferences' যোগ করা লাগবে না
+    useEffect(() => { calculateStorage(); }, [calculateStorage]);
 
-    // ২. সার্ভার সিঙ্ক ইঞ্জিন (সাইলেন্ট মোড)
-const syncSettings = async (newCats: string[], newCurr: string, newPref: any) => {
-    try {
-        await fetch('/api/user/settings', { // <--- আপনার API Endpoint
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                userId: currentUser._id, 
-                categories: newCats, 
-                currency: newCurr, 
-                preferences: newPref 
-            }),
-        });
-        // আমরা সার্ভারের রেসপন্সের জন্য অপেক্ষা করব না UI আপডেটের ক্ষেত্রে
-    } catch (error) {
-        console.error("Background Sync Failed");
-    }
-};
+    // ৪. সলিড সিঙ্ক ইঞ্জিন (Debounced Sync for performance)
+    const performServerSync = useCallback(async (updatedUser: any) => {
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
 
-    // 🔥 ৩. প্রেফারেন্স ইঞ্জিন (FIXED)
-    const updatePreference = (key: string, value: any) => {
-        // ক. স্টেট আপডেট
-        const updatedPrefs = { ...preferences, [key]: value };
-        setPreferences(updatedPrefs);
-
-        // খ. ইনস্ট্যান্ট এফেক্ট (DOM Manipulation)
-        const root = document.documentElement;
-
-        if (key === 'isMidnight') {
-            if (value) {
-                root.classList.add('midnight-mode');
-                setTheme('dark'); // মিডনাইট হলে ডার্ক ফোর্স করা
-            } else {
-                root.classList.remove('midnight-mode');
+        syncTimeoutRef.current = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/user/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        userId: updatedUser._id, 
+                        categories: updatedUser.categories, 
+                        currency: updatedUser.currency, 
+                        preferences: updatedUser.preferences 
+                    }),
+                });
+                if (!res.ok) throw new Error("Sync failed");
+                console.log("📡 Settings: Cloud Registry Synchronized.");
+            } catch (error) {
+                console.warn("Settings Sync Pending (Network/Server)");
             }
-        }
+        }, 1000); // ১ সেকেন্ড ওয়েট করবে যাতে ঘনঘন সেভ না হয়
+    }, []);
 
-        if (key === 'compactMode') {
-            value ? root.classList.add('compact-deck') : root.classList.remove('compact-deck');
-        }
+    // ৫. কোর আপডেট লজিক (Optimistic Update)
+    const masterUpdate = (updates: any) => {
+        if (!currentUser) return;
 
-        if (key === 'language') {
-            // ল্যাঙ্গুয়েজ চেঞ্জ হলে ইভেন্ট ফায়ার করা
-            localStorage.setItem('vault_lang', value);
-            window.dispatchEvent(new Event('language-changed'));
-        }
+        // নতুন ইউজার অবজেক্ট তৈরি
+        const updatedUser = { 
+            ...currentUser, 
+            ...updates,
+            // যদি প্রেফারেন্স এর ভেতর কোনো কী থাকে তবে তা মার্জ করো
+            preferences: { ...currentUser.preferences, ...(updates.preferences || {}) }
+        };
 
-        // গ. লোকাল স্টোরেজ আপডেট (যাতে রিলোড দিলেও থাকে)
-        const updatedUser = { ...currentUser, preferences: updatedPrefs };
-    localStorage.setItem('cashbookUser', JSON.stringify(updatedUser));
-    setCurrentUser(updatedUser);
+        // লোকাল আপডেট (Instant UI)
+        setCurrentUser(updatedUser);
+        localStorage.setItem('cashbookUser', JSON.stringify(updatedUser));
 
-        // ঘ. সার্ভার সিঙ্ক (ব্যাকগ্রাউন্ডে)
-        syncSettings(categories, currency, updatedPrefs);
+        // সার্ভার সিঙ্ক
+        performServerSync(updatedUser);
     };
 
-    // ৪. ক্যাটাগরি ও কারেন্সি হ্যান্ডলার
+    const updatePreference = (key: string, value: any) => {
+        masterUpdate({ preferences: { [key]: value } });
+    };
+
     const addCategory = (tag: string) => {
         const trimmed = tag.trim().toUpperCase();
         if (!trimmed || categories.includes(trimmed)) return;
-        const newCats = [...categories, trimmed];
-        setCategories(newCats);
-        updateUserProfile({ categories: newCats });
+        masterUpdate({ categories: [...categories, trimmed] });
     };
 
     const removeCategory = (tag: string) => {
-        const newCats = categories.filter(c => c !== tag);
-        setCategories(newCats);
-        updateUserProfile({ categories: newCats });
+        masterUpdate({ categories: categories.filter((c: string) => c !== tag) });
     };
 
     const updateCurrency = (val: string) => {
-        setCurrency(val);
-        updateUserProfile({ currency: val });
-    };
-
-    // ইন্টারনাল হেল্পার (Dry Code)
-    const updateUserProfile = (updates: any) => {
-        const updatedUser = { ...currentUser, ...updates };
-        setCurrentUser(updatedUser);
-        localStorage.setItem('cashbookUser', JSON.stringify(updatedUser));
-        syncSettings(updates.categories || categories, updates.currency || currency, preferences);
+        masterUpdate({ currency: val });
     };
 
     const clearLocalCache = async () => {
-        if (!confirm("Purge local cache? This will force a re-sync.")) return;
+        if (!confirm("DANGER: This will wipe local data and force re-sync. Proceed?")) return;
         setIsCleaning(true);
         try {
             await db.delete();
             localStorage.clear();
             window.location.reload();
-        } catch (e) {
-            setIsCleaning(false);
-        }
+        } catch (e) { setIsCleaning(false); }
     };
 
     return {
         categories, currency, preferences, dbStats,
-        isLoading, isCleaning,
+        isLoading: !currentUser, isCleaning,
         addCategory, removeCategory, updatePreference, updateCurrency, clearLocalCache
     };
 };
