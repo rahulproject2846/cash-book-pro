@@ -5,6 +5,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { TranslationProvider } from '@/context/TranslationContext';
 import { ModalProvider } from '@/context/ModalContext'; 
 import { ModalRegistry } from '@/components/Modals/ModalRegistry'; 
+import { PusherProvider } from '@/context/PusherContext'; // 🔥 নতুন ইমপোর্ট
 
 /**
  * INTERNAL COMPONENT: THEME SYNCHRONIZER
@@ -56,7 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             const parsedUser = JSON.parse(savedUser);
             setCurrentUser(parsedUser);
             
-            // 🔥 IMMEDIATE DOM UPDATE (ফ্লিকারিং আটকানোর জন্য)
+            // IMMEDIATE DOM UPDATE (ফ্লিকারিং আটকানোর জন্য)
             const root = document.documentElement;
             if (parsedUser.preferences?.isMidnight) root.classList.add('midnight-mode');
             if (parsedUser.preferences?.compactMode) root.classList.add('compact-deck');
@@ -73,8 +74,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     };
 
     window.addEventListener('language-changed', syncUser);
-    // আমরা ধরে নিচ্ছি সেটিংস আপডেট হলে আপনি 'settings-changed' বা স্টোরেজ ইভেন্ট ফায়ার করেন, 
-    // অথবা লোকাল স্টোরেজ লিসেনার ব্যবহার করা যায়:
     window.addEventListener('storage', syncUser); 
     
     return () => {
@@ -91,18 +90,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
         enableSystem={true} 
         disableTransitionOnChange
       >
-        <TranslationProvider currentUser={currentUser}>
-            
-            {/* 🔥 এই লাইনটি আপনার ক্লাসগুলোকে ধরে রাখবে */}
-            <ThemeSynchronizer currentUser={currentUser} />
+        {/* 🔥 PusherProvider এখানে যোগ করা হলো যাতে এটি ইউজার ডাটা পায় */}
+        <PusherProvider currentUser={currentUser}>
+            <TranslationProvider currentUser={currentUser}>
+                
+                {/* এই লাইনটি আপনার ক্লাসগুলোকে ধরে রাখবে */}
+                <ThemeSynchronizer currentUser={currentUser} />
 
-            <div style={{ opacity: mounted ? 1 : 0 }} className="transition-opacity duration-300">
-                {children}
-            </div>
-            
-            {mounted && <ModalRegistry />}
-            
-        </TranslationProvider>
+                <div style={{ opacity: mounted ? 1 : 0 }} className="transition-opacity duration-300">
+                    {children}
+                </div>
+                
+                {mounted && <ModalRegistry />}
+                
+            </TranslationProvider>
+        </PusherProvider>
       </ThemeProvider>
     </ModalProvider>
   );

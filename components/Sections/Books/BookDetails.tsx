@@ -16,7 +16,7 @@ import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helper
 import { Tooltip } from '@/components/UI/Tooltip';
 
 export const BookDetails = ({ 
-    currentBook, items, onBack, onEdit, onDelete, onToggleStatus, 
+    currentBook, items, onBack, onAdd, onEdit, onDelete, onToggleStatus, 
     searchQuery, setSearchQuery, pagination, currentUser, stats
 }: any) => {
     const { T, t, language } = useTranslation();

@@ -29,7 +29,8 @@ import { useVault } from '@/hooks/useVault';
  * Status: Final Polish, Enterprise Grade Reactivity.
  */
 export const BooksSection = ({ 
-    currentUser, currentBook, setCurrentBook, onGlobalSaveBook 
+    currentUser, currentBook, setCurrentBook, onGlobalSaveBook ,
+    onSaveEntry, onDeleteEntry
 }: any) => {
     
     const { openModal } = useModal();
@@ -43,10 +44,13 @@ export const BooksSection = ({
     } = useVault(currentUser, currentBook);
 
     // ২. রিয়েক্টিভ দারোয়ান (Unsynced Units Counter)
-    const unsyncedCount = useLiveQuery(
-        () => db.entries.where('synced').equals(0).count(),
-        []
-    ) || 0;
+        const unsyncedCount = useLiveQuery(
+            () => db.entries
+                .where('synced').equals(0)
+                .and(e => e.isDeleted === 0) // 🔥 ফিক্স: ডিলিট মার্ক করা ডাটা এখানে গুনবে না
+                .count(),
+            []
+        ) || 0;
 
     // ৩. লোকাল ইউআই স্টেট
     const [searchQuery, setSearchQuery] = useState(''); 
@@ -242,17 +246,15 @@ export const BooksSection = ({
                             stats={stats} 
                             currentUser={currentUser} 
                             onBack={() => setCurrentBook(null)}
-                            onAdd={() => openModal('addEntry', { currentUser, currentBook, onSubmit: saveEntry })}
-                            onEdit={(e: any) => openModal('addEntry', { entry: e, currentBook, currentUser, onSubmit: saveEntry })}
-                            onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => deleteEntry(e) })}
+                            // 🔥 নিচের এই ৩টি লাইন একদম হুবহু রিপ্লেস কর:
+                            onAdd={() => openModal('addEntry', { currentUser, currentBook, onSubmit: onSaveEntry })}
+                            onEdit={(e: any) => openModal('addEntry', { entry: e, currentBook, currentUser, onSubmit: onSaveEntry })}
+                            onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => onDeleteEntry(e) })}
+                            
                             onToggleStatus={toggleEntryStatus}
                             searchQuery={detailsSearchQuery} 
                             setSearchQuery={setDetailsSearchQuery}
-                            pagination={{ 
-                                currentPage: detailsPage, 
-                                totalPages: Math.ceil(entries.length / 10) || 1, 
-                                setPage: setDetailsPage 
-                            }}
+                            pagination={{ currentPage: detailsPage, totalPages: Math.ceil(entries.length / 10) || 1, setPage: setDetailsPage }}
                         />
                     </motion.div>
                 )}

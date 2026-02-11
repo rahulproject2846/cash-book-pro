@@ -1,3 +1,4 @@
+// src/lib/utils/helpers.ts
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -39,4 +40,40 @@ export const getTimeAgo = (date: any, lang: string = 'en', T?: any): string => {
     interval = seconds / 60;
     if (interval >= 1) return toBn(Math.floor(interval), lang) + (lang === 'bn' ? ' মিনিট আগে' : 'M AGO');
     return lang === 'bn' ? 'এখনই' : 'JUST NOW';
+};
+
+/**
+ * 🛡️ LOGIC C: DATA SOLIDARITY (CHECKSUM GENERATOR)
+ * এটি এন্ট্রির মূল ডাটা থেকে একটি ইউনিক হ্যাশ তৈরি করে। 
+ * ট্রান্সমিশনের সময় ডাটা নষ্ট হলে সার্ভার এই চেকসাম মিলিয়ে সেটি রিজেক্ট করতে পারবে।
+ */
+export const generateChecksum = (data: { 
+    amount: number; 
+    date: string | Date; 
+    title: string 
+}): string => {
+    // ১. ডাটা নরমালাইজেশন (Strict lowercase & formatting)
+    const title = data.title?.trim().toLowerCase() || "";
+    
+    // ২. ডেট ফরম্যাটিং (নিশ্চিত করা যে টাইমস্ট্যাম্প নয়, শুধু তারিখ ব্যবহার হচ্ছে)
+    let dateStr = "";
+    if (data.date instanceof Date) {
+        dateStr = data.date.toISOString().split('T')[0];
+    } else {
+        dateStr = String(data.date).split('T')[0];
+    }
+
+    // ৩. পেলোড তৈরি
+    const payload = `${data.amount}-${dateStr}-${title}`;
+    
+    // ৪. বিটওয়াইজ হ্যাশিং অ্যালগরিদম (Fast & Efficient for JS)
+    let hash = 0;
+    for (let i = 0; i < payload.length; i++) {
+        const char = payload.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash |= 0; // Convert to 32bit integer
+    }
+
+    // ৫. সিকিউরিটি প্রিফিক্স সহ রিটার্ন (ভার্সন কন্ট্রোলড)
+    return `v1_${Math.abs(hash)}`;
 };

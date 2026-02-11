@@ -1,34 +1,35 @@
-// src/hooks/useVault.ts
+"use client";
+
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { db, generateCID } from '@/lib/offlineDB';
 import { orchestrator } from '@/lib/vault/SyncOrchestrator';
+import { generateChecksum } from '@/lib/utils/helpers';
+
+/**
+ * VAULT PRO: MASTER LOGIC ENGINE (V13.1 - FIX CHECKSUM PARITY)
+ */
 
 export const useVault = (currentUser: any, currentBook?: any) => {
     const userId = currentUser?._id;
     const bookId = currentBook?._id || currentBook?.localId;
 
-    // ১. লাইভ কুয়েরি: updatedAt দিয়ে সর্ট (Latest First)
     const books = useLiveQuery(async () => {
         const data = await db.books.where('isDeleted').equals(0).toArray();
-        // ম্যানুয়াল সর্ট (JS) অনেক বেশি নির্ভরযোগ্য রিঅ্যাক্টিভিটির জন্য
         return data.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    }) || [];
+    }, []) || [];
 
     const allEntries = useLiveQuery(() => 
         db.entries.where('isDeleted').equals(0).toArray()
     ) || [];
 
-    // 🔥 ফিক্স ১: এন্ট্রি সর্টিং (Newest First)
     const entries = useMemo(() => {
         if (!allEntries || !bookId) return [];
         return allEntries
             .filter(e => String(e.bookId) === String(bookId))
-            // সর্টিং লজিক: লেটেস্ট এন্ট্রি সবার উপরে
             .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     }, [allEntries, bookId]);
 
-    // ৩. পাওয়ারফুল স্ট্যাটাস ইঞ্জিন
     const stats = useMemo(() => {
         const target = bookId ? entries : allEntries;
         const income = target
@@ -37,116 +38,176 @@ export const useVault = (currentUser: any, currentBook?: any) => {
         const expense = target
             .filter(e => String(e.type).toLowerCase() === 'expense' && String(e.status).toLowerCase() === 'completed')
             .reduce((s, e) => s + Number(e.amount), 0);
-        
+        const pending = target
+            .filter(e => String(e.status).toLowerCase() === 'pending')
+            .reduce((s, e) => s + Number(e.amount), 0);
+            
+        const balance = income - expense;
+        // Logic: (Surplus / Income) * 100. Handles division by zero.
+        const healthScore = income > 0 ? Math.max(0, Math.floor((balance / income) * 100)) : 0;
+
         return { 
             inflow: income, 
             outflow: expense, 
-            balance: income - expense 
+            balance: balance, 
+            pending: pending,
+            healthScore: healthScore
         };
     }, [entries, allEntries, bookId]);
 
-    // --- ৪. কোর অ্যাকশনস (CRUD) ---
-
-    // 🔥 ফিক্স ২: সেভ প্রোটোকল এবং বুক আপডেট
-// useVault.ts এর saveEntry ফাংশনের ভেতরে:
-
-const saveEntry = async (entryForm: any, editTarget?: any) => {
-    if (!bookId || !userId) return false;
-    const timestamp = Date.now();
-    
-    const dbData: any = {
-        ...entryForm,
-        amount: Number(entryForm.amount),
-        bookId: String(bookId),
-        userId: String(userId),
-        synced: 0,
-        isDeleted: 0,
-        updatedAt: timestamp,
-        createdAt: editTarget ? editTarget.createdAt : timestamp,
-        cid: editTarget?.cid || generateCID()
+    /**
+     * লোডাল ইন্টেলিজেন্স: ডুপ্লিকেট এন্ট্রি চেক (১০ মিনিটের উইন্ডো)
+     */
+    const checkPotentialDuplicate = async (amount: number, type: string) => {
+        const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+        try {
+            const matches = await db.entries
+                .where('updatedAt')
+                .above(tenMinutesAgo)
+                .filter(e => 
+                    e.amount === Number(amount) && 
+                    e.type.toLowerCase() === type.toLowerCase() && 
+                    e.isDeleted === 0
+                )
+                .toArray();
+            return matches.length > 0;
+        } catch (err) {
+            return false;
+        }
     };
 
-    try {
-        if (editTarget?.localId) {
-            await db.entries.update(editTarget.localId, dbData);
-        } else {
-            await db.entries.add(dbData);
-        }
+    // এন্ট্রি সেভ লজিক (FIXED)
+    const saveEntry = async (entryForm: any, editTarget?: any) => {
+        if (!bookId || !userId) return false;
+        const timestamp = Date.now();
         
-        // 🔥 মাস্টার ফিক্স: এন্ট্রি সেভ হওয়ার পর 'বই' এর সময় আপডেট করা
-        // যাতে ড্যাশবোর্ডে "Just Now" দেখায় এবং বইটি সবার উপরে চলে আসে
-        const bookToUpdate = await db.books
-            .where('localId').equals(currentBook?.localId || 0)
-            .or('_id').equals(String(bookId))
-            .first();
+        // ১. টাইটেল নরমালাইজেশন (সার্ভারের সাথে মিল রেখে)
+        const finalTitle = entryForm.title?.trim() || `${(entryForm.category || 'GENERAL').toUpperCase()} RECORD`;
 
-        if (bookToUpdate && bookToUpdate.localId) {
-            await db.books.update(bookToUpdate.localId, { updatedAt: timestamp });
-        }
+        // ২. Logic B: Increment vKey
+        const currentVKey = Number(editTarget?.vKey || 0);
+        const nextVKey = Math.max(Number(editTarget?.vKey || 0) + 1, (editTarget?.vKey || 0) + 1);
 
-        orchestrator.triggerSync(userId);
-        return true;
-    } catch (err) { return false; }
-};
+        // ৩. Logic C: Generate Checksum (Using normalized title)
+        const checksum = generateChecksum({
+            amount: Number(entryForm.amount),
+            date: entryForm.date,
+            title: finalTitle
+        });
+
+        const dbData: any = {
+            ...entryForm,
+            localId: editTarget?.localId || entryForm?.localId || undefined, 
+            _id: editTarget?._id || entryForm?._id || undefined,
+            title: finalTitle, // স্টোর করার সময়ও ফাইনাল টাইটেল রাখা ভালো
+            amount: Number(entryForm.amount),
+            bookId: String(bookId),
+            userId: String(userId),
+            type: String(entryForm.type).toLowerCase(),
+            status: String(entryForm.status || 'completed').toLowerCase(),
+            updatedAt: timestamp,
+            synced: 0,
+            isDeleted: 0,
+            cid: editTarget?.cid || entryForm?.cid || generateCID(),
+            vKey: nextVKey,
+            checksum: checksum,
+            syncAttempts: 0 
+        };
+
+        try {
+            await db.entries.put(dbData);
+            
+            const bKey = currentBook?.localId || currentBook?._id;
+            if (bKey) {
+                const bookVKey = (currentBook?.vKey || 0) + 1;
+                await db.books.update(Number(bKey) || bKey, { 
+                    updatedAt: timestamp, 
+                    synced: 0,
+                    vKey: bookVKey,
+                    syncAttempts: 0 
+                });
+            }
+
+            window.dispatchEvent(new Event('vault-updated'));
+            orchestrator.triggerSync(userId); 
+            return true;
+        } catch (err) { return false; }
+    };
 
     const deleteEntry = async (target: any) => {
         try {
-            const id = target.localId || target._id;
+            const key = Number(target.localId);
+            if (!key) return false;
             const timestamp = Date.now();
-            // সফট ডিলিট
-            await db.entries.update(id, { isDeleted: 1, synced: 0, updatedAt: timestamp });
-            
-            // ডিলিট করলেও বই সবার উপরে আসবে
-            if (target.bookId) {
-                const book = await db.books.where('_id').equals(String(target.bookId)).first();
-                if (book && book.localId) {
-                    await db.books.update(book.localId, { updatedAt: timestamp });
-                }
-            }
+            await db.entries.update(key, { isDeleted: 1, synced: 0, updatedAt: timestamp, vKey: (target.vKey || 0) + 1, syncAttempts: 0 });
+            const bKey = String(target.bookId);
+            const book = await db.books.where('_id').equals(bKey).or('localId').equals(Number(bKey) || 0).first();
+            if (book?.localId) await db.books.update(book.localId, { updatedAt: timestamp, synced: 0, vKey: (book.vKey || 0) + 1, syncAttempts: 0 });
+            window.dispatchEvent(new Event('vault-updated'));
             orchestrator.triggerSync(userId);
             return true;
-        } catch (err) { 
-            return false; 
-        }
+        } catch (err) { return false; }
     };
 
-// useVault.ts এর toggleEntryStatus ফাংশন:
+    const restoreEntry = async (target: any) => {
+        try {
+            const key = Number(target.localId);
+            if (!key) return false;
+            await db.entries.update(key, { isDeleted: 0, synced: 0, updatedAt: Date.now(), vKey: (target.vKey || 0) + 1, syncAttempts: 0 });
+            window.dispatchEvent(new Event('vault-updated'));
+            orchestrator.triggerSync(userId);
+            return true;
+        } catch (err) { return false; }
+    };
 
-const toggleEntryStatus = async (entry: any) => {
-    if (!entry.localId) return false;
-    const newStatus = entry.status === 'pending' ? 'completed' : 'pending';
-    const timestamp = Date.now();
-    try {
-        await db.entries.update(entry.localId, { 
-            status: newStatus, 
-            synced: 0, 
-            updatedAt: timestamp 
-        });
+    const toggleEntryStatus = async (entry: any) => {
+        if (!entry.localId) return false;
+        const newStatus = entry.status === 'pending' ? 'completed' : 'pending';
+        const timestamp = Date.now();
+        try {
+            await db.entries.update(Number(entry.localId), { status: newStatus, synced: 0, updatedAt: timestamp, vKey: (entry.vKey || 0) + 1, syncAttempts: 0 });
+            const bKey = String(entry.bookId);
+            const book = await db.books.where('_id').equals(bKey).or('localId').equals(Number(bKey) || 0).first();
+            if (book?.localId) await db.books.update(book.localId, { updatedAt: timestamp, synced: 0, vKey: (book.vKey || 0) + 1, syncAttempts: 0 });
+            orchestrator.triggerSync(userId); 
+            return true;
+        } catch (err) { return false; }
+    };
 
-        // বইয়ের সময় আপডেট করা (সর্টিং ঠিক রাখতে)
-        const book = await db.books.where('_id').equals(String(entry.bookId)).or('localId').equals(Number(entry.bookId) || 0).first();
-        if (book && book.localId) {
-            await db.books.update(book.localId, { updatedAt: timestamp });
-        }
-        
-        // অর্কেস্ট্রেটরকে কল করো (ডাটা ডুপ্লিকেট হবে না কারণ আমরা শুধু status update করছি)
-        orchestrator.triggerSync(userId); 
-        return true;
-    } catch (err) { return false; }
-};
+    const deleteBook = async (target: any) => {
+        try {
+            const key = Number(target.localId || target.id);
+            if (!key) return false;
+            await db.books.update(key, { isDeleted: 1, synced: 0, updatedAt: Date.now(), vKey: (target.vKey || 0) + 1, syncAttempts: 0 });
+            window.dispatchEvent(new Event('vault-updated'));
+            orchestrator.triggerSync(userId);
+            return true;
+        } catch (err) { return false; }
+    };
 
-console.log("LOG_ENGINE: Books Count ->", books.length);
-console.log("LOG_ENGINE: All Entries Count ->", allEntries.length);
-console.log("DEBUG [useVault]: Current Entries Count:", entries.length);
-    return {
-        books,
-        entries,
-        allEntries,
-        stats,
-        saveEntry,
-        deleteEntry,
-        toggleEntryStatus,
-        isLoading: !books,
-        fetchData: () => {} 
+    const restoreBook = async (target: any) => {
+        try {
+            const key = Number(target.localId || target.id);
+            if (!key) return false;
+            await db.books.update(key, { isDeleted: 0, synced: 0, updatedAt: Date.now(), vKey: (target.vKey || 0) + 1, syncAttempts: 0 });
+            window.dispatchEvent(new Event('vault-updated'));
+            orchestrator.triggerSync(userId);
+            return true;
+        } catch (err) { return false; }
+    };
+
+    return { 
+        books, 
+        entries, 
+        allEntries, 
+        stats, 
+        checkPotentialDuplicate,
+        saveEntry, 
+        deleteEntry, 
+        restoreEntry, 
+        toggleEntryStatus, 
+        deleteBook, 
+        restoreBook, 
+        isLoading: !books 
     };
 };

@@ -2,11 +2,12 @@
 import React from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useModal } from '@/context/ModalContext';
-import { Plus } from 'lucide-react';
+import { Plus, Zap } from 'lucide-react';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
+import { cn } from '@/lib/utils/helpers';
 
 // মডাল কম্পোনেন্ট ইম্পোর্টস
 import { 
@@ -17,40 +18,37 @@ import {
   AdvancedExportModal 
 } from './index';
 import { ShareModal } from './ShareModal';
-import { AnalyticsChart } from '@/components/AnalyticsChart';
+import { TerminationModal } from './TerminationModal';
+import { AnalyticsChart } from '@/components/AnalyticsChart'; // পাথ সিঙ্ক করা হয়েছে
 
 /**
- * VAULT PRO: MASTER MODAL REGISTRY (ULTRA-SMOOTH V5)
+ * VAULT PRO: MASTER MODAL REGISTRY (V12.0 ELITE)
  * -----------------------------------------------
- * Fix: Removed 'isOpen &&' from mounting logic. 
- * Now components stay in DOM for 300ms during exit, allowing Framer Motion to finish.
+ * Status: Final Polish, Safe Lifecycle, Multi-type Payload Handling.
  */
 export const ModalRegistry = () => {
   const { view, isOpen, data, closeModal } = useModal();
-  const { T, t } = useTranslation();
+  const { T, t, language } = useTranslation();
 
   return (
-    <AnimatePresence mode="popLayout" initial={false}>
-      {/* ১. বুক অ্যাড / এডিট মডাল */}
+    <AnimatePresence mode="popLayout">
+      {/* ১. বুক ম্যানেজমেন্ট প্রোটোকল */}
       {(view === 'addBook' || view === 'editBook') && (
         <BookModal 
           key="book-modal"
-          type={view === 'addBook' ? 'add' : 'edit'}
-          isOpen={isOpen} // 🔥 এখন এটি মডালের ভেতরের অ্যানিমেশন কন্ট্রোল করবে
+          isOpen={isOpen}
           onClose={closeModal}
           initialData={data?.currentBook || data?.book || null}
           currentUser={data?.currentUser}
           onSubmit={data?.onSubmit}
-          formData={data?.bookForm}
-          setFormData={data?.setBookForm}
         />
       )}
 
-      {/* ২. এন্ট্রি অ্যাড / এডিট মডাল */}
+      {/* ২. এন্ট্রি ম্যানেজমেন্ট প্রোটোকল */}
       {(view === 'addEntry' || view === 'editEntry') && (
         <EntryModal 
           key="entry-modal"
-          isOpen={isOpen} // 🔥 সিঙ্ক করা হয়েছে
+          isOpen={isOpen}
           onClose={closeModal}
           currentUser={data?.currentUser}
           currentBook={data?.currentBook || data?.book}
@@ -59,78 +57,84 @@ export const ModalRegistry = () => {
         />
       )}
 
-      {/* ৩. এনালাইটিক্স মডাল */}
+      {/* ৩. ভিজ্যুয়াল ইন্টেলিজেন্স (Analytics) */}
       {view === 'analytics' && (
         <ModalLayout 
           key="analytics-modal" 
-          title={T('modal_analytics_title') || "Vault Intelligence"} 
+          title={T('modal_analytics_title') || "ANALYTICS INTELLIGENCE"} 
           onClose={closeModal}
-          isOpen={isOpen} // মডাল লেআউটে পাস করা হলো
+          isOpen={isOpen}
         >
-          <div className="h-[450px] py-4" onClick={(e) => e.stopPropagation()}>
+          <div className="min-h-[450px] py-6 px-2 overflow-y-auto no-scrollbar">
             <AnalyticsChart entries={data?.entries || []} />
           </div>
         </ModalLayout>
       )}
 
-      {/* ৪. এক্সপোর্ট মডাল */}
+      {/* ৪. ডাটা এক্সট্রাকশন (Export) */}
       {view === 'export' && (
         <AdvancedExportModal 
           key="export-modal" 
-          isOpen={isOpen} // 🔥 সিঙ্ক
+          isOpen={isOpen}
           onClose={closeModal} 
           entries={data?.entries || []} 
-          bookName={data?.bookName} 
+          bookName={data?.bookName || data?.currentBook?.name} 
         />
       )}
 
-      {/* ৫. শেয়ার মডাল */}
+      {/* ৫. শেয়ারড অ্যাক্সেস প্রোটোকল */}
       {view === 'share' && (
         <ShareModal 
           key="share-modal" 
-          isOpen={isOpen} // 🔥 সিঙ্ক
+          isOpen={isOpen}
           onClose={closeModal} 
           currentBook={data?.currentBook || data?.book} 
           onToggleShare={data?.onToggleShare} 
         />
       )}
 
-      {/* ৬. ডিলিট কনফার্মেশন */}
-      {(view === 'deleteConfirm' || view === 'deleteBookConfirm') && (
-        <DeleteConfirmModal 
-          key="delete-confirm-modal"
-          isOpen={isOpen} // 🔥 সিঙ্ক
-          targetName={data?.targetName}
-          onConfirm={data?.onConfirm}
+      {/* ৬. টার্মিনেশন প্রোটোকল (Delete Confirmations) */}
+      {(view === 'deleteConfirm' || view === 'deleteBookConfirm' || view === 'deleteTagConfirm') && (
+        <TerminationModal 
+          key="termination-modal"
+          isOpen={isOpen}
           onClose={closeModal}
+          targetName={data?.targetName}
+          title={data?.title}
+          desc={data?.desc}
+          onConfirm={data?.onConfirm}
         />
       )}
 
-      {/* ৭. প্রোটোকল শর্টকাট মডাল */}
+      {/* ৭. সিস্টেম শর্টকাট হাব */}
       {view === 'shortcut' && (
         <ModalLayout 
           key="shortcut-modal" 
-          title={T('modal_shortcut_title') || "Protocol Shortcut"} 
+          title={T('modal_shortcut_title') || "SYSTEM SHORTCUTS"} 
           onClose={closeModal}
           isOpen={isOpen}
         >
-          <div className="grid grid-cols-1 gap-[var(--app-gap,1rem)] p-2">
+          <div className="p-4 space-y-4">
               <Tooltip text={t('tt_shortcut_initialize')}>
                   <button 
                       onClick={() => { if (data?.onInitialize) data.onInitialize(); }} 
-                      className="w-full p-[var(--card-padding,1.5rem)] bg-white/[0.03] border-2 border-[var(--border-color)] rounded-[var(--radius-card,32px)] flex items-center gap-[var(--app-gap,1.25rem)] group hover:bg-orange-500 transition-all duration-300 shadow-lg"
+                      className={cn(
+                        "w-full p-8 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[32px]",
+                        "flex items-center gap-6 group hover:bg-orange-500/5 hover:border-orange-500/40 transition-all shadow-xl"
+                      )}
                   >
-                        <div className="p-4 bg-orange-500 rounded-2xl text-white group-hover:bg-[var(--bg-app)] group-hover:text-orange-500 shadow-lg shadow-orange-500/20 transition-all">
-                          <Plus size={24} strokeWidth={4}/>
+                        <div className="p-4 bg-orange-500 rounded-2xl text-white shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
+                          <Plus size={28} strokeWidth={4}/>
                         </div>
                         <div className="text-left">
-                          <p className="font-black uppercase text-xs tracking-[2px] text-[var(--text-main)]">
+                          <p className="font-black uppercase text-sm tracking-[3px] text-[var(--text-main)]">
                             {T('initialize_ledger')}
                           </p>
-                          <p className="text-[9px] font-bold text-[var(--text-muted)] group-hover:bg-[var(--bg-app)] uppercase tracking-widest mt-1">
-                            {t('shortcut_desc') || "Go to Dashboard and create vault"}
+                          <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mt-1.5 opacity-60">
+                            {t('shortcut_desc')}
                           </p>
                         </div>
+                        <Zap size={16} className="ml-auto text-orange-500 opacity-20 group-hover:opacity-100 transition-opacity" />
                   </button>
               </Tooltip>
           </div>

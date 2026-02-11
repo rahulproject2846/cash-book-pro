@@ -293,14 +293,9 @@ html {
   backdrop-filter: blur(30px) !important;       /* strong blur */
   -webkit-backdrop-filter: blur(30px) !important;
 
-  /* Force stacking context */
   isolation: isolate;
-
-  /* Optional border & shadow */
   border: 1px solid rgba(0,0,0,0.05);
   box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-
-  /* Smooth transition */
   transition: background-color 0.2s ease, backdrop-filter 0.2s ease, border-color 0.2s ease;
 }
 
@@ -308,4 +303,23 @@ html {
 .dark .full-blur {
   background-color: rgba(28, 28, 30, 0.55); /* Dark glass */
   border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 
+ * 🚀 TURBO MODE PROTOCOL (VAULT PRO V10.0)
+ * Logic: Disables heavy visual effects for extreme performance on low-end devices.
+ */
+body.turbo-active *,
+body.turbo-active {
+  /* Stop all transitions and animations instantly */
+  transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+  animation-duration: 0ms !important;
+  
+  /* Disable expensive GPU filters */
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  
+  /* Optional: Disable complex box shadows if needed for even more speed */
+  /* box-shadow: none !important; */
 }

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     CreditCard, Layers, Info, ArrowDownLeft, ArrowUpRight, 
     Calendar, Clock, X, PlusCircle, Calculator, 
-    SlidersHorizontal, ChevronDown, CheckCircle2 
+    SlidersHorizontal, ChevronDown, CheckCircle2, AlertTriangle 
 } from 'lucide-react';
 
 // Components & Utils
@@ -12,8 +12,9 @@ import { OSInput, ModalEliteDropdown } from '@/components/UI/FormComponents';
 import { Keypad } from '@/components/UI/Keypad';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useVault } from '@/hooks/useVault';
 
-// --- 🧠 SMART MATH ENGINE (Logic remains same) ---
+// --- 🧠 SMART MATH ENGINE ---
 const safeCalculate = (expression: string) => {
     try {
         const sanitized = expression.replace(/[^0-9+\-*/.]/g, '');
@@ -24,6 +25,7 @@ const safeCalculate = (expression: string) => {
 
 export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
     const { T, t, language } = useTranslation();
+    const { checkPotentialDuplicate } = useVault(currentUser, currentBook);
     
     // States
     const [isExpanded, setIsExpanded] = useState(false);
@@ -32,6 +34,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
     const [isMobile, setIsMobile] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [showKeypad, setShowKeypad] = useState(false);
+    const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
 
     const [form, setForm] = useState({ 
         title: '', category: 'GENERAL', paymentMethod: 'CASH', 
@@ -39,9 +42,23 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
     });
 
     const userCategories = currentUser?.categories || ['GENERAL', 'FOOD', 'TRANSPORT'];
-    const dateInputRef = useRef<HTMLInputElement>(null);
-    const timeInputRef = useRef<HTMLInputElement>(null);
     const amountInputRef = useRef<HTMLInputElement>(null);
+
+    // --- 🛡️ LOGIC: POTENTIAL DUPLICATE CHECK ---
+    useEffect(() => {
+        const checkDuplicate = async () => {
+            const finalAmount = safeCalculate(amountStr);
+            if (finalAmount > 0) {
+                const isDuplicate = await checkPotentialDuplicate(finalAmount, activeInput === 'in' ? 'income' : 'expense');
+                setShowDuplicateWarning(isDuplicate);
+            } else {
+                setShowDuplicateWarning(false);
+            }
+        };
+
+        const timeoutId = setTimeout(checkDuplicate, 500); // Debounce check
+        return () => clearTimeout(timeoutId);
+    }, [amountStr, activeInput]);
 
     useEffect(() => { 
         setIsMobile(window.innerWidth < 768); 
@@ -170,7 +187,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
 
                 <div className="flex-1 overflow-y-auto no-scrollbar px-6 pt-2 pb-32 md:pb-8">
                     
-                    {/* 1. TYPE TOGGLE - Refined Glassmorphism UI */}
+                    {/* 1. TYPE TOGGLE */}
                     <div className="grid grid-cols-2 gap-3 mb-6">
                         <button 
                             onClick={() => { setActiveInput('out'); handleAmountFocus(); }} 
@@ -198,12 +215,13 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                         </button>
                     </div>
 
-                    {/* 2. AMOUNT DISPLAY - High Visibility Design */}
-                    <div 
+                    {/* 2. AMOUNT DISPLAY - Apple Haptic Look */}
+                    <motion.div 
                         onClick={handleAmountFocus} 
+                        animate={showKeypad ? { scale: [1, 1.02, 1] } : {}}
                         className={cn(
-                            "w-full h-24 mb-6 rounded-3xl bg-[var(--bg-app)] border-2 flex flex-col justify-center px-6 relative transition-all", 
-                            showKeypad ? "border-orange-500/50 shadow-lg ring-4 ring-orange-500/5" : "border-[var(--border)]"
+                            "w-full h-24 mb-6 rounded-3xl bg-[var(--bg-app)] border-2 flex flex-col justify-center px-6 relative transition-all duration-300", 
+                            showKeypad ? "border-orange-500 shadow-[0_0_25px_-5px_rgba(249,115,22,0.2)]" : "border-[var(--border)]"
                         )}
                     >
                         <div className="flex items-center gap-2 mb-1">
@@ -222,7 +240,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                                 getFontSize(amountStr)
                             )}
                         />
-                    </div>
+                    </motion.div>
 
                     {/* 3. MAIN INPUTS */}
                     <div className="space-y-4">
@@ -235,7 +253,6 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                             onKeyDown={handleKeyDown}
                         />
                         
-                        {/* 4. CONFIGURATION TOGGLE */}
                         <button 
                             type="button" 
                             onClick={() => setIsExpanded(!isExpanded)} 
@@ -253,7 +270,6 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                             <ChevronDown size={18} className={cn("transition-transform duration-300", isExpanded && "rotate-180")} />
                         </button>
                         
-                        {/* 5. EXPANDABLE SECTION */}
                         <AnimatePresence>
                             {isExpanded && (
                                 <motion.div 
@@ -263,70 +279,54 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                                     className="overflow-hidden space-y-4 pt-1"
                                 >
                                     <div className="grid grid-cols-2 gap-4">
-                                        <OSInput 
-                                            type="date" value={form.date} 
-                                            onChange={(v:any) => setForm({...form, date: v})} 
-                                            icon={Calendar} 
-                                            onClick={() => dateInputRef.current?.showPicker()} 
-                                        />
-                                        <OSInput 
-                                            type="time" value={form.time} 
-                                            onChange={(v:any) => setForm({...form, time: v})} 
-                                            icon={Clock} 
-                                            onClick={() => timeInputRef.current?.showPicker()} 
-                                        />
+                                        <OSInput type="date" value={form.date} onChange={(v:any) => setForm({...form, date: v})} icon={Calendar} />
+                                        <OSInput type="time" value={form.time} onChange={(v:any) => setForm({...form, time: v})} icon={Clock} />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
-                                        <ModalEliteDropdown 
-                                            label={T('classification')} 
-                                            current={form.category} 
-                                            options={userCategories} 
-                                            onChange={(v:any) => setForm({...form, category: v})} 
-                                            icon={Layers} 
-                                        />
-                                        <ModalEliteDropdown 
-                                            label={T('via_protocol')} 
-                                            current={form.paymentMethod} 
-                                            options={['CASH', 'BANK', 'BKASH', 'NAGAD']} 
-                                            onChange={(v:any) => setForm({...form, paymentMethod: v})} 
-                                            icon={CreditCard} 
-                                        />
+                                        <ModalEliteDropdown label={T('classification')} current={form.category} options={userCategories} onChange={(v:any) => setForm({...form, category: v})} icon={Layers} />
+                                        <ModalEliteDropdown label={T('via_protocol')} current={form.paymentMethod} options={['CASH', 'BANK', 'BKASH', 'NAGAD']} onChange={(v:any) => setForm({...form, paymentMethod: v})} icon={CreditCard} />
                                     </div>
                                     
-                                    <OSInput 
-                                        value={form.note} 
-                                        onChange={(v:any) => setForm({...form, note: v})} 
-                                        placeholder={t('placeholder_entry_memo')} 
-                                        icon={Info} 
-                                        onFocus={handleTextFocus} 
-                                    />
+                                    <OSInput value={form.note} onChange={(v:any) => setForm({...form, note: v})} placeholder={t('placeholder_entry_memo')} icon={Info} onFocus={handleTextFocus} />
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
                 </div>
 
-                {/* CALCULATOR KEYPAD (Mobile Only) - Improved Alignment */}
+                {/* --- 🚀 BOTTOM ACTION AREA (Keypad + Warnings + Submit) --- */}
                 <AnimatePresence>
                     {isMobile && showKeypad && (
                         <motion.div
-                            initial={{ y: "100%" }} 
-                            animate={{ y: 0 }} 
-                            exit={{ y: "100%" }}
+                            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
                             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                            className="absolute bottom-0 w-full z-[100] bg-[var(--bg-card)] border-t border-[var(--border)]"
+                            className="absolute bottom-0 w-full z-[100] bg-[var(--bg-card)] border-t border-[var(--border)] pb-safe"
                         >
+                            {/* Potential Duplicate Warning (Mobile) */}
+                            <AnimatePresence>
+                                {showDuplicateWarning && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                                        className="mx-4 mb-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-xl flex items-center gap-3"
+                                    >
+                                        <AlertTriangle size={18} className="text-orange-500 shrink-0" />
+                                        <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wider leading-tight">
+                                            {t('duplicate_warning')}
+                                        </p>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
                             <Keypad 
                                 onInput={(val) => setAmountStr(prev => prev + val)}
                                 onDelete={() => setAmountStr(prev => prev.slice(0, -1))}
                             />
-                            {/* Mobile Submit integrated in keypad area or floating */}
-                            <div className="px-4 pb-4 bg-[var(--bg-card)]">
+                            <div className="px-4 pb-4">
                                 <button 
                                     onClick={() => handleSubmit()} 
                                     disabled={isLoading}
-                                    className="w-full h-14 bg-orange-500 text-white rounded-2xl font-black text-[13px] uppercase tracking-[3px] shadow-lg flex items-center justify-center gap-2"
+                                    className="w-full h-14 bg-orange-500 text-white rounded-2xl font-black text-[13px] uppercase tracking-[3px] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform"
                                 >
                                     {isLoading ? 'Processing...' : 'Save Entry'}
                                 </button>
@@ -335,8 +335,20 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                     )}
                 </AnimatePresence>
 
-                {/* Desktop Save Button - Styled with Glow */}
+                {/* Desktop Save Button with Duplicate Warning */}
                 <div className="hidden md:block p-6 border-t border-[var(--border)]/50 bg-[var(--bg-card)]">
+                    <AnimatePresence>
+                        {showDuplicateWarning && (
+                            <motion.div 
+                                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                                className="mb-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl flex items-center gap-3"
+                            >
+                                <AlertTriangle size={18} className="text-orange-500" />
+                                <span className="text-[11px] font-bold text-orange-600 uppercase tracking-widest">{t('duplicate_warning')}</span>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    
                     <button 
                         onClick={() => handleSubmit()} 
                         className="group w-full h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-black text-[12px] uppercase tracking-[3px] shadow-[0_10px_30px_-10px_rgba(249,115,22,0.5)] transition-all active:scale-[0.97] flex items-center justify-center gap-2"

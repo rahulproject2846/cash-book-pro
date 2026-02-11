@@ -20,6 +20,7 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
         if (!currentUser) return;
         
         const root = document.documentElement;
+        const body = document.body;
         const prefs = currentUser.preferences || {};
 
         // Compact Mode Apply
@@ -31,6 +32,13 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
             if (theme !== 'dark') setTheme('dark');
         } else {
             root.classList.remove('midnight-mode');
+        }
+
+        // 🚀 Turbo Mode Apply (New Intelligence)
+        if (prefs.turboMode) {
+            body.classList.add('turbo-active');
+        } else {
+            body.classList.remove('turbo-active');
         }
 
         // Language apply

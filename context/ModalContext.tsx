@@ -1,7 +1,14 @@
 "use client";
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
-// ১. মডাল টাইপ ডেফিনিশন (Strict Protocol)
+/**
+ * VAULT PRO: MASTER MODAL PROTOCOL (V12.0 ELITE)
+ * -----------------------------------------------
+ * Handles global modal states with framed-motion exit safety.
+ * Added: 'deleteTagConfirm' and typed data handling.
+ */
+
+// ১. মডাল টাইপ ডেফিনিশন (Strict Registry)
 type ModalView = 
   | 'addBook' 
   | 'editBook' 
@@ -12,6 +19,7 @@ type ModalView =
   | 'share' 
   | 'deleteBookConfirm' 
   | 'deleteConfirm' 
+  | 'deleteTagConfirm' // 🔥 ফিক্স: রেড লাইন দূর করার জন্য এটি যোগ করা হয়েছে
   | 'shortcut' 
   | 'none';
 
@@ -30,21 +38,26 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [data, setData] = useState<any>(null);
 
-  // মডাল ওপেন করার ফাংশন
-  const openModal = useCallback((view: ModalView, modalData: any = null) => {
+  // ২. মডাল ওপেন প্রোটোকল (Memoized for performance)
+  const openModal = useCallback((targetView: ModalView, modalData: any = null) => {
     setData(modalData);
-    setView(view);
-    setIsOpen(true);
+    setView(targetView);
+    // ছোট একটি ডিলে দিয়ে ওপেন করা হয় যাতে ডাটা প্রপারলি সিঙ্ক হয়
+    requestAnimationFrame(() => {
+        setIsOpen(true);
+    });
   }, []);
 
-  // মডাল ক্লোজ করার ফাংশন
+  // ৩. মডাল ক্লোজ প্রোটোকল (Exit Animation Safety)
   const closeModal = useCallback(() => {
     setIsOpen(false);
-    // ডিলে দিয়ে স্টেট রিসেট করা হয় যাতে এক্সিট অ্যানিমেশন স্মুথ থাকে
+    
+    // 🔥 মাস্টার ডিলে: ৩৫০ms ওয়েট করা হয় যাতে Framer Motion এর exit অ্যানিমেশন শেষ হতে পারে।
+    // এটি না থাকলে মডাল হুট করে গায়েব হয়ে যায়, যা দেখতে বিচ্ছিরি লাগে।
     setTimeout(() => {
       setView('none');
       setData(null);
-    }, 300);
+    }, 350); 
   }, []);
 
   return (
@@ -54,9 +67,11 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// কাস্টম হুক
+// ৪. কাস্টম ইজি-হুক
 export const useModal = () => {
   const context = useContext(ModalContext);
-  if (!context) throw new Error("useModal must be used within ModalProvider");
+  if (!context) {
+    throw new Error("CRITICAL_FAULT: useModal must be used within a ModalProvider node.");
+  }
   return context;
 };

@@ -1,81 +1,141 @@
+// src/app/api/entries/route.ts
 import connectDB from "@/lib/db";
 import Entry from "@/models/Entry";
+import User from "@/models/User"; // ইউজার মডেল ইমপোর্ট করা হলো
 import { NextResponse } from "next/server";
+import Pusher from 'pusher';
+import { generateChecksum } from "@/lib/utils/helpers";
 
+const pusher = new Pusher({
+  appId: process.env.PUSHER_APP_ID!,
+  key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
+  secret: process.env.PUSHER_SECRET!,
+  cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+  useTLS: true
+});
+
+/**
+ * GET: ডাটা সিংক্রোনাইজেশন এবং হেলথ চেক (Logic D + Security Check)
+ */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const bookId = searchParams.get('bookId');
-    const userId = searchParams.get('userId'); // অনেক সময় ইউজার আইডি দিয়েও সব আনতে হয়
+    const userId = searchParams.get('userId');
+    const since = searchParams.get('since'); 
 
-    if (!bookId && !userId) {
-      return NextResponse.json({ success: true, entries: [] });
-    }
+    if (!userId) return NextResponse.json({ message: "UID missing" }, { status: 400 });
 
     await connectDB();
-    
-    // কুয়েরি বিল্ডার
-    const query = bookId ? { bookId } : {}; 
-    
-    // 🔥 cid সহ সব ডাটা ফেরত পাঠানো হচ্ছে
-    const entries = await Entry.find(query).sort({ date: -1, createdAt: -1 });
-    
-    return NextResponse.json({
-        success: true,
-        count: entries.length,
-        entries: entries
+
+    // --- সিকিউরিটি চেক: ইউজার ব্লকড কি না ---
+    const user = await User.findById(userId).select('isActive');
+    if (!user) return NextResponse.json({ message: "Identity not found" }, { status: 404 });
+    if (user.isActive === false) {
+        return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
+    }
+
+    let query: any = { userId };
+
+    if (since && since !== '0') {
+        query.updatedAt = { $gt: new Date(Number(since)) };
+    }
+
+    const entries = await Entry.find(query)
+        .sort({ updatedAt: -1 })
+        .lean();
+
+    return NextResponse.json({ 
+        success: true, 
+        entries, 
+        isActive: true, // অর্কেস্ট্রেটরকে সিগন্যাল দেওয়া
+        serverTime: Date.now() 
     }, { status: 200 });
 
-  } catch (error: any) {
-    return NextResponse.json({ message: "Fetch failed" }, { status: 500 });
+  } catch (error: any) { 
+    return NextResponse.json({ message: "Fail" }, { status: 500 }); 
   }
 }
 
-// src/app/api/entries/route.ts এর POST ফাংশনটি এভাবে আপডেট করুন
-
+/**
+ * POST: নতুন এন্ট্রি তৈরি এবং চেকসাম ভ্যালিডেশন (Logic C + Security Check)
+ */
 export async function POST(req: Request) {
   try {
     const data = await req.json();
-    const { 
-        cid, bookId, userId, title, amount, type, 
-        category, paymentMethod, note, date, time, status 
-    } = data;
+    const { cid, bookId, userId, amount, date, title, category, checksum, vKey } = data;
 
-    // 🔥 ১. ফ্লেক্সিবল ভ্যালিডেশন (টাইটেল আর রিকোয়ার্ড নয়)
-    if (!bookId || !userId || amount === undefined || !date) {
-        return NextResponse.json({ 
-            message: "Mandatory fields (Book, User, Amount) missing" 
-        }, { status: 400 });
+    if (!bookId || !userId || amount === undefined || !date || !checksum) {
+        return NextResponse.json({ message: "Solidarity fields missing" }, { status: 400 });
     }
 
     await connectDB();
 
-    // ২. ডুপ্লিকেট চেক (CID দিয়ে)
-    if (cid) {
-        const existingEntry = await Entry.findOne({ cid });
-        if (existingEntry) return NextResponse.json({ message: "Synced", entry: existingEntry }, { status: 409 });
+    // --- সিকিউরিটি চেক: ইউজার ব্লকড কি না ---
+    const user = await User.findById(userId).select('isActive');
+    if (!user) return NextResponse.json({ message: "Identity not found" }, { status: 404 });
+    if (user.isActive === false) {
+        return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
 
-    // ৩. সেভ প্রোটোকল
-    const newEntry = await Entry.create({
-      cid: cid || `server_${Date.now()}`,
-      bookId,
-      userId,
-      // 🔥 যদি টাইটেল না থাকে, তবে ক্যাটাগরির নাম বা 'UNNAMED' বসবে
-      title: title?.trim() || `${category || 'GENERAL'} PROTOCOL`, 
-      amount: Number(amount),
-      type: type?.toLowerCase() || 'expense',
-      category: category || "General",
-      paymentMethod: paymentMethod || "Cash",
-      note: note?.trim() || "",
-      date: new Date(date),
-      time: time || "", 
-      status: status || "completed"
+    // ডুপ্লিকেট প্রোটেকশন
+    if (cid) {
+        const existing = await Entry.findOne({ cid }).select('_id cid');
+        if (existing) {
+            return NextResponse.json({ 
+                success: true, 
+                entry: existing,
+                isActive: true,
+                message: "Duplicate prevented" 
+            }, { status: 409 });
+        }
+    }
+
+    // Logic C: Checksum Validation
+    const serverCalculatedChecksum = generateChecksum({
+        amount: Number(amount),
+        date: date,
+        title: title || `${category || 'GENERAL'} RECORD`
     });
 
-    return NextResponse.json({ success: true, entry: newEntry }, { status: 201 });
+    if (serverCalculatedChecksum !== checksum) {
+        return NextResponse.json({ 
+            message: "Data integrity failure",
+            errorCode: "CHECKSUM_MISMATCH",
+            isActive: true
+        }, { status: 400 });
+    }
 
-  } catch (error: any) {
-    return NextResponse.json({ message: "Sync Error" }, { status: 500 });
+    // ডাটা ক্রিয়েশন
+    const newEntryData = {
+        ...data,
+        title: title?.trim() || `${category || 'GENERAL'} RECORD`,
+        date: new Date(date),
+        status: String(data.status || 'completed').toLowerCase(),
+        type: String(data.type || 'expense').toLowerCase(),
+        category: String(data.category || 'general').toLowerCase(),
+        paymentMethod: String(data.paymentMethod || 'cash').toLowerCase(),
+        vKey: vKey || 1,
+        checksum: checksum
+    };
+
+    const newEntry = await Entry.create(newEntryData);
+
+    try {
+        await pusher.trigger(`vault_channel_${userId}`, 'sync_signal', { 
+            refresh: true, 
+            type: 'ENTRY_CREATE',
+            bookId: bookId,
+            cid: cid
+        });
+    } catch (e) {}
+
+    return NextResponse.json({ 
+        success: true, 
+        entry: newEntry,
+        isActive: true 
+    }, { status: 201 });
+
+  } catch (error: any) { 
+    return NextResponse.json({ message: "Sync Engine Error" }, { status: 500 }); 
   }
 }

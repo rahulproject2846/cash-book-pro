@@ -41,33 +41,35 @@ export const Tooltip = ({ text, children, position = 'top', className }: Tooltip
         >
             {children}
             
-            <AnimatePresence>
-                {isVisible && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: position === 'top' ? 10 : -10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        className={cn("absolute z-[9999] pointer-events-none", positionClasses[position])}
-                    >
-                        <div className={cn(
-                            "relative bg-black/90 text-white backdrop-blur-xl",
-                            "px-4 py-2 rounded-full border border-white/10 shadow-2xl",
-                            "whitespace-nowrap flex items-center justify-center"
-                        )}>
-                            <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">
-                                {text}
-                            </span>
+<AnimatePresence>
+    {isVisible && (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: position === 'top' ? 8 : -8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 600, damping: 35 }}
+            className={cn("absolute z-[9999] pointer-events-none", positionClasses[position])}
+        >
+            <div className={cn(
+                // ব্যাকগ্রাউন্ড আপনার থিমের কার্ড কালার এবং গ্লাস ইফেক্ট মেনে চলবে
+                "relative bg-[var(--bg-card)] text-[var(--text-main)] backdrop-blur-xl saturate-[180%]",
+                "px-4 py-2 rounded-full border border-[var(--border-color)] shadow-[var(--card-shadow)]",
+                "whitespace-nowrap flex items-center justify-center transition-colors duration-300"
+            )}>
+                <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">
+                    {text}
+                </span>
 
-                            {/* Apple Style Tiny Arrow */}
-                            <div className={cn(
-                                "absolute w-2.5 h-2.5 bg-black/90 border-white/10 rotate-45",
-                                arrowClasses[position]
-                            )} />
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                {/* Apple Style Tiny Arrow - ডাইনামিক কালার সহ */}
+                <div className={cn(
+                    "absolute w-2.5 h-2.5 bg-[var(--bg-card)] border-[var(--border-color)] rotate-45 transition-colors duration-300",
+                    position === 'top' ? "border-b border-r" : "border-t border-l", // বর্ডার পজিশন ফিক্স
+                    arrowClasses[position]
+                )} />
+            </div>
+        </motion.div>
+    )}
+</AnimatePresence>
         </div>
     );
 };

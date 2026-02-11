@@ -1,174 +1,245 @@
-// src/lib/vault/SyncOrchestrator.ts
+"use client";
 import { db } from '@/lib/offlineDB';
+
+/**
+ * VAULT PRO: SYNC ORCHESTRATOR (V22.0 - SECURITY ENFORCED)
+ * ------------------------------------------------------------
+ * Logic A: Outbox Pattern with Exponential Backoff.
+ * Logic B: vKey Logical Clock Conflict Resolution.
+ * Logic C: Checksum Solidarity Integration.
+ * Logic D: Deep Health Check & Auto-Healing.
+ * Security: Administrative Account Suspension (isActive check).
+ */
 
 class SyncOrchestrator {
   private isSyncing = false;
-  private channel = new BroadcastChannel('vault_sync_broadcast');
+  private channel = new BroadcastChannel('vault_global_sync');
+  private lastSyncKey = 'vault_last_sync_timestamp';
+  private MAX_RETRIES = 5;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      // ✅ রেড লাইন ফিক্স: এরো ফাংশন ব্যবহার করে 'this' কে বাইন্ড করা হয়েছে
+      this.channel.onmessage = (e) => {
+        if (e.data.type === 'FORCE_REFRESH') {
+          window.dispatchEvent(new Event('vault-updated'));
+        }
+      };
       window.addEventListener('online', () => this.triggerSync());
-      this.channel.onmessage = (e) => e.data.type === 'REFRESH' && window.dispatchEvent(new Event('vault-updated'));
     }
   }
 
-  private notify() {
-    this.channel.postMessage({ type: 'REFRESH' });
+  private broadcast() {
+    this.channel.postMessage({ type: 'FORCE_REFRESH' });
     window.dispatchEvent(new Event('vault-updated'));
   }
 
-  // ৩. কোর সিঙ্ক ইঞ্জিন (The Master Logic)
-  // src/lib/vault/SyncOrchestrator.ts
+  /**
+   * Security Gate: isActive Check
+   * সার্ভার থেকে আসা রেসপন্সে ইউজার ব্লকড কি না তা চেক করে।
+   */
+  private checkSecurityStatus(data: any) {
+    if (data && data.isActive === false) {
+      console.error("🛑 Security Protocol: Account Suspended by Admin.");
+      this.logout();
+      return false;
+    }
+    return true;
+  }
 
-async triggerSync(userId?: string) {
-    // ১. ইউজার আইডি রিকভারি লজিক
+  /**
+   * Logic A: Backoff Calculator
+   */
+  private shouldRetry(item: any): boolean {
+    if (!item.syncAttempts || item.syncAttempts === 0) return true;
+    if (item.syncAttempts >= this.MAX_RETRIES) return false;
+
+    const delay = Math.pow(2, item.syncAttempts) * 1000;
+    const lastAttempt = item.lastAttempt || 0;
+    return Date.now() > lastAttempt + delay;
+  }
+
+  // ৩. কোর সিঙ্ক ইঞ্জিন
+  async triggerSync(userId?: string) {
     let uid = userId;
     if (!uid && typeof window !== 'undefined') {
         const saved = localStorage.getItem('cashbookUser');
         if (saved) uid = JSON.parse(saved)._id;
     }
     
-    // ২. গার্ড ক্লজ: যদি ইউজার আইডি না থাকে বা নেট না থাকে তবে কাজ করবে না
     if (!navigator.onLine || this.isSyncing || !uid) return;
 
     this.isSyncing = true;
-    console.log("📡 Orchestrator: Professional Sync Initiated...");
-
     try {
-        // --- STEP A: Books Sync (The ID Bridge) ---
+        // --- STEP A: Books Sync ---
         const pendingBooks = await db.books.where('synced').equals(0).toArray();
         for (const book of pendingBooks) {
+            if (!this.shouldRetry(book)) continue;
+
+            if (book.isDeleted === 1) {
+                if (book._id) {
+                    const res = await fetch(`/api/books/${book._id}`, { method: 'DELETE' }).catch(() => null);
+                    if (res) {
+                        const result = await res.json().catch(() => ({}));
+                        if (!this.checkSecurityStatus(result)) return; // Security Kick
+                    }
+                }
+                await db.books.delete(book.localId!);
+                continue;
+            }
+
             const res = await fetch('/api/books', {
-                method: book._id ? 'PUT' : 'POST',
+                method: book._id ? 'PUT' : 'POST', 
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: book.name, _id: book._id, userId: uid }),
+                body: JSON.stringify({ ...book, userId: uid }),
             });
 
-            if (res.ok) {
-                const result = await res.json();
-                // 🔥 ফিক্স: আপনার API হয়তো 'book' অথবা 'data' পাঠায়, তাই দুটোই চেক করছি
-                const serverId = result.book?._id || result.data?._id;
-                
-                if (serverId) {
-                    // লোকাল এন্ট্রিগুলোর bookId আপডেট (localId -> serverId)
-                    await db.entries.where('bookId').equals(String(book.localId)).modify({ bookId: serverId });
-                    await db.books.update(book.localId!, { _id: serverId, synced: 1 });
+            if (res) {
+                const result = await res.json().catch(() => ({}));
+                if (!this.checkSecurityStatus(result)) return; // Security Kick
+
+                if (res.ok) {
+                    const sId = result.book?._id || result.data?._id || book._id;
+                    await db.books.update(book.localId!, { _id: sId, synced: 1, syncAttempts: 0 });
+                } else if (res.status === 409) {
+                    await db.books.update(book.localId!, { synced: 1, syncAttempts: 0 });
+                } else {
+                    await db.books.update(book.localId!, { syncAttempts: (book.syncAttempts || 0) + 1, lastAttempt: Date.now() });
                 }
             }
         }
 
-        // --- STEP B: Entries Sync (Dependency Handling) ---
+        // --- STEP B: Entries Sync ---
         const pendingEntries = await db.entries.where('synced').equals(0).toArray();
         for (const entry of pendingEntries) {
-            
-            let finalBookId = entry.bookId;
+            if (!this.shouldRetry(entry)) continue;
 
-            // যদি bookId এখনও নাম্বার থাকে, তবে চেক করো ওই বই সিঙ্ক হয়েছে কি না
-            if (!isNaN(Number(finalBookId))) {
-                const parentBook = await db.books.get(Number(finalBookId));
-                if (parentBook?._id) {
-                    finalBookId = parentBook._id;
+            if (entry.isDeleted === 1) {
+                if (entry._id) {
+                    const res = await fetch(`/api/entries/${entry._id}`, { 
+                        method: 'DELETE',
+                        body: JSON.stringify({ vKey: entry.vKey }) 
+                    }).catch(() => null);
+                    if (res) {
+                        const result = await res.json().catch(() => ({}));
+                        if (!this.checkSecurityStatus(result)) return; // Security Kick
+                    }
+                }
+                await db.entries.update(entry.localId!, { synced: 1, syncAttempts: 0 });
+                continue;
+            }
+
+            const res = await fetch(entry._id ? `/api/entries/${entry._id}` : '/api/entries', {
+                method: entry._id ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...entry, userId: uid, amount: Number(entry.amount) }),
+            });
+
+            if (res) {
+                const result = await res.json().catch(() => ({}));
+                if (!this.checkSecurityStatus(result)) return; // Security Kick
+
+                if (res.ok) {
+                    const sId = result.entry?._id || result.data?._id || entry._id;
+                    await db.entries.update(entry.localId!, { synced: 1, _id: sId, syncAttempts: 0 });
+                } else if (res.status === 409) {
+                    await db.entries.update(entry.localId!, { synced: 1, syncAttempts: 0 });
                 } else {
-                    console.warn("⚠️ Skipping entry sync: Parent book is still offline.");
-                    continue; 
+                    await db.entries.update(entry.localId!, { syncAttempts: (entry.syncAttempts || 0) + 1, lastAttempt: Date.now() });
                 }
             }
-
-            const apiStatus = entry.status.charAt(0).toUpperCase() + entry.status.slice(1);
-            
-            let res;
-           if (entry._id) {
-    // 🔥 স্ট্যাটাস আপডেটের জন্য সঠিক পেলোড
-    const safeStatus = entry.status || 'completed'; 
-// আমরা এখন শুধু .toLowerCase() ব্যবহার করব, .toUpperCase() বাদ
-const apiStatus = safeStatus.toLowerCase(); 
-
-// 2. এখন যেখানেই স্ট্যাটাস পাঠান, এই 'apiStatus' ব্যবহার করুন।
-// ... বডিতে এই apiStatus পাঠানো হচ্ছে
-body: JSON.stringify({ status: apiStatus })
-    
-    res = await fetch(`/api/entries/status/${entry._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: apiStatus }) // বডি শুধু { status: "Completed" } পাঠাবে
-    });
-
-    if (res?.ok) {
-        // সার্ভার সফল হলে লোকাল ডাটা সিঙ্কড মার্ক করা
-        await db.entries.update(entry.localId!, { synced: 1 });
-    }
-
-            } else {
-                const { localId, synced, isDeleted, ...payload } = entry;
-                res = await fetch('/api/entries', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        ...payload, 
-                        bookId: finalBookId, 
-                        status: apiStatus, 
-                        userId: uid, 
-                        amount: Number(entry.amount) 
-                    })
-                });
-            }
-
-            if (res?.ok || res?.status === 409) {
-                const result = await res.json();
-                // 🔥 ফিক্স: এখানেও API ফরম্যাট অনুযায়ী 'entry' অথবা 'data' চেক করা হচ্ছে
-                const sId = result.entry?._id || result.data?._id || entry._id;
-                await db.entries.update(entry.localId!, { synced: 1, _id: sId, bookId: finalBookId });
-            }
         }
-
-        this.notify();
-        console.log("✅ Orchestrator: Vault Protocol Synchronized.");
-    } catch (err) {
-        console.error("❌ Orchestrator Critical Error:", err);
+        this.broadcast();
+    } catch (err: any) { 
+        console.error("Sync Cycle Error:", err);
     } finally {
         this.isSyncing = false;
+        this.hydrate(uid as string);
     }
-}
+  }
 
-  // হাইড্রেশন লজিক (Pull & Merge)
-  async hydrate(userId: string) {
+  // ৪. স্মার্ট ডেল্টা হাইড্রেশন
+  async hydrate(userId: string, forceFullSync = false) {
     if (!navigator.onLine || !userId) return;
+    const lastSync = forceFullSync ? '0' : (localStorage.getItem(this.lastSyncKey) || '0');
+    
     try {
       const [bRes, eRes] = await Promise.all([
-        fetch(`/api/books?userId=${userId}`),
-        fetch(`/api/entries/all?userId=${userId}`)
+        fetch(`/api/books?userId=${userId}&since=${lastSync}`),
+        fetch(`/api/entries/all?userId=${userId}&since=${lastSync}`)
       ]);
 
       if (bRes.ok) {
-        const { books } = await bRes.json();
-        for (const sb of (books || [])) {
+        const bData = await bRes.json();
+        if (!this.checkSecurityStatus(bData)) return; // Security Kick
+
+        const serverBooks = bData.books || bData.data || [];
+        for (const sb of serverBooks) {
           const local = await db.books.where('_id').equals(sb._id).first();
-          if (!local || sb.updatedAt > (local.updatedAt || 0)) {
-            await db.books.put({ ...sb, synced: 1, isDeleted: 0 });
+          if (!local || (sb.vKey > (local.vKey || 0)) || new Date(sb.updatedAt).getTime() > new Date(local.updatedAt || 0).getTime()) {
+            await db.books.put({ ...sb, synced: 1, isDeleted: sb.isDeleted ? 1 : 0 });
           }
         }
       }
-      
+
       if (eRes.ok) {
-        const { entries } = await eRes.json();
-        for (const se of (entries || [])) {
-          const local = await db.entries.where('cid').equals(se.cid || "").or('_id').equals(se._id).first();
-          if (!local || se.updatedAt > (local.updatedAt || 0)) {
-            await db.entries.put({ ...se, localId: local?.localId, synced: 1, isDeleted: 0, status: se.status.toLowerCase() });
-          }
-        }
+        const eData = await eRes.json();
+        if (!this.checkSecurityStatus(eData)) return; // Security Kick
+
+        const serverEntries = eData.entries || eData.data || [];
+        await db.transaction('rw', db.entries, async () => {
+            for (const se of serverEntries) {
+                const local = await db.entries.where('cid').equals(se.cid || "").or('_id').equals(se._id).first();
+                if (se.isDeleted === true || se.isDeleted === 1) {
+                    if (local) await db.entries.delete(local.localId!);
+                    continue; 
+                }
+                if (!local || (se.vKey > (local.vKey || 0)) || new Date(se.updatedAt).getTime() > new Date(local.updatedAt || 0).getTime()) {
+                  await db.entries.put({ ...se, localId: local?.localId, synced: 1, isDeleted: 0, status: se.status.toLowerCase(), vKey: se.vKey || 1 });
+                }
+            }
+        });
       }
-      this.notify();
-      this.triggerSync(userId);
+
+      localStorage.setItem(this.lastSyncKey, Date.now().toString());
+      this.broadcast();
+      if (!forceFullSync) this.performHealthCheck(userId);
     } catch (err) { }
   }
 
+  /**
+   * Logic D: Deep Health Check
+   */
+  async performHealthCheck(userId: string) {
+    try {
+        const res = await fetch(`/api/entries/count?userId=${userId}`);
+        if (!res.ok) return;
+        const result = await res.json();
+        
+        if (!this.checkSecurityStatus(result)) return; // Security Kick
+        
+        const localCount = await db.entries.count();
+        const serverCount = result.count;
+        
+        if (serverCount > localCount) {
+            this.hydrate(userId, true);
+        }
+    } catch (e) {}
+  }
+
+  // --- ⚡ PUSHER TARGETED SIGNAL ENGINE ---
+  initPusher(pusher: any, userId: string) {
+    if (!pusher || !userId) return;
+    const channel = pusher.subscribe(`vault_channel_${userId}`);
+    channel.bind('sync_signal', (data: { type: string, id?: string }) => {
+        if (data.type === 'BOOK_UPDATE') this.hydrate(userId);
+        else this.triggerSync(userId);
+    });
+  }
+
   async logout() {
-    const unsynced = await db.entries.where('synced').equals(0).count();
-    if (unsynced > 0 && !confirm(`Purge ${unsynced} unsynced items?`)) return;
     await db.delete();
     localStorage.removeItem('cashbookUser');
+    localStorage.removeItem(this.lastSyncKey);
     window.location.href = '/';
   }
 }

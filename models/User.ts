@@ -1,11 +1,12 @@
+// src/models/User.ts
 import mongoose, { Schema, model, models, Document } from 'mongoose';
 
 /**
- * USER IDENTITY SCHEMA PROTOCOL (FINAL v3)
+ * USER IDENTITY SCHEMA PROTOCOL (FINAL v11.0 - UNBREAKABLE)
  * ---------------------------------------
  * Project: Vault Pro (Financial OS)
  * Module: Authentication Core
- * Updates: Added 'googleId' for secure linking and 'isVerified' for OTP logic.
+ * Updates: Added 'isActive' flag for administrative control and blocking.
  */
 
 // ১. টাইপস্ক্রিপ্ট ইন্টারফেস (Protocol Intelligence)
@@ -22,6 +23,7 @@ export interface IUser extends Document {
   
   // Security & Verification
   isVerified: boolean; // OTP বা Google Login এর মাধ্যমে ভেরিফাইড কি না
+  isActive: boolean;   // অ্যাডমিন কন্ট্রোল: true মানে সচল, false মানে ব্লকড
   otpCode?: string;
   otpExpiry?: Date;
   
@@ -86,6 +88,10 @@ const UserSchema = new Schema<IUser>({
     type: Boolean,
     default: false // রেজিস্ট্রেশনের পর ডিফল্ট false, OTP বা Google দিয়ে true হবে
   },
+  isActive: {
+    type: Boolean,
+    default: true // ডিফল্টভাবে ইউজার সচল থাকবে
+  },
   otpCode: {
     type: String,
     select: false // সিকিউরিটি: এটি ক্লায়েন্টে যাবে না
@@ -119,5 +125,6 @@ const UserSchema = new Schema<IUser>({
 // ২. ইনডেক্সিং: ইমেইল এবং গুগল আইডি দিয়ে সার্চ ফাস্ট করার জন্য
 UserSchema.index({ email: 1 });
 UserSchema.index({ googleId: 1 });
+UserSchema.index({ isActive: 1 }); // ব্লকড ইউজারদের দ্রুত ফিল্টার করার জন্য ইনডেক্স
 
 export default models.User || model<IUser>('User', UserSchema);

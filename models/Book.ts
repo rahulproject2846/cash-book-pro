@@ -1,10 +1,11 @@
+// src/models/Book.ts
 import mongoose, { Schema, model, models, Document } from 'mongoose';
 
 /**
- * VAULT (BOOK) SCHEMA PROTOCOL - V2 (Elite Upgrade)
+ * VAULT (BOOK) SCHEMA PROTOCOL - V11.0 (Stability Upgrade)
  * -----------------------------------------------
- * এটি প্রতিটি লেজারের জন্য মূল ডাটা স্ট্রাকচার। 
- * নতুনভাবে Type (General/Customer/Supplier), Phone এবং Image সাপোর্ট যোগ করা হয়েছে।
+ * Architecture: Logical Clock (vKey) integrated for Sync Conflict Resolution.
+ * Logic B: If Server vKey > Local vKey, client triggers background hydration.
  */
 
 // ১. টাইপস্ক্রিপ্ট ইন্টারফেস
@@ -18,6 +19,8 @@ export interface IBook extends Document {
   type: 'general' | 'customer' | 'supplier';
   phone?: string;
   image?: string; // Base64 বা ইমেজ URL
+  // --- Stability Upgrade Field ---
+  vKey: number; // Logic B: Logical Clock for Conflict Resolution
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,14 +71,21 @@ const BookSchema = new Schema<IBook>({
   image: { 
     type: String, 
     default: "" // ভল্ট আইডেন্টিটি ইমেজ (Base64)
+  },
+  // --- ৩. Stability Protocol Field ---
+  vKey: {
+    type: Number,
+    default: 1, // Default to 1 for backward compatibility
+    required: true
   }
 }, { 
   timestamps: true, 
-  versionKey: false 
+  versionKey: false // Mongoose default __v off (We use our custom vKey)
 });
 
-// ৩. ইনডেক্সিং: সার্চ এবং সর্টিং পারফরম্যান্স অপ্টিমাইজেশন
+// ৪. ইনডেক্সিং: সার্চ এবং সর্টিং পারফরম্যান্স অপ্টিমাইজেশন
 BookSchema.index({ userId: 1, updatedAt: -1 });
 BookSchema.index({ userId: 1, type: 1 }); // টাইপ অনুযায়ী দ্রুত খোঁজার জন্য
+BookSchema.index({ userId: 1, vKey: 1 }); // Logic D: Health Check performance
 
 export default models.Book || model<IBook>('Book', BookSchema);
