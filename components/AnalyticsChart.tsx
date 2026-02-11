@@ -1,20 +1,27 @@
 "use client";
 import React, { useMemo } from 'react';
-import { 
-    PieChart, Pie, Cell, ResponsiveContainer, 
-    Tooltip as ChartTooltip 
-} from 'recharts';
+import dynamic from 'next/dynamic';
+
+// --- 📦 RECHARTS DYNAMIC (Turbopack Compatible & Optimized) ---
+// সরাসরি লাইব্রেরি থেকে Named Export নিয়ে আসা হয়েছে যাতে 'default export' এরর না আসে
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false });
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false });
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false });
+const ChartTooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false });
+
+// --- 🎨 ICONS OPTIMIZED ---
+// সরাসরি 'lucide-react' থেকে ইম্পোর্ট, Next.js এটি এখন নিজে থেকেই অপ্টিমাইজ করে
 import { PieChart as PieIcon, Zap, ShieldCheck, GitCommit } from 'lucide-react';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
-import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
-
+import { cn, toBn } from '@/lib/utils/helpers';
 export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
     const { T, t, language } = useTranslation();
     
-    // --- 🧬 ১. MEMOIZED LOGIC (Standardized) ---
+    // --- 🧬 ১. MEMOIZED LOGIC (লজিক অপরিবর্তিত রাখা হয়েছে) ---
     const { categoryData, totalValue } = useMemo(() => {
         const data = entries
             .filter(e => 
@@ -96,7 +103,7 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                     </PieChart>
                 </ResponsiveContainer>
 
-                {/* --- 🎯 ৩. CENTER LABEL (The Apple Identity Node) --- */}
+                {/* --- 🎯 ৩. CENTER LABEL --- */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] opacity-30">
                         {T('total_expense') || "TOTAL"}

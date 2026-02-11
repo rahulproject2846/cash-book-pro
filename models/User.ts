@@ -123,8 +123,6 @@ const UserSchema = new Schema<IUser>({
 });
 
 // ২. ইনডেক্সিং: ইমেইল এবং গুগল আইডি দিয়ে সার্চ ফাস্ট করার জন্য
-UserSchema.index({ email: 1 });
-UserSchema.index({ googleId: 1 });
 UserSchema.index({ isActive: 1 }); // ব্লকড ইউজারদের দ্রুত ফিল্টার করার জন্য ইনডেক্স
 
 export default models.User || model<IUser>('User', UserSchema);

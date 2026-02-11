@@ -1,22 +1,43 @@
 "use client";
-import React from 'react';
+import React, { useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
+
+// ✅ Lucide Icons: সরাসরি লাইব্রেরি থেকে ইম্পোর্ট, Next.js অটো-অপ্টিমাইজ করবে
 import { 
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, 
-    PieChart, Pie, Cell 
-} from 'recharts';
-import { Activity, PieChart as PieIcon, CreditCard, Wallet, Zap, ShieldCheck, Cpu, GitCommit, BadgeCheck } from 'lucide-react';
+    Activity, 
+    PieChart as PieIcon, 
+    CreditCard, 
+    Wallet, 
+    Zap, 
+    GitCommit, 
+    BadgeCheck 
+} from 'lucide-react';
+
+// ✅ Recharts Dynamic Imports: Named Export এরর (Export default doesn't exist) সমাধান করা হয়েছে
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false });
+const AreaChart = dynamic(() => import('recharts').then(mod => mod.AreaChart), { ssr: false });
+const Area = dynamic(() => import('recharts').then(mod => mod.Area), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: false });
+const CartesianGrid = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), { ssr: false });
+const ChartTooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false });
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false });
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false });
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
-import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
+import { cn, toBn } from '@/lib/utils/helpers';
+
 
 export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, symbol }: any) => {
     const { T, t, language } = useTranslation();
-    const PIE_COLORS = ['#F97316', '#3B82F6', '#10B981', '#EF4444', '#8B5CF6', '#64748B'];
+    
+    // ✅ Memoized Colors to prevent re-renders
+    const PIE_COLORS = useMemo(() => ['#F97316', '#3B82F6', '#10B981', '#EF4444', '#8B5CF6', '#64748B'], []);
 
-    // --- 🎨 CUSTOM ELITE GLASS TOOLTIP ---
     const CustomTooltip = ({ active, payload }: any) => {
         if (active && payload && payload.length) {
             return (
@@ -41,14 +62,11 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
         <div className={cn("space-y-[1.5rem] md:space-y-[2.5rem] transition-all duration-500 pb-10")}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
                 
-                {/* --- 1. FLOW VELOCITY TREND (Area Chart) --- */}
-                <div className={cn(
-                    "lg:col-span-2 bg-[var(--bg-card)] rounded-[40px] border border-[var(--border)]",
-                    "p-6 md:p-10 shadow-2xl relative overflow-hidden group transition-all duration-500"
-                )}>
+                {/* --- 1. FLOW VELOCITY TREND --- */}
+                <div className="lg:col-span-2 bg-[var(--bg-card)] rounded-[40px] border border-[var(--border)] p-6 md:p-10 shadow-2xl relative overflow-hidden group transition-all duration-500">
                     <div className="flex justify-between items-start mb-12 relative z-10">
                         <div className="flex items-center gap-5">
-                            <Tooltip text={t('tt_flow_velocity') || "Monitors transaction speed and volume"}>
+                            <Tooltip text={t('tt_flow_velocity') || "Monitors transaction speed"}>
                                 <div className="p-3.5 bg-orange-500/10 rounded-[22px] text-orange-500 border border-orange-500/20 shadow-inner">
                                     <Activity size={24} strokeWidth={2.5} />
                                 </div>
@@ -60,12 +78,10 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                 <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-50">Sequential Intelligence Engine</p>
                             </div>
                         </div>
-                        <Tooltip text={t('tt_live_feed') || "Data updated in real-time"}>
-                            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-xl cursor-help">
-                                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                                <span className="text-[8px] font-black uppercase text-green-500 tracking-widest">LIVE FEED</span>
-                            </div>
-                        </Tooltip>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-xl">
+                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                            <span className="text-[8px] font-black uppercase text-green-500 tracking-widest">LIVE FEED</span>
+                        </div>
                     </div>
                     
                     <div className="h-[320px] w-full relative z-10 pr-4">
@@ -76,27 +92,22 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                     <linearGradient id="chartOut" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#EF4444" stopOpacity={0.2}/><stop offset="95%" stopColor="#EF4444" stopOpacity={0}/></linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="var(--border)" opacity={0.1} />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: 'var(--text-muted)', fontWeight: '900', letterSpacing: '1px'}} dy={15} />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: 'var(--text-muted)', fontWeight: '900'}} dy={15} />
                                 <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: 'var(--text-muted)', fontWeight: '900'}} tickFormatter={(v) => toBn(v, language)} />
                                 <ChartTooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--border)', strokeWidth: 1 }} />
-                                <Area type="monotone" dataKey="income" stroke="#10B981" strokeWidth={4} fill="url(#chartIn)" dot={false} activeDot={{r: 6, fill: '#10B981', strokeWidth: 4, stroke: '#fff'}} />
-                                <Area type="monotone" dataKey="expense" stroke="#EF4444" strokeWidth={4} fill="url(#chartOut)" dot={false} activeDot={{r: 6, fill: '#EF4444', strokeWidth: 4, stroke: '#fff'}} />
+                                <Area type="monotone" dataKey="income" stroke="#10B981" strokeWidth={4} fill="url(#chartIn)" activeDot={{r: 6}} />
+                                <Area type="monotone" dataKey="expense" stroke="#EF4444" strokeWidth={4} fill="url(#chartOut)" activeDot={{r: 6}} />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* --- 2. CAPITAL SPLIT (Pie Chart) --- */}
-                <div className={cn(
-                    "bg-[var(--bg-card)] rounded-[40px] border border-[var(--border)]",
-                    "p-6 md:p-10 flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-500"
-                )}>
+                {/* --- 2. CAPITAL SPLIT --- */}
+                <div className="bg-[var(--bg-card)] rounded-[40px] border border-[var(--border)] p-6 md:p-10 flex flex-col shadow-2xl relative overflow-hidden group transition-all duration-500">
                     <div className="flex items-center gap-4 mb-10">
-                        <Tooltip text={t('tt_capital_split') || "Shows asset distribution across tags"}>
-                            <div className="p-3.5 bg-blue-500/10 rounded-[22px] text-blue-500 border border-blue-500/20 shadow-inner">
-                                <PieIcon size={24} strokeWidth={2.5} />
-                            </div>
-                        </Tooltip>
+                        <div className="p-3.5 bg-blue-500/10 rounded-[22px] text-blue-500 border border-blue-500/20 shadow-inner">
+                            <PieIcon size={24} strokeWidth={2.5} />
+                        </div>
                         <div className="min-w-0">
                             <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none truncate">
                                 {T('capital_split') || "CAPITAL SPLIT"}
@@ -111,7 +122,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie data={pieData} innerRadius={75} outerRadius={95} paddingAngle={8} dataKey="value" stroke="none">
-                                            {pieData.map((e:any, i:number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} style={{outline: 'none'}} />)}
+                                            {pieData.map((_: any, i: number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                                         </Pie>
                                         <ChartTooltip content={<CustomTooltip />} />
                                     </PieChart>
@@ -132,34 +143,30 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                     </div>
 
                     <div className="mt-10 space-y-2 overflow-y-auto no-scrollbar max-h-[180px] pr-2">
-                        {pieData.map((item:any, i:number) => (
-                            <Tooltip key={i} text={`${item.name}: ${symbol}${toBn(item.value.toLocaleString(), language)}`}>
-                                <div className="flex justify-between items-center p-4 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] group/item hover:border-orange-500/30 transition-all cursor-help">
-                                    <div className="flex items-center gap-3 max-w-[70%]">
-                                        <div className="w-2 h-2 rounded-full shadow-lg shrink-0" style={{backgroundColor: PIE_COLORS[i % PIE_COLORS.length]}} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] truncate">{item.name}</span>
-                                    </div>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-[12px] font-black text-[var(--text-main)] group-hover/item:text-orange-500 transition-colors">
-                                            {toBn(Math.round((item.value / (totalExpense || 1)) * 100), language)}
-                                        </span>
-                                        <span className="text-[8px] font-bold text-[var(--text-muted)] opacity-30">%</span>
-                                    </div>
+                        {pieData.map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center p-4 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] group/item hover:border-orange-500/30 transition-all">
+                                <div className="flex items-center gap-3 max-w-[70%]">
+                                    <div className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor: PIE_COLORS[i % PIE_COLORS.length]}} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] truncate">{item.name}</span>
                                 </div>
-                            </Tooltip>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-[12px] font-black text-[var(--text-main)] group-hover/item:text-orange-500">
+                                        {toBn(Math.round((item.value / (totalExpense || 1)) * 100), language)}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-[var(--text-muted)] opacity-30">%</span>
+                                </div>
+                            </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* --- 3. LIQUIDITY PROTOCOL (The OS Modules) --- */}
+            {/* --- 3. LIQUIDITY ANALYSIS --- */}
             <div className="space-y-6">
                 <div className="flex items-center gap-4 px-1">
-                    <Tooltip text={t('tt_liquidity_monitor') || "Analyze available capital"}>
-                        <div className="p-3 bg-purple-500/10 rounded-[20px] text-purple-500 border border-purple-500/20 shadow-inner">
-                            <CreditCard size={22} strokeWidth={2.5} />
-                        </div>
-                    </Tooltip>
+                    <div className="p-3 bg-purple-500/10 rounded-[20px] text-purple-500 border border-purple-500/20 shadow-inner">
+                        <CreditCard size={22} strokeWidth={2.5} />
+                    </div>
                     <div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[4px] italic leading-none">
                             {T('liquidity_protocol') || "LIQUIDITY ANALYSIS"}
@@ -178,12 +185,8 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                         return (
                             <motion.div 
                                 key={method} whileHover={{ y: -5 }}
-                                className={cn(
-                                    "bg-[var(--bg-card)] p-8 border border-[var(--border)] rounded-[40px]",
-                                    "relative overflow-hidden group shadow-2xl transition-all duration-500"
-                                )}
+                                className="bg-[var(--bg-card)] p-8 border border-[var(--border)] rounded-[40px] relative overflow-hidden group shadow-2xl transition-all duration-500"
                             >
-                                {/* Elite Background Aura */}
                                 <div className={cn(
                                     "absolute -right-12 -bottom-12 opacity-[0.03] group-hover:opacity-[0.08] blur-3xl w-56 h-56 rounded-full transition-opacity duration-1000",
                                     isCash ? "bg-green-500" : "bg-blue-500"
@@ -192,13 +195,13 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                 <div className="flex justify-between items-start mb-10 relative z-10">
                                     <div className="flex items-center gap-5">
                                         <div className={cn(
-                                            "p-4 rounded-[22px] shadow-2xl transition-all duration-700 text-white",
-                                            isCash ? "bg-green-500 shadow-green-500/20" : "bg-blue-500 shadow-blue-500/20"
+                                            "p-4 rounded-[22px] shadow-2xl text-white",
+                                            isCash ? "bg-green-500" : "bg-blue-500"
                                         )}>
                                             {isCash ? <Wallet size={26} strokeWidth={2.5} /> : <CreditCard size={26} strokeWidth={2.5} />}
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-[12px] font-black uppercase tracking-[3px] text-[var(--text-main)] leading-none">
+                                            <p className="text-[12px] font-black uppercase tracking-[3px] text-[var(--text-main)]">
                                                 {T(isCash ? 'cash_archive' : 'bank_archive') || method}
                                             </p>
                                             <div className="flex items-center gap-2">
@@ -222,26 +225,13 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                     <div className="h-2.5 w-full bg-[var(--bg-app)] rounded-full overflow-hidden border border-[var(--border)] shadow-inner">
                                         <motion.div 
                                             initial={{ width: 0 }} animate={{ width: `${percentage}%` }}
-                                            transition={{ duration: 2.5, ease: "circOut", delay: 0.2 }}
+                                            transition={{ duration: 1.5, ease: "circOut" }}
                                             className={cn(
                                                 "h-full rounded-full transition-all duration-1000",
                                                 isCash ? "bg-green-500 shadow-[0_0_20px_rgba(34,197,94,0.5)]" : "bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
                                             )} 
                                         />
                                     </div>
-                                    <div className="flex justify-between items-center px-1">
-                                         <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[3px] opacity-20">PROTOCOL {isCash ? 'CASH' : 'STREAMS'} ACTIVE</span>
-                                         <Activity size={12} className="text-orange-500 opacity-10 group-hover:opacity-100 transition-opacity duration-1000 animate-pulse" />
-                                    </div>
-                                </div>
-
-                                {/* Hover Secret Action Detail */}
-                                <div className="absolute top-6 right-8">
-                                    <Tooltip text={isCash ? t('tt_cash_intel') : t('tt_bank_intel')}>
-                                        <div className="w-10 h-10 rounded-xl bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] opacity-20 group-hover:opacity-100 transition-all cursor-help hover:text-orange-500 hover:border-orange-500/30 shadow-inner">
-                                            <Zap size={16} fill="currentColor" strokeWidth={0} />
-                                        </div>
-                                    </Tooltip>
                                 </div>
                             </motion.div>
                         );

@@ -84,7 +84,7 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
                             <span className="relative z-20 text-[11px] font-black leading-none">{toBn(option.days, language)}</span>
                             <span className="relative z-20 text-[6px] font-black uppercase tracking-[1px] mt-0.5 opacity-60">DAYS</span>
                             {isActive && (
-                                <motion.div layoutId="activeRange" className="absolute inset-0 bg-orange-600 rounded-[16px] shadow-lg" />
+                                <motion.div layoutId="activeRange" className="absolute inset-0 bg-orange-500 rounded-[16px] shadow-lg" />
                             )}
                         </button>
                     );

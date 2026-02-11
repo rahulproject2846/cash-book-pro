@@ -4,6 +4,13 @@ import { useTheme } from 'next-themes';
 import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
 
+/**
+ * VAULT PRO: SETTINGS ENGINE (V25.0 - TURBO OPTIMIZED)
+ * ---------------------------------------------------
+ * Logic: Manages System Preferences & DOM Side-effects.
+ * Turbo Mode: Injects 'turbo-active' class for performance.
+ */
+
 export const useSettings = (currentUser: any, setCurrentUser: any) => {
     const { theme, setTheme } = useTheme();
     const [isCleaning, setIsCleaning] = useState(false);
@@ -15,7 +22,7 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
     const categories = currentUser?.categories || [];
     const currency = currentUser?.currency || 'BDT (৳)';
 
-    // ২. DOM side-effects (এটি রিলোড দিলেও Compact/Midnight ধরে রাখবে)
+    // ২. DOM side-effects (এটি রিলোড দিলেও Compact/Midnight/Turbo ধরে রাখবে)
     useEffect(() => {
         if (!currentUser) return;
         
@@ -34,7 +41,7 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
             root.classList.remove('midnight-mode');
         }
 
-        // 🚀 Turbo Mode Apply (New Intelligence)
+        // 🚀 Turbo Mode Apply (Intelligence for Low-end Devices)
         if (prefs.turboMode) {
             body.classList.add('turbo-active');
         } else {
@@ -80,26 +87,21 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
             } catch (error) {
                 console.warn("Settings Sync Pending (Network/Server)");
             }
-        }, 1000); // ১ সেকেন্ড ওয়েট করবে যাতে ঘনঘন সেভ না হয়
+        }, 1000);
     }, []);
 
     // ৫. কোর আপডেট লজিক (Optimistic Update)
     const masterUpdate = (updates: any) => {
         if (!currentUser) return;
 
-        // নতুন ইউজার অবজেক্ট তৈরি
         const updatedUser = { 
             ...currentUser, 
             ...updates,
-            // যদি প্রেফারেন্স এর ভেতর কোনো কী থাকে তবে তা মার্জ করো
             preferences: { ...currentUser.preferences, ...(updates.preferences || {}) }
         };
 
-        // লোকাল আপডেট (Instant UI)
         setCurrentUser(updatedUser);
         localStorage.setItem('cashbookUser', JSON.stringify(updatedUser));
-
-        // সার্ভার সিঙ্ক
         performServerSync(updatedUser);
     };
 

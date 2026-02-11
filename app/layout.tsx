@@ -8,7 +8,8 @@ import { ModalRegistry } from "@/components/Modals/ModalRegistry";
 const jakarta = Plus_Jakarta_Sans({ 
   subsets: ["latin"],
   weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-jakarta'
+  variable: '--font-jakarta',
+  display: 'swap', // এই লাইনটি নিশ্চিত করুন
 });
 
 export const metadata: Metadata = {
@@ -35,11 +36,7 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${jakarta.variable} font-sans antialiased selection:bg-orange-500/30 overflow-x-hidden`} suppressHydrationWarning >
@@ -65,10 +62,10 @@ export default function RootLayout({
       borderRadius: '24px',
       padding: '12px 24px',
       fontSize: '11px',
-      fontWeight: '800',
-      textTransform: 'uppercase',
-      letterSpacing: '2px',
-      boxShadow: 'var(--card-shadow)', // আপনার অ্যাপল স্টাইল শ্যাডো
+      fontWeight: '600',
+      textTransform: 'none',
+      letterSpacing: 'normal',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', // আপনার অ্যাপল স্টাইল শ্যাডো
       maxWidth: '400px',
     },
     // সাকসেস টোস্ট - অ্যাকসেন্ট কালার (Orange) ফোকাসড

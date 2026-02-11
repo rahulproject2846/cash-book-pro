@@ -3,13 +3,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, BarChart3, Download, Fingerprint, Cpu } from 'lucide-react';
 import { db } from '@/lib/offlineDB';
-import { AdvancedExportModal } from '@/components/Modals/AdvancedExportModal';
 import { useTranslation } from '@/hooks/useTranslation';
 import { HubHeader } from '@/components/Layout/HubHeader';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { StatsGrid } from '@/components/UI/StatsGrid';
-import { AnalyticsVisuals } from './AnalyticsVisuals';
 import { toBn } from '@/lib/utils/helpers';
+import dynamic from 'next/dynamic';
+
+// ১. চার্ট কম্পোনেন্টকে ডাইনামিক করো
+const AnalyticsVisuals = dynamic(() => import('./AnalyticsVisuals').then(mod => mod.AnalyticsVisuals), { 
+    ssr: false,
+    loading: () => <div className="h-[400px] w-full animate-pulse bg-orange-500/5 rounded-[40px]" />
+});
+
+// ২. এক্সপোর্ট মোডালকে ডাইনামিক করো (এটি অনেক বড় লাইব্রেরি নিয়ে বসে থাকে)
+const AdvancedExportModal = dynamic(() => import('@/components/Modals/AdvancedExportModal').then(mod => mod.AdvancedExportModal), { 
+    ssr: false 
+});
 
 export const ReportsSection = ({ currentUser }: any) => {
     const { T, t, language } = useTranslation();

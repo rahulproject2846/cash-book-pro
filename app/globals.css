@@ -323,3 +323,72 @@ body.turbo-active {
   /* Optional: Disable complex box shadows if needed for even more speed */
   /* box-shadow: none !important; */
 }
+
+
+/* --- 🚀 TURBO MODE OPTIMIZATION (THE MAGIC) --- */
+body.turbo-active *, 
+body.turbo-active {
+  /* Disable heavy transitions */
+  transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+  animation-duration: 0ms !important;
+  
+  /* Disable expensive blurs */
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  
+  /* Simplify backgrounds - use solid colors instead of glass */
+  background-attachment: scroll !important;
+  
+  /* Lighten shadows for GPU efficiency */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Specific Turbo-active Overrides */
+body.turbo-active .full-blur, 
+body.turbo-active .glass-heavy {
+  background-color: var(--bg-card) !important;
+  backdrop-filter: none !important;
+}
+
+/* --- UTILITIES --- */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.full-blur {
+  @apply rounded-[24px]; /* অ্যাপল এর মতো বড় রাউন্ডেড কর্নার */
+  
+  /* শ্যাডো টোটালি অফ করার মতো করা হয়েছে */
+  box-shadow: none !important; 
+  
+  /* ব্যাকগ্রাউন্ড কালার একদম হালকা সাদা (Off-white) */
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+
+  /* শ্যাডোর বদলে হালকা বর্ডার দিয়ে এলিমেন্ট আলাদা করা (Apple Style) */
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+  
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ৩. ডার্ক মোডেও শ্যাডো অফ থাকবে */
+.dark .full-blur {
+  background-color: rgba(28, 28, 30, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: none !important;
+}
+
+/* ৪. ইনপুট এবং ছোট বাটন ফিক্স (যাতে হিজিবিজি না লাগে) */
+input, .tag-item {
+  box-shadow: none !important;
+  border: 1px solid rgba(0, 0, 0, 0.04) !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+
+[lang="bn"], 
+.font-bengali, /* তোমার প্রজেক্টে বাংলার জন্য যে ক্লাস আছে */
+body:has([lang="bn"]) {
+  letter-spacing: 0 !important;
+}

@@ -2,13 +2,13 @@
 import { db } from '@/lib/offlineDB';
 
 /**
- * VAULT PRO: SYNC ORCHESTRATOR (V22.0 - SECURITY ENFORCED)
+ * VAULT PRO: SYNC ORCHESTRATOR (V25.0 - UNBREAKABLE INTEGRITY)
  * ------------------------------------------------------------
  * Logic A: Outbox Pattern with Exponential Backoff.
  * Logic B: vKey Logical Clock Conflict Resolution.
  * Logic C: Checksum Solidarity Integration.
  * Logic D: Deep Health Check & Auto-Healing.
- * Security: Administrative Account Suspension (isActive check).
+ * Phase 1 Fix: Map-First Hydration (Surgical Duplicate Protection).
  */
 
 class SyncOrchestrator {
@@ -35,7 +35,6 @@ class SyncOrchestrator {
 
   /**
    * Security Gate: isActive Check
-   * সার্ভার থেকে আসা রেসপন্সে ইউজার ব্লকড কি না তা চেক করে।
    */
   private checkSecurityStatus(data: any) {
     if (data && data.isActive === false) {
@@ -80,7 +79,7 @@ class SyncOrchestrator {
                     const res = await fetch(`/api/books/${book._id}`, { method: 'DELETE' }).catch(() => null);
                     if (res) {
                         const result = await res.json().catch(() => ({}));
-                        if (!this.checkSecurityStatus(result)) return; // Security Kick
+                        if (!this.checkSecurityStatus(result)) return; 
                     }
                 }
                 await db.books.delete(book.localId!);
@@ -95,7 +94,7 @@ class SyncOrchestrator {
 
             if (res) {
                 const result = await res.json().catch(() => ({}));
-                if (!this.checkSecurityStatus(result)) return; // Security Kick
+                if (!this.checkSecurityStatus(result)) return;
 
                 if (res.ok) {
                     const sId = result.book?._id || result.data?._id || book._id;
@@ -121,7 +120,7 @@ class SyncOrchestrator {
                     }).catch(() => null);
                     if (res) {
                         const result = await res.json().catch(() => ({}));
-                        if (!this.checkSecurityStatus(result)) return; // Security Kick
+                        if (!this.checkSecurityStatus(result)) return;
                     }
                 }
                 await db.entries.update(entry.localId!, { synced: 1, syncAttempts: 0 });
@@ -136,7 +135,7 @@ class SyncOrchestrator {
 
             if (res) {
                 const result = await res.json().catch(() => ({}));
-                if (!this.checkSecurityStatus(result)) return; // Security Kick
+                if (!this.checkSecurityStatus(result)) return;
 
                 if (res.ok) {
                     const sId = result.entry?._id || result.data?._id || entry._id;
@@ -157,7 +156,7 @@ class SyncOrchestrator {
     }
   }
 
-  // ৪. স্মার্ট ডেল্টা হাইড্রেশন
+  // ৪. স্মার্ট ডেল্টা হাইড্রেশন (Map-First Surgical Fix)
   async hydrate(userId: string, forceFullSync = false) {
     if (!navigator.onLine || !userId) return;
     const lastSync = forceFullSync ? '0' : (localStorage.getItem(this.lastSyncKey) || '0');
@@ -170,20 +169,30 @@ class SyncOrchestrator {
 
       if (bRes.ok) {
         const bData = await bRes.json();
-        if (!this.checkSecurityStatus(bData)) return; // Security Kick
+        if (!this.checkSecurityStatus(bData)) return;
 
         const serverBooks = bData.books || bData.data || [];
         for (const sb of serverBooks) {
-          const local = await db.books.where('_id').equals(sb._id).first();
+          // 🔥 Surgical Fix: Map by cid or _id to prevent duplication
+          const local = await db.books
+            .where('cid').equals(sb.cid || "")
+            .or('_id').equals(sb._id)
+            .first();
+
           if (!local || (sb.vKey > (local.vKey || 0)) || new Date(sb.updatedAt).getTime() > new Date(local.updatedAt || 0).getTime()) {
-            await db.books.put({ ...sb, synced: 1, isDeleted: sb.isDeleted ? 1 : 0 });
+            await db.books.put({ 
+                ...sb, 
+                localId: local?.localId, // Preserve localId to update existing instead of inserting new
+                synced: 1, 
+                isDeleted: sb.isDeleted ? 1 : 0 
+            });
           }
         }
       }
 
       if (eRes.ok) {
         const eData = await eRes.json();
-        if (!this.checkSecurityStatus(eData)) return; // Security Kick
+        if (!this.checkSecurityStatus(eData)) return;
 
         const serverEntries = eData.entries || eData.data || [];
         await db.transaction('rw', db.entries, async () => {
@@ -194,7 +203,14 @@ class SyncOrchestrator {
                     continue; 
                 }
                 if (!local || (se.vKey > (local.vKey || 0)) || new Date(se.updatedAt).getTime() > new Date(local.updatedAt || 0).getTime()) {
-                  await db.entries.put({ ...se, localId: local?.localId, synced: 1, isDeleted: 0, status: se.status.toLowerCase(), vKey: se.vKey || 1 });
+                  await db.entries.put({ 
+                    ...se, 
+                    localId: local?.localId, 
+                    synced: 1, 
+                    isDeleted: 0, 
+                    status: se.status.toLowerCase(), 
+                    vKey: se.vKey || 1 
+                  });
                 }
             }
         });
@@ -215,7 +231,7 @@ class SyncOrchestrator {
         if (!res.ok) return;
         const result = await res.json();
         
-        if (!this.checkSecurityStatus(result)) return; // Security Kick
+        if (!this.checkSecurityStatus(result)) return;
         
         const localCount = await db.entries.count();
         const serverCount = result.count;

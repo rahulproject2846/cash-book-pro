@@ -2,10 +2,11 @@
 import Dexie, { Table } from 'dexie';
 
 /**
- * VAULT PRO: CORE DATABASE ENGINE (V11.0 - UNBREAKABLE)
+ * VAULT PRO: CORE DATABASE ENGINE (V25.0 - INTEGRITY UPGRADE)
  * --------------------------------------------------------
  * Architecture: Local-First with Client-ID Integrity.
- * Logic Layers: Outbox Pattern, Logical Clocks, Checksum Validation.
+ * Phase 1 Fix: Surgical Duplicate Protection (&cid) for Books.
+ * Phase 3 Prep: Telemetry Table addition.
  */
 
 // --- ১. ডাটা টাইপ ডিফিনিশনস ---
@@ -18,22 +19,23 @@ export interface LocalUser {
     language: 'en' | 'bn';
     compactMode: boolean;
     currency: string;
+    turboMode?: boolean; // Phase 1 Turbo Mode
   };
   updatedAt: number;
 }
 
 export interface LocalBook {
   localId?: number;     
-  _id?: string;         
+  _id?: string; 
+  cid: string;        // মাস্টার প্রোটোকল: ডুপ্লিকেট প্রোটেকশন
   name: string;
   description?: string;
   updatedAt: number;
   synced: 0 | 1;        
   isDeleted: 0 | 1;     
-  // --- Stability Upgrade Fields ---
-  vKey: number;         // Logical Clock (Version)
-  syncAttempts: number; // Outbox: Logic A
-  lastAttempt?: number; // Backoff: Logic A
+  vKey: number;         
+  syncAttempts: number; 
+  lastAttempt?: number; 
 }
 
 export interface LocalEntry {
@@ -55,27 +57,33 @@ export interface LocalEntry {
   isDeleted: 0 | 1;     
   createdAt: number;
   updatedAt: number;
-  // --- Stability Upgrade Fields ---
-  vKey: number;         // Logical Clock: Logic B
-  checksum: string;     // Data Solidarity: Logic C
-  syncAttempts: number; // Outbox: Logic A
-  lastAttempt?: number; // Backoff: Logic A
+  vKey: number;         
+  checksum: string;     
+  syncAttempts: number; 
+  lastAttempt?: number; 
+}
+
+// Phase 3 Prep: সাইলেন্ট অ্যাক্টিভিটি ট্র্যাকিং
+export interface LocalTelemetry {
+  id?: number;
+  type: 'SYNC_ERROR' | 'APP_OPEN' | 'TRANS_COUNT';
+  details: string;
+  synced: 0 | 1;
+  timestamp: number;
 }
 
 // --- ২. হেল্পার ফাংশনস (Integrity & Utilities) ---
 
 /**
  * Logic C: Checksum Generator
- * Generates a unique hash of the financial core to prevent data rotting.
  */
 export const generateEntryChecksum = (entry: Partial<LocalEntry>): string => {
   const payload = `${entry.amount}-${entry.date}-${entry.title?.trim().toLowerCase()}`;
-  // Simple fast hash (Murmur-style alternative)
   let hash = 0;
   for (let i = 0; i < payload.length; i++) {
     const char = payload.charCodeAt(i);
     hash = (hash << 5) - hash + char;
-    hash |= 0; // Convert to 32bit integer
+    hash |= 0; 
   }
   return `v1_${Math.abs(hash)}`;
 };
@@ -93,6 +101,7 @@ export class VaultProDB extends Dexie {
   books!: Table<LocalBook>;
   entries!: Table<LocalEntry>;
   users!: Table<LocalUser>; 
+  telemetry!: Table<LocalTelemetry>; // Phase 3 Table
 
   constructor() {
     super('VaultPro_Core_V1'); 
@@ -104,17 +113,20 @@ export class VaultProDB extends Dexie {
       users: '_id'
     });
 
-    // Logic Layer: Logic A, B, C (Stability Upgrade)
-    // We increment version to 2 and add new indices for sync optimization
-    this.version(2).stores({
-      books: '++localId, _id, synced, isDeleted, updatedAt, vKey, syncAttempts',
+    // Version 3: The Integrity & Intelligence Upgrade (Phase 1-4 Ready)
+    this.version(3).stores({
+      // &cid added to books for Surgical Duplicate Fix
+      books: '++localId, _id, &cid, synced, isDeleted, updatedAt, vKey, syncAttempts',
       entries: '++localId, _id, &cid, bookId, userId, synced, isDeleted, updatedAt, vKey, syncAttempts',
-      users: '_id'
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp' // Phase 3 Readiness
     }).upgrade(async (tx) => {
-        // Backward Compatibility: Hydrate existing data with default stability keys
+        // Backward Compatibility: Hydrate existing books
         await tx.table('books').toCollection().modify(book => {
             if (book.vKey === undefined) book.vKey = 1;
             if (book.syncAttempts === undefined) book.syncAttempts = 0;
+            // পুরনো বই যাদের cid নেই, তাদের জন্য cid জেনারেট করা হলো (Index collision রোধে)
+            if (!book.cid) book.cid = `old_${generateCID()}`;
         });
 
         await tx.table('entries').toCollection().modify(entry => {
@@ -136,7 +148,10 @@ export const db = new VaultProDB();
  * ডাটাবেজ রিসেট (লগআউটের সময় ব্যবহার্য)
  */
 export const clearVaultData = async () => {
-  await db.books.clear();
-  await db.entries.clear();
-  await db.users.clear();
+  await Promise.all([
+    db.books.clear(),
+    db.entries.clear(),
+    db.users.clear(),
+    db.telemetry.clear()
+  ]);
 };

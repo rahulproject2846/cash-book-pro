@@ -295,7 +295,7 @@ export default function CashBookApp() {
         />
         
         <DashboardLayout
-            // @ts-ignore
+            
             activeSection={activeSection} setActiveSection={setActiveSection}
             currentUser={currentUser} currentBook={currentBook} 
             onLogout={() => orchestrator.logout()}

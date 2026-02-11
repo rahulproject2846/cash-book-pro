@@ -1,28 +1,17 @@
 import mongoose from 'mongoose';
 
-/**
- * DATABASE CONNECTION PROTOCOL
- * ----------------------------
- * Next.js-এর Hot Reloading ফিচারের কারণে ডাটাবেস কানেকশন বার বার 
- * তৈরি হওয়া ঠেকাতে এখানে গ্লোবাল ক্যাশিং ব্যবহার করা হয়েছে।
- */
-
 const MONGODB_URI = process.env.MONGODB_URI || "";
 
 if (!MONGODB_URI) {
-  throw new Error("CRITICAL_ERROR: MONGODB_URI is not defined in environment variables.");
+  throw new Error("CRITICAL_ERROR: MONGODB_URI is not defined.");
 }
 
-/** 
- * গ্লোবাল অবজেক্টে মঙ্গুস ক্যাশ করার জন্য টাইপ ডেফিনিশন 
- */
 interface MongooseCache {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var mongoose: MongooseCache | undefined;
 }
 
@@ -33,29 +22,39 @@ if (!cached) {
 }
 
 async function connectDB() {
-  // ১. যদি কানেকশন আগে থেকেই থাকে, তবে সেটিই রিটার্ন করবে (Fast Path)
   if (cached!.conn) {
     return cached!.conn;
   }
 
-  // ২. যদি কোনো কানেকশন পেন্ডিং থাকে, তবে সেটির জন্য অপেক্ষা করবে
   if (!cached!.promise) {
     const opts = {
-      bufferCommands: false, // কমান্ড বাফার বন্ধ রাখা হয়েছে পারফরম্যান্সের জন্য
+      bufferCommands: false,
+      // নিচের অপশনগুলো এপিআই রেসপন্স টাইম কমাতে সাহায্য করবে
+      maxPoolSize: 10,        // ১০টি কানেকশন রেডি রাখবে (মোবাইল ইউজারদের জন্য ফাস্ট হবে)
+      serverSelectionTimeoutMS: 5000, 
+      socketTimeoutMS: 45000,
     };
 
     console.log("📡 INITIALIZING_DATABASE_PROTOCOL...");
     
-    cached!.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+    cached!.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
       console.log("✅ DATABASE_SYNCHRONIZATION_COMPLETE");
-      return mongoose;
+      
+      /** * 🔥 ইনডেক্স ওয়ার্নিং ফিক্স: 
+       * প্রোডাকশনে অটো-ইনডেক্সিং অফ রাখলে এপিআই ফাস্ট লোড হয়। 
+       */
+      if (process.env.NODE_ENV === 'production') {
+        mongooseInstance.set('autoIndex', false); 
+      }
+
+      return mongooseInstance;
     });
   }
 
   try {
     cached!.conn = await cached!.promise;
   } catch (e) {
-    cached!.promise = null; // এরর হলে প্রমিজ রিসেট করবে
+    cached!.promise = null;
     console.error("❌ DATABASE_CONNECTION_FAILED:", e);
     throw e;
   }
