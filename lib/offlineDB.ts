@@ -36,6 +36,8 @@ export interface LocalBook {
   vKey: number;         
   syncAttempts: number; 
   lastAttempt?: number; 
+  isPinned?: number;     // PIN TO TOP: Timestamp for sort order (undefined = not pinned)
+  userId: string;        // 🛑 ADDED: Required for query filtering
 }
 
 export interface LocalEntry {
@@ -61,6 +63,9 @@ export interface LocalEntry {
   checksum: string;     
   syncAttempts: number; 
   lastAttempt?: number; 
+  _emergencyFlushed?: boolean;
+  _emergencyFlushAt?: number;
+  isPinned?: number;     // 📌 PIN TO TOP: Timestamp for sort order (undefined = not pinned)
 }
 
 // Phase 3 Prep: সাইলেন্ট অ্যাক্টিভিটি ট্র্যাকিং
@@ -75,17 +80,23 @@ export interface LocalTelemetry {
 // --- ২. হেল্পার ফাংশনস (Integrity & Utilities) ---
 
 /**
- * Logic C: Checksum Generator
+ * Logic C: SHA-256 Checksum Generator (Matches Server Format)
  */
-export const generateEntryChecksum = (entry: Partial<LocalEntry>): string => {
-  const payload = `${entry.amount}-${entry.date}-${entry.title?.trim().toLowerCase()}`;
-  let hash = 0;
-  for (let i = 0; i < payload.length; i++) {
-    const char = payload.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0; 
-  }
-  return `v1_${Math.abs(hash)}`;
+export const generateEntryChecksum = async (entry: { amount: number; date: string; title: string }): Promise<string> => {
+    // 1. Normalize Title (Trim & Lowercase)
+    const title = entry.title?.trim().toLowerCase() || "";
+    const dateStr = String(entry.date).split('T')[0];
+    
+    // 2. Construct Payload with COLONS (Matches Server Format)
+    const payload = `${entry.amount}:${dateStr}:${title}`;
+    
+    // 3. Generate SHA-256 Hash
+    const msgUint8 = new TextEncoder().encode(payload);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    return `sha256_${hashHex}`;
 };
 
 /**
@@ -120,22 +131,19 @@ export class VaultProDB extends Dexie {
       entries: '++localId, _id, &cid, bookId, userId, synced, isDeleted, updatedAt, vKey, syncAttempts',
       users: '_id',
       telemetry: '++id, type, synced, timestamp' // Phase 3 Readiness
-    }).upgrade(async (tx) => {
-        // Backward Compatibility: Hydrate existing books
-        await tx.table('books').toCollection().modify(book => {
-            if (book.vKey === undefined) book.vKey = 1;
-            if (book.syncAttempts === undefined) book.syncAttempts = 0;
-            // পুরনো বই যাদের cid নেই, তাদের জন্য cid জেনারেট করা হলো (Index collision রোধে)
-            if (!book.cid) book.cid = `old_${generateCID()}`;
-        });
+    });
 
-        await tx.table('entries').toCollection().modify(entry => {
-            if (entry.vKey === undefined) entry.vKey = 1;
-            if (entry.syncAttempts === undefined) entry.syncAttempts = 0;
-            if (!entry.checksum) {
-                entry.checksum = generateEntryChecksum(entry);
-            }
-        });
+    // 🚀 Version 4: FINAL FIX (Schema Update)
+    // Added 'userId' to books schema to fix "KeyPath not indexed" error
+    // Added 'isPinned' for faster sorting
+    this.version(4).stores({
+      books: '++localId, _id, userId, &cid, synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned',
+      entries: '++localId, _id, &cid, bookId, userId, synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp'
+    }).upgrade(async (tx) => {
+        // Upgrade logic: Ensure all books have a userId if missing (Optional safeguard)
+        // Dexie automatically handles the schema index update
     });
   }
 }

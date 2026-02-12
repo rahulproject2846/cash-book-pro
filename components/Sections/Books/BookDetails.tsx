@@ -6,7 +6,7 @@ import { LayoutGrid, ChevronLeft, ChevronRight, Inbox, Zap, GitCommit, ShieldChe
 // Sub Components
 import { StatsGrid } from '@/components/UI/StatsGrid'; 
 import { TransactionTable } from './TransactionTable';
-import { MobileLedgerCards } from '@/components/UI/MobileLedgerCards';
+import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
 import { DetailsToolbar } from './DetailsToolbar';
 import { MobileFilterSheet } from './MobileFilterSheet';
 

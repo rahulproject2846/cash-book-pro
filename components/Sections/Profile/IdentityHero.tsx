@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { 
     Camera, Chrome, Zap, ShieldCheck, Activity, 
     Trash2, User, MailCheck, Fingerprint, BadgeCheck 
@@ -10,19 +10,85 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
+import { db } from '@/lib/offlineDB';
 
 export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUser, fileInputRef }: any) => {
     const { T, t, language } = useTranslation();
     
-    // --- 🧬 ১. INTEGRITY LOGIC (100% Preserved) ---
+    // --- 🧬 ১. DYNAMIC INTEGRITY SCORE CALCULATION ---
+    const [syncPercentage, setSyncPercentage] = useState(0);
+    const [backupStatus, setBackupStatus] = useState(false);
+
+    // Calculate sync percentage from Dexie
+    const calculateSyncPercentage = useCallback(async () => {
+        try {
+            const [totalBooks, syncedBooks, totalEntries, syncedEntries] = await Promise.all([
+                db.books.where('isDeleted').equals(0).count(),
+                db.books.where('isDeleted').equals(0).and(item => item.synced === 1).count(),
+                db.entries.where('isDeleted').equals(0).count(),
+                db.entries.where('isDeleted').equals(0).and(item => item.synced === 1).count()
+            ]);
+
+            const bookSyncPercentage = totalBooks > 0 ? (syncedBooks / totalBooks) * 100 : 100;
+            const entrySyncPercentage = totalEntries > 0 ? (syncedEntries / totalEntries) * 100 : 100;
+            const overallSyncPercentage = (bookSyncPercentage + entrySyncPercentage) / 2;
+
+            setSyncPercentage(Math.round(overallSyncPercentage));
+        } catch (err) {
+            console.error('Failed to calculate sync percentage:', err);
+            setSyncPercentage(0);
+        }
+    }, []);
+
+    // Check backup status from localStorage
+    const checkBackupStatus = useCallback(() => {
+        const hasBackup = typeof window !== 'undefined' && localStorage.getItem('last_backup_time');
+        setBackupStatus(!!hasBackup);
+    }, []);
+
+    // Initialize values on mount
+    useEffect(() => {
+        calculateSyncPercentage();
+        checkBackupStatus();
+    }, [calculateSyncPercentage, checkBackupStatus]);
+
+    // Listen for sync events and profile changes
+    useEffect(() => {
+        const handleVaultUpdate = () => {
+            calculateSyncPercentage();
+        };
+
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'last_backup_time') {
+                checkBackupStatus();
+            }
+        };
+
+        window.addEventListener('vault-updated', handleVaultUpdate);
+        window.addEventListener('storage', handleStorageChange);
+
+        return () => {
+            window.removeEventListener('vault-updated', handleVaultUpdate);
+            window.removeEventListener('storage', handleStorageChange);
+        };
+    }, [calculateSyncPercentage, checkBackupStatus]);
+
+    // Dynamic health score calculation
     const healthScore = useMemo(() => {
         let score = 0;
-        if (formData.name) score += 25;
-        if (formData.image) score += 25;
-        if (currentUser?.authProvider === 'google') score += 25;
-        if (typeof window !== 'undefined' && localStorage.getItem('last_backup_time')) score += 25;
-        return score;
-    }, [formData, currentUser]);
+        
+        // Profile completion (40% weight)
+        if (formData.name) score += 20; // 20% for name
+        if (formData.image) score += 20; // 20% for image
+        
+        // Sync percentage (40% weight)
+        score += Math.round((syncPercentage / 100) * 40); // 0-40 points based on sync
+        
+        // Backup status (20% weight)
+        if (backupStatus) score += 20; // 20% for having backup
+        
+        return Math.min(score, 100); // Cap at 100%
+    }, [formData.name, formData.image, syncPercentage, backupStatus]);
 
     const handleRemovePhoto = () => {
         setForm({ ...formData, image: '' });

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, WifiOff, Trash2, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -13,9 +13,10 @@ import { cn } from '@/lib/utils/helpers';
 // --- UI Shell & Layout ---
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
 import { CommandHub } from '@/components/Layout/CommandHub';
+import { useVault } from '@/hooks/useVault';
 
 // --- Domain-Driven Sections ---
-import { BooksSection } from '@/components/Sections/Books/BooksSection';
+import BooksSection from '@/components/Sections/Books/BooksSection';
 import { ReportsSection } from '@/components/Sections/Reports/ReportsSection';
 import { TimelineSection } from '@/components/Sections/Timeline/TimelineSection';
 import { SettingsSection } from '@/components/Sections/Settings/SettingsSection';
@@ -24,7 +25,9 @@ import { ProfileSection } from '@/components/Sections/Profile/ProfileSection';
 // --- Global Engine Hooks ---
 import { useModal } from '@/context/ModalContext';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useVault } from '@/hooks/useVault'; 
+import { EntryCard } from '@/components/UI/EntryCard';
+import { BookCard } from '@/components/UI/BookCard';
+import { VirtualizedEntryList } from '@/components/UI/VirtualizedEntryList'; 
 import { usePusher } from '@/context/PusherContext'; // 🔥 রিয়েল-টাইম সিঙ্ক হুক
 import { ToastCountdown } from '@/components/Modals/TerminationModal';
 
@@ -45,7 +48,7 @@ export default function CashBookApp() {
   const [isHydrated, setIsHydrated] = useState(false);
 
   // ২. রিঅ্যাক্টিভ ইঞ্জিন (useVault V12.0)
-  const { saveEntry, deleteEntry, restoreEntry, deleteBook, restoreBook } = useVault(currentUser, currentBook);
+  const { saveBook, saveEntry, deleteEntry, restoreEntry, deleteBook, restoreBook } = useVault(currentUser, currentBook);
 
   // --- ৩. লাইফসাইকেল কন্ট্রোল (The Initialization Protocol) ---
   useEffect(() => {
@@ -83,10 +86,50 @@ export default function CashBookApp() {
 
   useEffect(() => {
     if (currentUser?._id && pusher) {
-        console.log("📡 Initializing Pusher Listener for User:", currentUser._id);
         orchestrator.initPusher(pusher, currentUser._id);
     }
   }, [currentUser?._id, pusher]);
+
+  // --- 🚨 RESOURCE DELETED EVENT HANDLER ---
+// ১. বুক ডিলিট গার্ড লজিক (Global Resource Guard)
+useEffect(() => {
+    const handleResourceDeleted = (event: any) => {
+        const { type, id } = event.detail;
+
+        // চেক করা: ডিলিট হওয়া বুকটি কি বর্তমানে ওপেন আছে?
+        if (type === 'book' && (currentBook?._id === id || currentBook?.localId === Number(id))) {
+            
+            // সুন্দর একটি পপআপ মেসেজ (Toast)
+            toast.error('This book was deleted on another device', {
+                icon: '📚',
+                duration: 5000,
+                style: {
+                    borderRadius: '20px',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                }
+            });
+
+            // � DEADLOCK FIX: Wrap state updates in startTransition to prevent re-render loops
+            startTransition(() => {
+                // প্রথমে বর্তমান বুক নাল করে দিন
+                setCurrentBook(null);
+                
+                // তারপর সেকশন চেঞ্জ করে 'books' এ পাঠিয়ে দিন (atomic operation)
+                setActiveSection('books');
+                
+                // URL যদি বুক আইডিতে থাকে (যদি আপনি routing ব্যবহার করেন), তবে হোমপেজে পাঠান
+                if (window.location.hash) window.location.hash = '';
+            });
+        }
+    };
+
+    window.addEventListener('resource-deleted', handleResourceDeleted);
+    return () => window.removeEventListener('resource-deleted', handleResourceDeleted);
+}, [currentBook, setActiveSection]);
 
   // --- ৪. কমান্ড হাব হ্যান্ডলার ---
   const handleCommandAction = (actionId: string, book?: any) => {
@@ -119,7 +162,8 @@ export default function CashBookApp() {
     } catch (err) { toast.error("Entry Protocol Fault"); }
   };
 
-  // ৫.১ এন্ট্রি ডিলিট লজিক (Undo Toast)
+  // ৫.১ এন্ট্রি ডিলিট লজিক (Undo Toast with 10-second buffer)
+// ৫.১ এন্ট্রি ডিলিট লজিক (Fixed Type & Translation)
   const handleDeleteEntryLogic = async (entry: any) => {
     closeModal(); 
     try {
@@ -127,7 +171,7 @@ export default function CashBookApp() {
         if (success) {
             window.dispatchEvent(new Event('vault-updated'));
 
-            toast.custom((tObj) => (
+            toast.custom((tObj: { id: string; visible: boolean }) => (
                 <div className={cn(
                     "flex items-center gap-5 bg-black/90 border border-white/10 p-5 rounded-[28px] shadow-2xl backdrop-blur-3xl transition-all duration-500",
                     tObj.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
@@ -138,29 +182,26 @@ export default function CashBookApp() {
                     <div className="flex flex-col min-w-[130px]">
                         <p className="text-[11px] font-black uppercase text-white tracking-[2px]">{T('success_entry_terminated')}</p>
                         <p className="text-[8px] font-bold text-white/40 uppercase mt-1">
-                            Expires in <span className="text-orange-500"><ToastCountdown initialSeconds={6} /></span>
+                            Server sync in <span className="text-orange-500"><ToastCountdown initialSeconds={10} /></span>
                         </p>
                     </div>
                     <button 
                         onClick={async () => {
-                            await restoreEntry(entry);
-                            toast.dismiss(tObj.id);
-                            window.dispatchEvent(new Event('vault-updated'));
-                            toast.success("PROTOCOL RESTORED", { icon: '🛡️' });
+                            const restored = await restoreEntry(entry);
+                            if (restored) {
+                                toast.dismiss(tObj.id);
+                                window.dispatchEvent(new Event('vault-updated'));
+                                toast.success(T("PROTOCOL RESTORED"), { icon: '🛡️' });
+                            }
                         }}
                         className="ml-2 px-6 h-12 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] active:scale-90 transition-all"
                     >
-                        {T('btn_undo')}
+                        {T('btn_undo')} 
                     </button>
                 </div>
-            ), { duration: 6000, position: 'bottom-center' });
-
-            setTimeout(async () => {
-                const current = await db.entries.get(Number(entry.localId));
-                if (current && current.isDeleted === 1) orchestrator.triggerSync(currentUser._id);
-            }, 6500);
+            ), { duration: 10000, position: 'bottom-center' });
         }
-    } catch (err) { toast.error("Process Fault"); }
+    } catch (err) { toast.error(T("Process Fault")); }
   };
 
   // ৫.২ ভল্ট টার্মিনেশন লজিক (Book Soft-Delete)
@@ -169,7 +210,7 @@ export default function CashBookApp() {
     const success = await deleteBook(book);
     if (success) {
         setCurrentBook(null); 
-        toast.custom((tObj) => (
+        toast.custom((tObj: { id: string; visible: boolean }) =>  (
             <div className={cn(
                 "flex items-center gap-5 bg-black/90 border border-orange-500/20 p-5 rounded-[28px] shadow-2xl backdrop-blur-2xl transition-all duration-500",
                 tObj.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
@@ -206,38 +247,15 @@ export default function CashBookApp() {
 
   // --- ৬. গ্লোবাল বুক সেভ লজিক ---
   const handleSaveBookGlobal = async (formData: any) => {
-    const localId = currentBook?.localId || formData?.localId;
-    const serverId = currentBook?._id || formData?._id;
-
     try {
-        const timestamp = Date.now();
-        const localData = {
-            ...formData,
-            localId: localId ? Number(localId) : undefined, 
-            _id: serverId || undefined,
-            userId: String(currentUser._id),
-            updatedAt: timestamp,
-            synced: 0,
-            isDeleted: 0
-        };
-
-        await db.books.put(localData);
-        window.dispatchEvent(new Event('vault-updated'));
-        closeModal();
-        
-        const res = await fetch('/api/books', { 
-            method: serverId ? 'PUT' : 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ ...formData, _id: serverId, userId: String(currentUser._id) }), 
-        });
-
-        if (res.ok) {
-            const result = await res.json();
-            const serverBook = result.book || result.data;
-            await db.books.where('updatedAt').equals(timestamp).modify({ _id: serverBook._id, synced: 1 });
-            orchestrator.triggerSync(currentUser._id);
+        // ✅ FIXED: Use robust saveBook function from useVault instead of manual API calls
+        const success = await saveBook(formData, currentBook);
+        if (success) {
+            closeModal();
         }
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+        console.error('Failed to save book:', err); 
+    }
   };
 
   const handleOpenGlobalModal = async (type: any) => {
@@ -282,9 +300,7 @@ export default function CashBookApp() {
               />,
     settings: <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />,
     profile: <ProfileSection currentUser={currentUser} setCurrentUser={setCurrentUser} onLogout={() => orchestrator.logout()} />
-  };
-
-  return (
+  };return (
     <>
         <CommandHub
             isOpen={false} 
@@ -295,9 +311,10 @@ export default function CashBookApp() {
         />
         
         <DashboardLayout
-            
-            activeSection={activeSection} setActiveSection={setActiveSection}
-            currentUser={currentUser} currentBook={currentBook} 
+            activeSection={activeSection} 
+            setActiveSection={setActiveSection}
+            currentUser={currentUser} 
+            currentBook={currentBook} 
             onLogout={() => orchestrator.logout()}
             onBack={() => setCurrentBook(null)}
             onFabClick={() => openModal('addEntry', { currentUser, currentBook, onSubmit: handleSaveEntryLogic })}
@@ -319,7 +336,9 @@ export default function CashBookApp() {
             <AnimatePresence mode="wait">
                 <motion.div 
                     key={activeSection} 
-                    initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}
+                    initial={{ opacity: 0, y: 15 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    exit={{ opacity: 0, y: -15 }}
                     transition={{ type: "spring", damping: 25, stiffness: 200 }}
                 >
                     {!isOnline && (
@@ -327,7 +346,7 @@ export default function CashBookApp() {
                             <WifiOff size={20} strokeWidth={2.5} />
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">{T('status_offline')}</span>
-                                <span className="text-[8px] font-bold uppercase opacity-60 mt-1">Working on local node</span>
+                                <span className="text-[8px] font-bold uppercase opacity-60 mt-1">{T('err_no_internet')}</span>
                             </div>
                         </div>
                     )}

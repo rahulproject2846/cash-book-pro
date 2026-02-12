@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import { Toaster } from 'react-hot-toast';
 import { Providers } from "./providers";
-import { ModalRegistry } from "@/components/Modals/ModalRegistry";
 
 const jakarta = Plus_Jakarta_Sans({ 
   subsets: ["latin"],
@@ -13,27 +11,81 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Vault Pro | Secure Digital Ledger",
-  description: "Private and secure financial protocol.",
+  title: "Cash Book Pro | Professional Financial Management",
+  description: "Advanced financial management application with real-time sync, analytics, and secure cloud storage. Track income, expenses, and manage your finances like a pro.",
+  keywords: ["financial management", "cash book", "expense tracker", "income tracker", "budgeting", "finance app", "real-time sync"],
+  authors: [{ name: "Cash Book Pro Team" }],
+  creator: "Cash Book Pro",
+  publisher: "Cash Book Pro",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: '/',
+    title: 'Cash Book Pro | Professional Financial Management',
+    description: 'Advanced financial management application with real-time sync and analytics',
+    siteName: 'Cash Book Pro',
+    images: [
+      {
+        url: '/icon-512.png',
+        width: 512,
+        height: 512,
+        alt: 'Cash Book Pro - Professional Financial Management',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Cash Book Pro | Professional Financial Management',
+    description: 'Advanced financial management application with real-time sync and analytics',
+    images: ['/icon-512.png'],
+  },
   manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/icon-192.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    shortcut: "/icon-192.png",
+    apple: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Vault Pro",
+    title: "Cash Book Pro",
+    startupImage: [
+      {
+        url: "/icon-512.png",
+        media: "(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)",
+      },
+    ],
+  },
+  verification: {
+    google: 'your-google-verification-code',
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0F0F0F",
+  themeColor: "#3b82f6",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
+  colorScheme: "dark",
+  interactiveWidget: "resizes-visual",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -41,60 +93,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${jakarta.variable} font-sans antialiased selection:bg-orange-500/30 overflow-x-hidden`} suppressHydrationWarning >
         <Providers>
-            {/* ১. এলিট নোটিফিকেশন ইঞ্জিন (V12 Fix) */}
-<Toaster
-  position="bottom-center"
-  reverseOrder={false}
-  gutter={12}
-  containerStyle={{
-    zIndex: 99999,
-    bottom: 40,
-  }}
-  toastOptions={{
-    duration: 4000,
-    // ডাইনামিক থিম ম্যাচিং স্টাইল
-    style: {
-      background: 'var(--bg-card)', // আপনার গ্লাস ব্যাকগ্রাউন্ড
-      backdropFilter: 'blur(20px) saturate(160%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-      color: 'var(--text-main)', // মোড অনুযায়ী টেক্সট কালার
-      border: '1px solid var(--border-color)', // আপনার থিমের বর্ডার
-      borderRadius: '24px',
-      padding: '12px 24px',
-      fontSize: '11px',
-      fontWeight: '600',
-      textTransform: 'none',
-      letterSpacing: 'normal',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', // আপনার অ্যাপল স্টাইল শ্যাডো
-      maxWidth: '400px',
-    },
-    // সাকসেস টোস্ট - অ্যাকসেন্ট কালার (Orange) ফোকাসড
-    success: {
-      iconTheme: {
-        primary: 'var(--accent)', // আপনার সিগনেচার অরেঞ্জ
-        secondary: '#fff',
-      },
-    },
-    // এরর টোস্ট - ভাইব্রেন্ট রেড কিন্তু গ্লাসি
-    error: {
-      style: {
-        background: 'rgba(239, 68, 68, 0.15)', // খুব হালকা রেড ব্যাকগ্রাউন্ড
-        border: '1px solid rgba(239, 68, 68, 0.3)', // রেড বর্ডার
-        backdropFilter: 'blur(25px)',
-        color: '#ef4444', // টেক্সট রেড
-      },
-      iconTheme: {
-        primary: '#ef4444',
-        secondary: '#fff',
-      },
-    },
-  }}
-/>
-            {/* ২. মেইন অ্যাপ কন্টেন্ট */}
             {children}
-
-            {/* ৩. গ্লোবাল মডাল হাব (Elite Layering) */}
-            <ModalRegistry /> 
         </Providers>
       </body>
     </html>

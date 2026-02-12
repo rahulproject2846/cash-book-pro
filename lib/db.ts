@@ -35,11 +35,7 @@ async function connectDB() {
       socketTimeoutMS: 45000,
     };
 
-    console.log("📡 INITIALIZING_DATABASE_PROTOCOL...");
-    
     cached!.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
-      console.log("✅ DATABASE_SYNCHRONIZATION_COMPLETE");
-      
       /** * 🔥 ইনডেক্স ওয়ার্নিং ফিক্স: 
        * প্রোডাকশনে অটো-ইনডেক্সিং অফ রাখলে এপিআই ফাস্ট লোড হয়। 
        */

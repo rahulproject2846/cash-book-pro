@@ -150,14 +150,33 @@ body:has(.modal-overlay) {
   z-index: 99999 !important;
 }
 
-
-.midnight-mode {
-                    --bg-app: #000000 !important;
-                    --bg-card: #080808 !important;
-                    --border-color: #121212 !important;
-                }
-                html.compact-deck {
-                    --card-padding: 0.75rem !important; 
+  /* 🚀 TURBO MODE PERFORMANCE OPTIMIZATIONS */
+  .turbo-mode {
+    /* Disable all backdrop-blur effects */
+    * {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    
+    /* Faster transitions */
+    * {
+      transition-duration: 0.15s !important;
+      animation-duration: 0.2s !important;
+    }
+    
+    /* Disable heavy shadows */
+    .glass-effect,
+    .backdrop-blur {
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    
+    /* Optimize framer-motion */
+    .framer-motion {
+      transition: none !important;
+      animation: none !important;
+    }
                     --app-gap: 0.5rem !important;
                     --app-padding: 1rem !important;
                     --input-height: 2.75rem !important;

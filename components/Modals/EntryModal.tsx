@@ -9,7 +9,7 @@ import {
 
 // Components & Utils
 import { OSInput, ModalEliteDropdown } from '@/components/UI/FormComponents';
-import { Keypad } from '@/components/UI/Keypad';
+import Keypad from '@/components/UI/Keypad';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useVault } from '@/hooks/useVault';
@@ -49,7 +49,12 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
         const checkDuplicate = async () => {
             const finalAmount = safeCalculate(amountStr);
             if (finalAmount > 0) {
-                const isDuplicate = await checkPotentialDuplicate(finalAmount, activeInput === 'in' ? 'income' : 'expense');
+                // 🚀 DUPLICATE ENTRY SHIELD: Check amount, type, and category within last 10 minutes
+                const isDuplicate = await checkPotentialDuplicate(
+                    finalAmount, 
+                    activeInput === 'in' ? 'income' : 'expense',
+                    form.category
+                );
                 setShowDuplicateWarning(isDuplicate);
             } else {
                 setShowDuplicateWarning(false);
@@ -58,7 +63,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
 
         const timeoutId = setTimeout(checkDuplicate, 500); // Debounce check
         return () => clearTimeout(timeoutId);
-    }, [amountStr, activeInput]);
+    }, [amountStr, activeInput, form.category]);
 
     useEffect(() => { 
         setIsMobile(window.innerWidth < 768); 
@@ -69,13 +74,43 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
         if (isOpen) {
             const now = new Date();
             const localDate = now.toISOString().split('T')[0];
-            const localTime = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
             
             if (initialData) {
                 const isIncome = initialData.type === 'income';
                 setAmountStr(initialData.amount.toString());
                 setActiveInput(isIncome ? 'in' : 'out');
-                setForm({ ...initialData, category: initialData.category.toUpperCase() });
+                
+                // 🔒 CRITICAL FIX: Proper date hydration for editEntry mode
+                // Convert entry timestamp to HTML date/time input format
+                let entryDate = localDate;
+                let entryTime = localTime;
+                
+                if (initialData.date) {
+                    try {
+                        // Handle various date formats from the database
+                        const entryDateTime = new Date(initialData.date);
+                        if (!isNaN(entryDateTime.getTime())) {
+                            entryDate = entryDateTime.toISOString().split('T')[0];
+                            entryTime = entryDateTime.toLocaleTimeString('en-US', { 
+                                hour: '2-digit', 
+                                minute: '2-digit', 
+                                hour12: true 
+                            });
+                        }
+                    } catch (err) {
+                        console.warn('Date conversion failed, using current time:', err);
+                    }
+                }
+                
+                // Preserve all existing data including vKey, localId, _id, checksum
+                // Only override date/time fields with properly formatted values
+                setForm({ 
+                    ...initialData, 
+                    category: initialData.category?.toUpperCase() || 'GENERAL',
+                    date: entryDate,
+                    time: entryTime
+                });
                 setTimeout(() => setIsExpanded(true), 200);
             } else {
                 setAmountStr('');

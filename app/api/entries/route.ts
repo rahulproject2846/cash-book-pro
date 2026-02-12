@@ -4,7 +4,7 @@ import Entry from "@/models/Entry";
 import User from "@/models/User"; // ইউজার মডেল ইমপোর্ট করা হলো
 import { NextResponse } from "next/server";
 import Pusher from 'pusher';
-import { generateChecksum } from "@/lib/utils/helpers";
+import { generateServerChecksum } from "@/lib/serverCrypto";
 
 const pusher = new Pusher({
   appId: process.env.PUSHER_APP_ID!,
@@ -90,8 +90,8 @@ export async function POST(req: Request) {
         }
     }
 
-    // Logic C: Checksum Validation
-    const serverCalculatedChecksum = generateChecksum({
+    // Logic C: SHA-256 Checksum Validation
+    const serverCalculatedChecksum = generateServerChecksum({
         amount: Number(amount),
         date: date,
         title: title || `${category || 'GENERAL'} RECORD`

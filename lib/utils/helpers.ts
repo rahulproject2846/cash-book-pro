@@ -43,19 +43,67 @@ export const getTimeAgo = (date: any, lang: string = 'en', T?: any): string => {
 };
 
 /**
- * 🛡️ LOGIC C: DATA SOLIDARITY (CHECKSUM GENERATOR)
- * এটি এন্ট্রির মূল ডাটা থেকে একটি ইউনিক হ্যাশ তৈরি করে। 
+ * 🛡️ LOGIC C: DATA SOLIDARITY (SHA-256 CHECKSUM GENERATOR)
+ * এটি এন্ট্রির মূল ডাটা থেকে SHA-256 হ্যাশ তৈরি করে। 
  * ট্রান্সমিশনের সময় ডাটা নষ্ট হলে সার্ভার এই চেকসাম মিলিয়ে সেটি রিজেক্ট করতে পারবে।
  */
-export const generateChecksum = (data: { 
+export const generateChecksum = async (data: { 
     amount: number; 
     date: string | Date; 
     title: string 
-}): string => {
+}): Promise<string> => {
     // ১. ডাটা নরমালাইজেশন (Strict lowercase & formatting)
     const title = data.title?.trim().toLowerCase() || "";
     
     // ২. ডেট ফরম্যাটিং (নিশ্চিত করা যে টাইমস্ট্যাম্প নয়, শুধু তারিখ ব্যবহার হচ্ছে)
+    let dateStr = "";
+    if (data.date instanceof Date) {
+        dateStr = data.date.toISOString().split('T')[0];
+    } else {
+        dateStr = String(data.date).split('T')[0];
+    }
+
+    // ৩. পেলোড তৈরি (consistent format for hashing)
+    const payload = `${data.amount}:${dateStr}:${title}`;
+    
+    try {
+        // ৪. SHA-256 হ্যাশিং (Web Crypto API - Browser & Node.js compatible)
+        const encoder = new TextEncoder();
+        const data = encoder.encode(payload);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        
+        // ৫. হ্যাশ কনভার্ট করা হেক্সাডেসিমালে
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        // ৬. সিকিউরিটি প্রিফিক্স সহ রিটার্ন (ভার্সন কন্ট্রোলড)
+        return `sha256_${hashHex}`;
+    } catch (error) {
+        // Fallback to simple hash if crypto not available
+        console.warn('SHA-256 not available, falling back to simple hash:', error);
+        let hash = 0;
+        for (let i = 0; i < payload.length; i++) {
+            const char = payload.charCodeAt(i);
+            hash = (hash << 5) - hash + char;
+            hash |= 0;
+        }
+        return `v1_${Math.abs(hash)}`;
+    }
+};
+
+/**
+ * 🛡️ SYNC-COMPATIBLE CHECKSUM GENERATOR (Synchronous Version for Legacy Support)
+ * যেহেতু কিছু জায়গায় async ব্যবহার করা যায় না, সেজন্য একটি sync ভার্সনও রাখা হলো
+ */
+export const generateChecksumSync = (data: { 
+    amount: number; 
+    date: string | Date; 
+    title: string 
+}): string => {
+    // ১. ডাটা নরমালাইজেশন
+    const title = data.title?.trim().toLowerCase() || "";
+    
+    // ২. ডেট ফরম্যাটিং
     let dateStr = "";
     if (data.date instanceof Date) {
         dateStr = data.date.toISOString().split('T')[0];

@@ -4,7 +4,7 @@ import Entry from "@/models/Entry";
 import User from "@/models/User"; // ইউজার মডেল ইমপোর্ট করা হলো
 import { NextResponse } from "next/server";
 import Pusher from 'pusher';
-import { generateChecksum } from "@/lib/utils/helpers";
+import { generateServerChecksum } from "@/lib/serverCrypto";
 
 const pusher = new Pusher({
   appId: process.env.PUSHER_APP_ID!,
@@ -35,8 +35,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
 
-    // --- Logic C: Checksum Validation (Data Solidarity) ---
-    const serverCalculatedChecksum = generateChecksum({
+    // --- Logic C: SHA-256 Checksum Validation (Data Solidity) ---
+    const serverCalculatedChecksum = generateServerChecksum({
         amount: Number(data.amount),
         date: data.date,
         title: data.title
@@ -51,10 +51,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     // --- Logic B: Logical Clock (Conflict Resolution) ---
-    // যদি সার্ভারের vKey ক্লায়েন্টের পাঠানো vKey এর চেয়ে বড় হয়, তবে কনফ্লিক্ট
-    if (existingEntry.vKey > data.vKey) {
+    // যদি সার্ভারের vKey ক্লায়েন্টের পাঠানো vKey এর চেয়ে বড় হয়, তবে কনফ্লিক্ট
+    if (data.vKey < existingEntry.vKey) {
         return NextResponse.json({ 
-            message: "Version conflict: Server has a newer version",
+            message: "Version conflict: Client has stale data",
             serverVKey: existingEntry.vKey,
             clientVKey: data.vKey,
             errorCode: "VERSION_CONFLICT",
@@ -72,10 +72,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         note: data.note?.trim() || "",
         date: new Date(data.date),
         time: data.time || "",
-        vKey: data.vKey, 
+        vKey: Number(data.vKey || 0) + 1, // 🔧 FORCE VKEY INCREMENT: Always increment
         checksum: data.checksum,
         isDeleted: false,
-        updatedAt: new Date()
+        updatedAt: new Date() // 🔧 NORMALIZED TIMESTAMP: Fresh timestamp
     };
 
     const updatedEntry = await Entry.findByIdAndUpdate(

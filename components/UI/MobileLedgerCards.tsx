@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { 
     Edit2, Trash2, Zap, Clock, ShieldCheck, 
@@ -8,14 +8,15 @@ import {
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn, toBn } from '@/lib/utils/helpers';
 
-const LedgerRow = ({ e, onEdit, onDelete, onToggleStatus, activeId, setActiveId, currencySymbol, lang, t, T }: any) => {
+// 🚀 PERFORMANCE OPTIMIZED: Memoized row component to prevent unnecessary re-renders
+const LedgerRow = memo(({ e, onEdit, onDelete, onToggleStatus, activeId, setActiveId, currencySymbol, lang, t, T }: any) => {
     const controls = useAnimation();
     const isIncome = e.type === 'income';
     const isCompleted = e.status?.toLowerCase() === 'completed';
     const rowId = e.localId || e._id;
     const isOpen = activeId === rowId;
 
-    // ১. ⚡ সলিড অ্যাকশন হ্যান্ডলার (Framer Tap Protocol)
+    // ১. ⚡ সলিফ অ্যাকশন হ্যান্ডলার (Framer Tap Protocol)
     const handleAction = async (actionFn: any) => {
         if (!actionFn) return;
         // ১. প্যানেল রিসেট অ্যানিমেশন
@@ -30,10 +31,10 @@ const LedgerRow = ({ e, onEdit, onDelete, onToggleStatus, activeId, setActiveId,
         const threshold = 50;
         if (info.offset.x > threshold) {
             setActiveId(rowId);
-            controls.start({ x: 110 }); // বাটনকে পর্যাপ্ত জায়গা দেওয়া হলো
+            controls.start({ x: 110 }); // বাটনকে পর্যাপ্ত জায়াগা দেওয়া হলো
         } else if (info.offset.x < -threshold) {
             setActiveId(rowId);
-            controls.start({ x: -110 }); // বাটনকে পর্যাপ্ত জায়গা দেওয়া হলো
+            controls.start({ x: -110 }); // বাটনকে পর্যাপ্ত জায়াগা দেওয়া হলো
         } else {
             setActiveId(null);
             controls.start({ x: 0 });
@@ -46,8 +47,19 @@ const LedgerRow = ({ e, onEdit, onDelete, onToggleStatus, activeId, setActiveId,
         }
     }, [activeId, rowId, controls]);
 
+    // 🚀 PERFORMANCE: Memoized styles to prevent recalculation
+    const rowStyles = useMemo(() => cn(
+        "relative overflow-hidden border-t border-[var(--border)] first:border-t-0 bg-[var(--bg-card)] h-[92px] touch-pan-y",
+        isOpen && "z-10"
+    ), [isOpen]);
+
+    const amountStyles = useMemo(() => cn(
+        "text-[16px] font-black tabular-nums",
+        isIncome ? "text-green-500" : "text-red-500"
+    ), [isIncome]);
+
     return (
-        <div className="relative overflow-hidden border-t border-[var(--border)] first:border-t-0 bg-[var(--bg-card)] h-[92px] touch-pan-y">
+        <div className={rowStyles}>
             
             {/* --- নীচের লেয়ার: অ্যাকশন বাটনসমূহ (Elite Spacing) --- */}
             <div className="absolute inset-0 flex items-center justify-between px-6 bg-[var(--bg-app)]/60 z-0">
@@ -122,10 +134,12 @@ const LedgerRow = ({ e, onEdit, onDelete, onToggleStatus, activeId, setActiveId,
             </motion.div>
         </div>
     );
-};
+});
+
+LedgerRow.displayName = 'LedgerRow';
 
 // --- 📦 MAIN UNIFIED COMPONENT ---
-export const MobileLedgerCards = ({ items, groupedEntries, isGrouped = false, onEdit, onDelete, onToggleStatus, currencySymbol }: any) => {
+const MobileLedgerCards = memo(({ items, groupedEntries, isGrouped = false, onEdit, onDelete, onToggleStatus, currencySymbol }: any) => {
     const { language, t, T } = useTranslation();
     const [activeSwipeId, setActiveSwipeId] = useState<string | null>(null);
 
@@ -140,7 +154,8 @@ export const MobileLedgerCards = ({ items, groupedEntries, isGrouped = false, on
         };
     }, [activeSwipeId]);
 
-    const renderRows = (list: any[]) => (
+    // 🚀 PERFORMANCE: Memoized render function to prevent unnecessary re-renders
+    const renderRows = useMemo(() => (list: any[]) => (
         <div className="bg-[var(--bg-card)] rounded-[40px] border border-[var(--border)] shadow-xl overflow-hidden relative">
             {list.map((e, idx) => (
                 <LedgerRow 
@@ -150,7 +165,7 @@ export const MobileLedgerCards = ({ items, groupedEntries, isGrouped = false, on
                 />
             ))}
         </div>
-    );
+    ), [currencySymbol, language, t, T, activeSwipeId, setActiveSwipeId]);
 
     return (
         <div className="space-y-10 relative pb-10">
@@ -172,4 +187,8 @@ export const MobileLedgerCards = ({ items, groupedEntries, isGrouped = false, on
             )}
         </div>
     );
-};
+});
+
+MobileLedgerCards.displayName = 'MobileLedgerCards';
+
+export default MobileLedgerCards;

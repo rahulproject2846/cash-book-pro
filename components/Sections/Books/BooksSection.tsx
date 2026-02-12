@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, ChevronRight, LayoutGrid, 
@@ -14,7 +14,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { SortDropdown } from '@/components/UI/SortDropdown';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { HubHeader } from '@/components/Layout/HubHeader';
-import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
+import { cn, toBn } from '@/lib/utils/helpers'; 
 
 // Domain-Driven Components
 import { BookDetails } from './BookDetails';
@@ -24,11 +24,12 @@ import { BooksList } from './BooksList';
 import { useVault } from '@/hooks/useVault'; 
 
 /**
- * VAULT PRO: MASTER BOOKS SECTION (SOLID ROCK V11.5)
+ * VAULT PRO: MASTER BOOKS SECTION (V13.0 - PINNED & ACTIVITY SORTED)
  * --------------------------------------------------------
  * Status: Final Polish, Enterprise Grade Reactivity.
+ * 🚀 Performance Optimized with React.memo and useMemo
  */
-export const BooksSection = ({ 
+const BooksSection = memo(({ 
     currentUser, currentBook, setCurrentBook, onGlobalSaveBook ,
     onSaveEntry, onDeleteEntry
 }: any) => {
@@ -37,20 +38,20 @@ export const BooksSection = ({
     const { T, t, language } = useTranslation();
     const [mounted, setMounted] = useState(false);
     
-    // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন (Direct Connection to V11 Engine)
+    // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন (Direct Connection to V13 Engine)
     const {
         books, allEntries, entries, stats, isLoading,
-        saveEntry, deleteEntry, toggleEntryStatus
+        saveEntry, deleteEntry, toggleEntryStatus, togglePin // 🔥 পিন ফাংশন যোগ করা হলো
     } = useVault(currentUser, currentBook);
 
     // ২. রিয়েক্টিভ দারোয়ান (Unsynced Units Counter)
-        const unsyncedCount = useLiveQuery(
-            () => db.entries
-                .where('synced').equals(0)
-                .and(e => e.isDeleted === 0) // 🔥 ফিক্স: ডিলিট মার্ক করা ডাটা এখানে গুনবে না
-                .count(),
-            []
-        ) || 0;
+    const unsyncedCount = useLiveQuery(
+        () => db.entries
+            .where('synced').equals(0)
+            .and(e => e.isDeleted === 0) 
+            .count(),
+        []
+    ) || 0;
 
     // ৩. লোকাল ইউআই স্টেট
     const [searchQuery, setSearchQuery] = useState(''); 
@@ -110,20 +111,9 @@ export const BooksSection = ({
             };
         });
 
-        // ঘ. ⏳ সর্টিং প্রোটোকল (V11.5 Standard)
-        processedList.sort((a, b) => {
-            const currentSort = (sortOption || "").toLowerCase();
-            if (currentSort === (t('sort_name') || "").toLowerCase()) {
-                return (a.name || "").localeCompare(b.name || "");
-            }
-            if (currentSort === (t('sort_balance_high') || "").toLowerCase()) {
-                return (b.stats?.balance || 0) - (a.stats?.balance || 0);
-            }
-            if (currentSort === (t('sort_balance_low') || "").toLowerCase()) {
-                return (a.stats?.balance || 0) - (b.stats?.balance || 0);
-            }
-            return (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0);
-        });
+        // ঘ. ⏳ সর্টিং প্রোটোকল (V13.0 Standard - Rely on pre-sorted books)
+        // Books are already sorted in useVault by isPinned desc, then updatedAt desc
+        // No additional sorting needed here to prevent conflicts
 
         return processedList;
     }, [books, allEntries, searchQuery, sortOption, t]);
@@ -142,7 +132,7 @@ export const BooksSection = ({
     return (
         <div className="w-full relative transition-all duration-500">
             
-            {/* --- ১. HUB HEADER (Unified OS Style) --- */}
+            {/* --- ১. HUB HEADER --- */}
             {!currentBook && (
                 <HubHeader 
                     title={T('ledger_hub') || "LEDGER HUB"} 
@@ -204,6 +194,10 @@ export const BooksSection = ({
                             onImportClick={handleImportClick}
                             onAddClick={() => openModal('addBook', { onSubmit: onGlobalSaveBook, currentUser })}
                             onBookClick={(b: any) => { setCurrentBook(b); setDetailsPage(1); }} 
+                            
+                            // 🔥 পিন ফাংশন পাস করা হলো
+                            onTogglePin={togglePin}
+
                             onQuickAdd={(b: any) => { 
                                 setCurrentBook(b); 
                                 setTimeout(() => openModal('addEntry', { currentUser, currentBook: b, onSubmit: saveEntry }), 300); 
@@ -212,7 +206,7 @@ export const BooksSection = ({
                             currencySymbol={getCurrencySymbol()}
                         />
 
-                        {/* --- ELITE OS PAGINATION --- */}
+                        {/* --- PAGINATION (Same as before) --- */}
                         {totalPages > 1 && (
                             <div className="flex flex-col md:flex-row justify-between items-center py-12 gap-8 border-t border-[var(--border)]/30 mt-16">
                                 <div className="flex items-center gap-4">
@@ -246,12 +240,14 @@ export const BooksSection = ({
                             stats={stats} 
                             currentUser={currentUser} 
                             onBack={() => setCurrentBook(null)}
-                            // 🔥 নিচের এই ৩টি লাইন একদম হুবহু রিপ্লেস কর:
                             onAdd={() => openModal('addEntry', { currentUser, currentBook, onSubmit: onSaveEntry })}
                             onEdit={(e: any) => openModal('addEntry', { entry: e, currentBook, currentUser, onSubmit: onSaveEntry })}
                             onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => onDeleteEntry(e) })}
-                            
                             onToggleStatus={toggleEntryStatus}
+                            
+                            // 🔥 পিন ফাংশন পাস করা হলো (এন্ট্রির জন্য)
+                            onTogglePin={togglePin}
+
                             searchQuery={detailsSearchQuery} 
                             setSearchQuery={setDetailsSearchQuery}
                             pagination={{ currentPage: detailsPage, totalPages: Math.ceil(entries.length / 10) || 1, setPage: setDetailsPage }}
@@ -262,4 +258,8 @@ export const BooksSection = ({
             <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" />
         </div>
     );
-};
+});
+
+BooksSection.displayName = 'BooksSection';
+
+export default BooksSection;

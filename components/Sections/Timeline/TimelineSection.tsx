@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { History, Loader2, ArrowDownUp, Filter, Zap } from 'lucide-react';
@@ -17,7 +18,8 @@ import { cn, toBn } from '@/lib/utils/helpers';
 
 // Unified UI Components
 import { TimelineFeed } from './TimelineFeed';
-import { MobileLedgerCards } from '@/components/UI/MobileLedgerCards';
+import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
+import { VirtualizedEntryList } from '@/components/UI/VirtualizedEntryList';
 
 export const TimelineSection = ({ currentUser }: any) => {
     const { T, t, language } = useTranslation();
@@ -29,6 +31,39 @@ export const TimelineSection = ({ currentUser }: any) => {
         () => db.entries.where('isDeleted').equals(0).toArray(),
         []
     ) || [];
+
+    // 🚀 VIRTUALIZATION THRESHOLD: Use virtualized list for 1000+ entries
+    const shouldUseVirtualization = entries.length > 1000;
+
+    if (shouldUseVirtualization) {
+        return (
+            <div className="space-y-4">
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                            <span className="text-xs font-bold">🚀</span>
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-blue-900">Virtualized Timeline</h3>
+                            <p className="text-sm text-blue-700">
+                                Showing {entries.length} entries with optimized performance
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <VirtualizedEntryList
+                    entries={entries}
+                    onEdit={saveEntry}
+                    onDelete={deleteEntry}
+                    onStatusToggle={toggleEntryStatus}
+                    currentUser={currentUser}
+                    itemHeight={60}
+                    bufferSize={10}
+                />
+            </div>
+        );
+    }
 
     // কন্ট্রোল স্টেটস
     const [searchQuery, setSearchQuery] = useState('');
