@@ -140,7 +140,7 @@ LedgerRow.displayName = 'LedgerRow';
 
 // --- 📦 MAIN UNIFIED COMPONENT ---
 const MobileLedgerCards = memo(({ items, groupedEntries, isGrouped = false, onEdit, onDelete, onToggleStatus, currencySymbol }: any) => {
-    const { language, t, T } = useTranslation();
+    const { language, t } = useTranslation();
     const [activeSwipeId, setActiveSwipeId] = useState<string | null>(null);
 
     // বাইরে ক্লিক করলে সোয়াইপ বন্ধ হবে
@@ -161,11 +161,11 @@ const MobileLedgerCards = memo(({ items, groupedEntries, isGrouped = false, onEd
                 <LedgerRow 
                     key={e.localId || e._id || idx} e={e} onEdit={onEdit} onDelete={onDelete}
                     onToggleStatus={onToggleStatus} activeId={activeSwipeId} setActiveId={setActiveSwipeId}
-                    currencySymbol={currencySymbol} lang={language} t={t} T={T}
+                    currencySymbol={currencySymbol} lang={language} t={t}
                 />
             ))}
         </div>
-    ), [currencySymbol, language, t, T, activeSwipeId, setActiveSwipeId]);
+    ), [currencySymbol, language, t, activeSwipeId, setActiveSwipeId]);
 
     return (
         <div className="space-y-10 relative pb-10">

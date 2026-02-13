@@ -15,7 +15,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
  * Features large character tracking and haptic feedback.
  */
 export const OtpView = ({ email, onBack, onSuccess }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [otpCode, setOtpCode] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [cooldown, setCooldown] = useState(120); 
@@ -75,11 +75,11 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                     
                     <div className="space-y-2">
                         <h2 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none">
-                            {T('title_protocol_verify') || "VERIFICATION"}
+                            {t('title_protocol_verify') || "VERIFICATION"}
                         </h2>
                         <div className="flex flex-col items-center">
                             <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] opacity-60">
-                                {T('auth_proto_dispatched')}
+                                {t('auth_proto_dispatched')}
                             </p>
                             <p className="text-[11px] font-black text-orange-500 uppercase tracking-widest mt-1 bg-orange-500/5 px-3 py-1 rounded-lg border border-orange-500/10">
                                 {email}
@@ -93,7 +93,7 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
             <form onSubmit={handleVerify} className="space-y-[var(--app-gap,2rem)]">
                 <div className="space-y-4">
                     <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[3px] text-center block w-full opacity-40">
-                        {T('label_entry_key')}
+                        {t('label_entry_key')}
                     </label>
                     <input 
                         type="text" 
@@ -119,7 +119,7 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                         {isLoading ? (
                             <span className="w-5 h-5 border-3 border-black border-t-transparent rounded-full animate-spin" />
                         ) : (
-                            <>{T('btn_confirm_identity')} <CheckCircle2 size={18} strokeWidth={3} /></>
+                            <>{t('btn_confirm_identity')} <CheckCircle2 size={18} strokeWidth={3} /></>
                         )}
                     </motion.button>
                 </Tooltip>
@@ -134,7 +134,7 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                     className="text-[9px] font-black text-[var(--text-muted)] hover:text-[var(--text-main)] uppercase tracking-[4px] transition-all flex items-center gap-2 group"
                 >
                     <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-                    {T('btn_adjust_detail')}
+                    {t('btn_adjust_detail')}
                 </button>
 
                 {/* Resend Logic with Timer */}
@@ -149,7 +149,7 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                         className="text-[9px] font-black text-orange-500 uppercase tracking-[4px] underline underline-offset-8 hover:text-orange-400 transition-all flex items-center gap-2"
                     >
                         <RefreshCcw size={14} />
-                        {T('btn_resend_protocol')}
+                        {t('btn_resend_protocol')}
                     </button>
                 )}
             </div>

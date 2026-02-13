@@ -9,7 +9,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 
 export const SocialAuth = ({ onGoogleAuth }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [isVerifying, setIsVerifying] = useState(false);
 
     // ১. গুগল পপ-আপ ইঞ্জিন (Direct Handshake Hook)
@@ -48,7 +48,7 @@ export const SocialAuth = ({ onGoogleAuth }: any) => {
                     {isVerifying ? (
                         <div className="flex items-center gap-3">
                             <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                            <span className="text-[11px] font-black text-blue-500 uppercase tracking-[3px]">{T('auth_verifying')}</span>
+                            <span className="text-[11px] font-black text-blue-500 uppercase tracking-[3px]">{t('auth_verifying')}</span>
                         </div>
                     ) : (
                         <div className="flex items-center gap-3">
@@ -56,7 +56,7 @@ export const SocialAuth = ({ onGoogleAuth }: any) => {
                                 <Chrome size={20} className="text-[var(--text-main)] group-hover:text-blue-500 transition-colors duration-300" />
                                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full border-2 border-[#0c0c0c] animate-pulse" />
                             </div>
-                            <span className="text-[11px] font-black text-[var(--text-main)] uppercase tracking-[3px]">{T('btn_link_google')}</span>
+                            <span className="text-[11px] font-black text-[var(--text-main)] uppercase tracking-[3px]">{t('btn_link_google')}</span>
                         </div>
                     )}
                 </motion.button>

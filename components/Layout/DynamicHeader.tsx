@@ -18,7 +18,7 @@ export const DynamicHeader = ({
     onEditBook, onOpenShare, onOpenExport, onOpenAnalytics, 
     onDeleteBook, setActiveSection 
 }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [showSuperMenu, setShowSuperMenu] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -46,7 +46,7 @@ export const DynamicHeader = ({
                     <div className="md:hidden flex items-center gap-3">
                         <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/30">V</div>
                         <h1 className="text-xl font-black uppercase italic text-[var(--text-main)] tracking-tighter leading-none">
-                            {T('vault_pro_split_1')}<span className="text-orange-500">{T('vault_pro_split_2')}</span>
+                            {t('vault_pro_split_1')}<span className="text-orange-500">{t('vault_pro_split_2')}</span>
                         </h1>
                     </div>
                 )}
@@ -69,7 +69,7 @@ export const DynamicHeader = ({
                             <div className="flex items-center gap-2 mt-1">
                                 <ShieldCheck size={12} className="text-green-500" strokeWidth={3} />
                                 <p className="text-[9px] font-black text-green-500 uppercase tracking-[2.5px] opacity-80">
-                                    {T('protocol_active')}
+                                    {t('protocol_active')}
                                 </p>
                             </div>
                         </div>
@@ -77,7 +77,7 @@ export const DynamicHeader = ({
                 ) : (
                     <div className="text-left hidden md:block">
                         <h2 className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[var(--text-main)]">
-                            {activeSection === 'books' ? T('financial_dashboard') : T(`nav_${activeSection}`)}
+                            {activeSection === 'books' ? t('financial_dashboard') : t(`nav_${activeSection}`)}
                         </h2>
                         <div className="flex items-center gap-2 mt-2">
                              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
@@ -103,7 +103,7 @@ export const DynamicHeader = ({
                         )}
                     >
                         <Plus size={18} strokeWidth={3.5} /> 
-                        {currentBook && activeSection === 'books' ? T('btn_new_entry') : T('btn_create_vault')}
+                        {currentBook && activeSection === 'books' ? t('btn_new_entry') : t('btn_create_vault')}
                     </button>
                 </Tooltip>
 
@@ -144,7 +144,7 @@ export const DynamicHeader = ({
                                         className="absolute right-0 top-16 w-72 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden"
                                     >
                                         <div className="px-5 py-3 border-b border-[var(--border)] mb-1 flex items-center justify-between opacity-60">
-                                            <span className="text-[8px] font-black uppercase tracking-[3px]">{T('action_quick_protocol')}</span>
+                                            <span className="text-[8px] font-black uppercase tracking-[3px]">{t('action_quick_protocol')}</span>
                                             <Zap size={10} fill="currentColor" />
                                         </div>
                                         
@@ -156,14 +156,14 @@ export const DynamicHeader = ({
                                         ].map((item) => (
                                             <button key={item.label} onClick={() => handleAction(item.action)} className={cn("w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] group", item.bg)}>
                                                 <item.icon size={18} className={`${item.color} group-hover:scale-110 transition-transform`} strokeWidth={2.5} /> 
-                                                <span className="group-hover:text-[var(--text-main)]">{T(item.label)}</span>
+                                                <span className="group-hover:text-[var(--text-main)]">{t(item.label)}</span>
                                             </button>
                                         ))}
                                         
                                         <div className="h-px bg-[var(--border)] mx-4 my-2 opacity-50" />
                                         
                                         <button onClick={() => handleAction(onDeleteBook)} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-[22px] transition-all text-left text-red-500 hover:bg-red-500/10 hover:text-red-600">
-                                            <Trash2 size={18} strokeWidth={2.5} /> <span>{T('action_terminate_vault')}</span>
+                                            <Trash2 size={18} strokeWidth={2.5} /> <span>{t('action_terminate_vault')}</span>
                                         </button>
                                     </motion.div>
                                 </>
@@ -197,11 +197,11 @@ export const DynamicHeader = ({
                                     <div className="fixed inset-0 z-[499]" onClick={() => setShowUserMenu(false)} />
                                     <motion.div initial={{ opacity: 0, scale: 0.9, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute right-0 top-16 w-64 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden">
                                         <button onClick={() => handleAction(() => setActiveSection('profile'))} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-blue-500/10 hover:text-blue-500">
-                                            <User size={18} strokeWidth={2.5} /> <span>{T('action_account_settings')}</span>
+                                            <User size={18} strokeWidth={2.5} /> <span>{t('action_account_settings')}</span>
                                         </button>
                                         <div className="mt-2 pt-2 border-t border-[var(--border)] opacity-30 mx-4" />
                                         <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-red-500 hover:bg-red-500/10 hover:text-red-600">
-                                            <LogOut size={18} strokeWidth={2.5} /> <span>{T('nav_signout')}</span>
+                                            <LogOut size={18} strokeWidth={2.5} /> <span>{t('nav_signout')}</span>
                                         </button>
                                     </motion.div>
                                 </>

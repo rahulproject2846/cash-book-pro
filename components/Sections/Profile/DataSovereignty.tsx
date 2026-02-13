@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
  * Design: High-Integrity OS Interface.
  */
 export const DataSovereignty = ({ exportMasterData, importMasterData, importInputRef, isExporting }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
 
     return (
         <div className={cn(
@@ -41,7 +41,7 @@ export const DataSovereignty = ({ exportMasterData, importMasterData, importInpu
                     </Tooltip>
                     <div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                            {T('data_sovereignty_title') || "DATA SOVEREIGNTY"}
+                            {t('data_sovereignty_title') || "DATA SOVEREIGNTY"}
                         </h4>
                         <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-2 opacity-60">
                             Local Protocol Recovery Hub
@@ -89,7 +89,7 @@ export const DataSovereignty = ({ exportMasterData, importMasterData, importInpu
                             )}
                         >
                             <Upload size={20} strokeWidth={2.5} className="group-hover/btn:-translate-y-0.5 transition-transform" /> 
-                            {T('action_restore') || "RESTORE"}
+                            {t('action_restore') || "RESTORE"}
                         </button>
                     </Tooltip>
                     <input type="file" ref={importInputRef} onChange={importMasterData} accept=".json" className="hidden" />
@@ -110,7 +110,7 @@ export const DataSovereignty = ({ exportMasterData, importMasterData, importInpu
                             ) : (
                                 <>
                                     <FileJson size={20} strokeWidth={2.5} className="group-hover/backup:scale-110 transition-transform" /> 
-                                    {T('action_backup') || "BACKUP"}
+                                    {t('action_backup') || "BACKUP"}
                                 </>
                             )}
                         </button>

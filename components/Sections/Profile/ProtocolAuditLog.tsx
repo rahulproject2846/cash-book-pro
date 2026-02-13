@@ -12,7 +12,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { cn } from '@/lib/utils/helpers'; // তোর নতুন cn utility
 
 export const ProtocolAuditLog = () => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
 
     // --- 🧬 DATA MAPPING (Logic Preserved) ---
     const logs = [
@@ -66,7 +66,7 @@ export const ProtocolAuditLog = () => {
                     </Tooltip>
                     <div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                            {T('audit_log_title') || "SECURITY AUDIT LOG"}
+                            {t('audit_log_title') || "SECURITY AUDIT LOG"}
                         </h4>
                         <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-2 opacity-60">
                             Local Node Activity Feed

@@ -21,6 +21,7 @@ type ModalView =
   | 'deleteConfirm' 
   | 'deleteTagConfirm' // 🔥 ফিক্স: রেড লাইন দূর করার জন্য এটি যোগ করা হয়েছে
   | 'shortcut' 
+  | 'conflictResolver' // 🔥 ফিক্স: vKey mismatch conflict resolution
   | 'none';
 
 interface ModalContextType {

@@ -21,7 +21,7 @@ interface CommandItem {
 }
 
 export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUser, setActiveSection, setCurrentBook }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [books, setBooks] = useState<any[]>([]);
@@ -134,10 +134,9 @@ export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUse
                         style={{ 
                             backgroundColor: 'var(--bg-card)', 
                             backdropFilter: 'var(--glass-blur)',
-                            WebkitBackdropFilter: 'var(--glass-blur)',
                             boxShadow: 'var(--card-shadow)',
                             borderColor: 'var(--border-color)'
-                        }}
+                        } as React.CSSProperties}
                         className="w-full max-w-2xl border rounded-[28px] overflow-hidden relative z-10"
                     >
                         {/* Search Input Area */}

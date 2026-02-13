@@ -44,7 +44,6 @@ const Keypad = memo(({ onInput, onDelete }: KeypadProps) => {
                         whileTap={{ scale: 0.92, transition: { duration: 0.1, ease: "easeOut" } }} // Faster transition
                         onClick={(e) => { e.preventDefault(); triggerHaptic(); onInput(k.val); }}
                         className={cn(btnBase, k.type === 'op' ? opBtn : numBtn)}
-                        style={{ willChange: 'auto' }} // Hardware acceleration
                     >
                         {k.icon ? <k.icon size={20} strokeWidth={2.5} /> : k.label}
                     </motion.button>
@@ -54,7 +53,6 @@ const Keypad = memo(({ onInput, onDelete }: KeypadProps) => {
                     whileTap={{ scale: 0.92, transition: { duration: 0.1, ease: "easeOut" } }} // Faster transition
                     onClick={(e) => { e.preventDefault(); triggerHaptic(); onDelete(); }}
                     className={cn(btnBase, "col-span-4 bg-red-500/10 text-red-500 border border-red-500/20 mt-2")}
-                    style={{ willChange: 'auto' }} // Hardware acceleration
                 >
                     <Delete size={22} strokeWidth={2.5} />
                 </motion.button>

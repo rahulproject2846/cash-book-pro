@@ -15,7 +15,7 @@ export const GovernanceModule = ({
     limitBuffer, setLimitBuffer, saveLimit, 
     newCat, setNewCat 
 }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const { openModal } = useModal();
     const [isFocused, setIsFocused] = useState<string | null>(null);
 
@@ -55,7 +55,7 @@ export const GovernanceModule = ({
                                 <Tag size={22} strokeWidth={2.5} />
                             </div>
                             <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic">
-                                {T('registry_tags') || "REGISTRY TAGS"}
+                                {t('registry_tags') || "REGISTRY TAGS"}
                             </h4>
                         </div>
                     </div>
@@ -114,7 +114,7 @@ export const GovernanceModule = ({
                             <ShieldAlert size={22} strokeWidth={2.5} />
                         </div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic">
-                            {T('expense_threshold') || "EXPENSE THRESHOLD"}
+                            {t('expense_threshold') || "EXPENSE THRESHOLD"}
                         </h4>
                     </div>
                     
@@ -135,7 +135,7 @@ export const GovernanceModule = ({
                             />
                             <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
                                 <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[3px] opacity-30">
-                                    {T('label_monthly_cap') || "PROTOCOL LIMIT"}
+                                    {t('label_monthly_cap') || "PROTOCOL LIMIT"}
                                 </span>
                             </div>
                         </div>

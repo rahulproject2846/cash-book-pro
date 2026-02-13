@@ -19,6 +19,7 @@ import {
 } from './index';
 import { ShareModal } from './ShareModal';
 import { TerminationModal } from './TerminationModal';
+import { ConflictResolverModal } from './ConflictResolverModal';
 import { AnalyticsChart } from '@/components/AnalyticsChart'; // পাথ সিঙ্ক করা হয়েছে
 
 /**
@@ -28,7 +29,7 @@ import { AnalyticsChart } from '@/components/AnalyticsChart'; // পাথ স�
  */
 export const ModalRegistry = () => {
   const { view, isOpen, data, closeModal } = useModal();
-  const { T, t, language } = useTranslation();
+  const { t, language } = useTranslation();
 
   return (
     <AnimatePresence mode="popLayout">
@@ -61,7 +62,7 @@ export const ModalRegistry = () => {
       {view === 'analytics' && (
         <ModalLayout 
           key="analytics-modal" 
-          title={T('modal_analytics_title') || "ANALYTICS INTELLIGENCE"} 
+          title={t('modal_analytics_title') || "ANALYTICS INTELLIGENCE"} 
           onClose={closeModal}
           isOpen={isOpen}
         >
@@ -110,7 +111,7 @@ export const ModalRegistry = () => {
       {view === 'shortcut' && (
         <ModalLayout 
           key="shortcut-modal" 
-          title={T('modal_shortcut_title') || "SYSTEM SHORTCUTS"} 
+          title={t('modal_shortcut_title') || "SYSTEM SHORTCUTS"} 
           onClose={closeModal}
           isOpen={isOpen}
         >
@@ -128,7 +129,7 @@ export const ModalRegistry = () => {
                         </div>
                         <div className="text-left">
                           <p className="font-black uppercase text-sm tracking-[3px] text-[var(--text-main)]">
-                            {T('initialize_ledger')}
+                            {t('initialize_ledger')}
                           </p>
                           <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mt-1.5 opacity-60">
                             {t('shortcut_desc')}
@@ -140,6 +141,9 @@ export const ModalRegistry = () => {
           </div>
         </ModalLayout>
       )}
+
+      {/* ৮. কনফ্লিক্ট রেজোলভার প্রোটোকল */}
+      {view === 'conflictResolver' && <ConflictResolverModal />}
     </AnimatePresence>
   );
 };

@@ -7,7 +7,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { cn } from '@/lib/utils/helpers';
 
 export const RegionModule = ({ currency, updateCurrency }: any) => {
-    const { language, setLanguage, T, t } = useTranslation();
+    const { language, setLanguage, t } = useTranslation();
 
     return (
         <div className={cn(
@@ -29,7 +29,7 @@ export const RegionModule = ({ currency, updateCurrency }: any) => {
                         </div>
                         <div>
                             <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                                {T('system_language') || "IDENTITY LANGUAGE"}
+                                {t('system_language') || "IDENTITY LANGUAGE"}
                             </h4>
                             <p className="text-[8px] font-bold text-blue-500 uppercase tracking-[2px] mt-2 opacity-60">Localization Protocol</p>
                         </div>
@@ -65,7 +65,7 @@ export const RegionModule = ({ currency, updateCurrency }: any) => {
                         </div>
                         <div>
                             <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                                {T('base_currency') || "FINANCIAL SYMBOL"}
+                                {t('base_currency') || "FINANCIAL SYMBOL"}
                             </h4>
                             <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-2 opacity-60">Currency Registry</p>
                         </div>

@@ -33,7 +33,7 @@ import { cn, toBn } from '@/lib/utils/helpers';
 
 
 export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, symbol }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     
     // ✅ Memoized Colors to prevent re-renders
     const PIE_COLORS = useMemo(() => ['#F97316', '#3B82F6', '#10B981', '#EF4444', '#8B5CF6', '#64748B'], []);
@@ -73,7 +73,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                             </Tooltip>
                             <div>
                                 <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                                    {T('flow_velocity') || "FLOW VELOCITY TREND"}
+                                    {t('flow_velocity') || "FLOW VELOCITY TREND"}
                                 </h4>
                                 <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-50">Sequential Intelligence Engine</p>
                             </div>
@@ -110,7 +110,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                         </div>
                         <div className="min-w-0">
                             <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none truncate">
-                                {T('capital_split') || "CAPITAL SPLIT"}
+                                {t('capital_split') || "CAPITAL SPLIT"}
                             </h4>
                             <p className="text-[8px] font-bold text-blue-500 uppercase tracking-[2px] mt-2 opacity-50">Categorical Nodes</p>
                         </div>
@@ -128,7 +128,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                     </PieChart>
                                 </ResponsiveContainer>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                    <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[3px] opacity-40">{T('total_expense')}</p>
+                                    <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[3px] opacity-40">{t('total_expense')}</p>
                                     <h5 className="text-[20px] font-mono-finance font-black text-[var(--text-main)] mt-1 tracking-tighter">
                                         {symbol}{toBn(totalExpense.toLocaleString(), language)}
                                     </h5>
@@ -137,7 +137,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                         ) : (
                             <div className="text-center flex flex-col items-center gap-4 opacity-10">
                                 <Zap size={48} className="text-orange-500" />
-                                <p className="text-[10px] font-black uppercase tracking-[5px]">{T('awaiting_intel')}</p>
+                                <p className="text-[10px] font-black uppercase tracking-[5px]">{t('awaiting_intel')}</p>
                             </div>
                         )}
                     </div>
@@ -169,7 +169,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                     </div>
                     <div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[4px] italic leading-none">
-                            {T('liquidity_protocol') || "LIQUIDITY ANALYSIS"}
+                            {t('liquidity_protocol') || "LIQUIDITY ANALYSIS"}
                         </h4>
                         <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-50">Physical Asset Verification</p>
                     </div>
@@ -202,7 +202,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                         </div>
                                         <div className="space-y-1">
                                             <p className="text-[12px] font-black uppercase tracking-[3px] text-[var(--text-main)]">
-                                                {T(isCash ? 'cash_archive' : 'bank_archive') || method}
+                                                {t(isCash ? 'cash_archive' : 'bank_archive') || method}
                                             </p>
                                             <div className="flex items-center gap-2">
                                                 <BadgeCheck size={10} className="text-orange-500 opacity-60" />

@@ -36,7 +36,7 @@ const EliteInput = ({ icon: Icon, type, placeholder, value, name, id, autoComple
 );
 
 export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [isLoading, setIsLoading] = useState(false);
     const [errorField, setErrorField] = useState<string | null>(null); // 'email', 'password', or 'both'
@@ -90,7 +90,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                     animate={{ letterSpacing: "1px", opacity: 1 }}
                     className="text-5xl font-black text-[var(--text-main)] italic tracking-tighter uppercase leading-none"
                 >
-                    {T('vault_pro_split_1')}<span className="text-[var(--accent)]">{T('vault_pro_split_2')}</span>
+                    {t('vault_pro_split_1')}<span className="text-[var(--accent)]">{t('vault_pro_split_2')}</span>
                 </motion.h2>
                 <p className="text-[9px] font-black text-[var(--text-muted)] mt-4 uppercase tracking-[6px] opacity-60">
                     {t('auth_tagline')}
@@ -156,7 +156,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                         ) : (
                             <div className="flex items-center gap-3">
                                 <Fingerprint size={18} strokeWidth={3} />
-                                {T('btn_unseal')} 
+                                {t('btn_unseal')} 
                                 <ArrowRight size={18} strokeWidth={3} />
                             </div>
                         )}
@@ -171,7 +171,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                 </div>
                 <div className="relative flex justify-center text-[7px] uppercase font-black tracking-[4px]">
                     <span className="bg-[var(--bg-app)] px-4 text-[var(--text-muted)] opacity-50">
-                        {T('auth_middleware')}
+                        {t('auth_middleware')}
                     </span>
                 </div>
             </div>
@@ -182,7 +182,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                 <button onClick={onSwitch} className="group text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[4px] transition-all">
                     {t('auth_new_operator')} 
                     <span className="ml-2 text-[var(--text-main)] underline underline-offset-8 decoration-orange-500/30 group-hover:text-[var(--accent)] transition-all font-black">
-                        {T('btn_initialize')}
+                        {t('btn_initialize')}
                     </span>
                 </button>
             </div>

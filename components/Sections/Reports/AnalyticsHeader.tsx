@@ -7,7 +7,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { toBn, cn } from '@/lib/utils/helpers'; // cn utility অ্যাড করা হয়েছে
 
 export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -38,14 +38,14 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
 
                 <div>
                     <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[var(--text-main)] leading-none">
-                        {T('nav_analytics') || "INTELLIGENCE"}<span className="text-orange-500">.</span>
+                        {t('nav_analytics') || "INTELLIGENCE"}<span className="text-orange-500">.</span>
                     </h2>
                     
                     <div className="flex items-center gap-2 mt-2.5">
                         <div className="flex items-center gap-2 px-2.5 py-1 bg-orange-500/10 text-orange-500 rounded-lg border border-orange-500/20">
                             <Zap size={11} fill="currentColor" strokeWidth={0} />
                             <span className="text-[8px] font-black uppercase tracking-[2px]">
-                                {toBn(count, language)} {T('protocols_label') || "RECORDS ANALYZED"}
+                                {toBn(count, language)} {t('protocols_label') || "RECORDS ANALYZED"}
                             </span>
                         </div>
                         <span className="text-[9px] font-bold text-[var(--text-muted)] opacity-30 uppercase tracking-[3px] ml-1">
@@ -69,9 +69,9 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                     >
                         <Clock size={18} strokeWidth={2.5} className={cn(isMenuOpen ? "text-orange-500" : "opacity-60")} />
                         <div className="flex flex-col items-start leading-none">
-                            <span className="text-[8px] opacity-40 mb-1 tracking-[2px]">{T('range_selector') || "RANGE"}</span>
+                            <span className="text-[8px] opacity-40 mb-1 tracking-[2px]">{t('range_selector') || "RANGE"}</span>
                             <span className="text-[11px] font-bold text-[var(--text-main)] tracking-widest">
-                                {toBn(timeRange, language)}{T('label_days_short') || "D"}
+                                {toBn(timeRange, language)}{t('label_days_short') || "D"}
                             </span>
                         </div>
                         <ChevronDown size={14} className={cn("opacity-30 transition-transform duration-500", isMenuOpen && "rotate-180")} />
@@ -87,7 +87,7 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                             className="absolute right-0 mt-3 w-60 bg-[var(--bg-card)]/95 backdrop-blur-2xl border border-[var(--border)] rounded-[28px] p-2 z-[1000] shadow-2xl"
                         >
                             <div className="px-4 py-2 border-b border-[var(--border)] mb-1 opacity-40">
-                                <span className="text-[8px] font-black uppercase tracking-[3px]">{T('filter_class') || "CYCLE SELECTION"}</span>
+                                <span className="text-[8px] font-black uppercase tracking-[3px]">{t('filter_class') || "CYCLE SELECTION"}</span>
                             </div>
                             <div className="py-1">
                                 {ranges.map((r) => {

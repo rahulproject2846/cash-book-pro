@@ -22,7 +22,7 @@ const AdvancedExportModal = dynamic(() => import('@/components/Modals/AdvancedEx
 });
 
 export const ReportsSection = ({ currentUser }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const [allEntries, setAllEntries] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [timeRange, setTimeRange] = useState('30');
@@ -101,8 +101,8 @@ export const ReportsSection = ({ currentUser }: any) => {
     return (
         <div className="w-full max-w-[1440px] mx-auto pb-40">
             <HubHeader 
-                title={T('nav_reports')} 
-                subtitle={`${toBn(processed.filtered.length, language)} ${T('records_analyzed')}`}
+                title={t('nav_reports')} 
+                subtitle={`${toBn(processed.filtered.length, language)} ${t('records_analyzed')}`}
                 icon={BarChart3}
                 showSearch={false}
             >
@@ -139,13 +139,13 @@ export const ReportsSection = ({ currentUser }: any) => {
                                 <Download size={28} />
                             </div>
                             <div className="text-center lg:text-left">
-                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter italic leading-none">{T('execute_report_title')}</h3>
+                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter italic leading-none">{t('execute_report_title')}</h3>
                                 <p className="text-[10px] md:text-[12px] font-bold text-white/80 uppercase tracking-[2px] mt-3 opacity-80 max-w-xl">{t('execute_report_desc')}</p>
                             </div>
                         </div>
                         <button onClick={() => setShowExportModal(true)} className="w-full lg:w-auto px-12 h-16 bg-black text-white rounded-[24px] text-[11px] font-black uppercase tracking-[4px] hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-4">
                             <Fingerprint size={20} className="text-orange-500" strokeWidth={3} />
-                            {T('btn_execute_archive')}
+                            {t('btn_execute_archive')}
                         </button>
                     </div>
                 </div>

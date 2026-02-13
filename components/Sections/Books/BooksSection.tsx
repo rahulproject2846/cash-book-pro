@@ -35,7 +35,7 @@ const BooksSection = memo(({
 }: any) => {
     
     const { openModal } = useModal();
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const [mounted, setMounted] = useState(false);
     
     // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন (Direct Connection to V13 Engine)
@@ -135,8 +135,8 @@ const BooksSection = memo(({
             {/* --- ১. HUB HEADER --- */}
             {!currentBook && (
                 <HubHeader 
-                    title={T('ledger_hub') || "LEDGER HUB"} 
-                    subtitle={`${toBn(processedBooks.length, language)} ${T('active_protocols') || "PROTOCOLS ACTIVE"}`}
+                    title={t('ledger_hub') || "LEDGER HUB"} 
+                    subtitle={`${toBn(processedBooks.length, language)} ${t('active_protocols') || "PROTOCOLS ACTIVE"}`}
                     icon={Layout}
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
@@ -214,7 +214,7 @@ const BooksSection = memo(({
                                         <LayoutGrid size={24}/>
                                     </div>
                                     <div className="text-left">
-                                        <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[4px] leading-none">{T('protocol_index')}</p>
+                                        <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[4px] leading-none">{t('protocol_index')}</p>
                                         <p className="text-[14px] font-black text-[var(--text-main)] uppercase tracking-[2px] mt-2">
                                             {toBn(dashPage, language)} <span className="opacity-20 mx-2">/</span> {toBn(totalPages, language)}
                                         </p>

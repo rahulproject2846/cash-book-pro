@@ -12,7 +12,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 
 export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [form, setForm] = useState({ name: '', description: '', type: 'general', phone: '', image: '' });
     const [isLoading, setIsLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
@@ -103,11 +103,11 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                 <div className="px-8 pt-6 pb-2 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                            {initialData ? T('title_vault_upgrade') : T('title_initialize_vault')}
+                            {initialData ? t('title_vault_upgrade') : t('title_initialize_vault')}
                         </h2>
                         <div className="flex items-center gap-1.5 mt-1 opacity-70">
                             <ShieldCheck size={10} className="text-orange-500" />
-                            <span className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px]">{T('sync_ready')}</span>
+                            <span className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px]">{t('sync_ready')}</span>
                         </div>
                     </div>
                     <button onClick={onClose} className="w-10 h-10 rounded-full bg-[var(--bg-input)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-sm"><X size={20} /></button>
@@ -140,7 +140,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                     reader.readAsDataURL(file);
                                 }
                             }} />
-                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] mt-4 opacity-50">{T('label_visual_id')}</p>
+                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] mt-4 opacity-50">{t('label_visual_id')}</p>
                         </div>
 
                         {/* টাইপ সিলেক্টর */}
@@ -219,7 +219,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                     form.name ? "bg-orange-500 text-white shadow-orange-500/30 hover:bg-orange-600" : "bg-zinc-800 text-zinc-500 opacity-50"
                                 )}
                             >
-                                {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Fingerprint size={20} /> {initialData ? T('btn_upgrade') : T('btn_execute')}</>}
+                                {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Fingerprint size={20} /> {initialData ? t('btn_upgrade') : t('btn_execute')}</>}
                             </button>
                         </form>
                     </div>

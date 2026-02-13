@@ -33,7 +33,7 @@ const NAV_ITEMS = [
 
 // --- 1. Sidebar Component (Optimized Blur) ---
 const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onResetBook, isCompact }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     return (
         <motion.div 
             initial={false}
@@ -61,7 +61,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
                     <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-[18px] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-orange-500/30">V</div>
                     {!collapsed && (
                         <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xl font-black uppercase italic text-[var(--text-main)] tracking-tighter">
-                            {T('vault_pro_split_1')}<span className="text-orange-500">{T('vault_pro_split_2')}</span>
+                            {t('vault_pro_split_1')}<span className="text-orange-500">{t('vault_pro_split_2')}</span>
                         </motion.h1>
                     )}
                 </div>
@@ -85,18 +85,18 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
                             )}
                         >
                             <item.icon size={isCompact ? 18 : 22} strokeWidth={isActive ? 2.5 : 2} />
-                            {!collapsed && <span className="text-[11px] font-black uppercase tracking-[3px]">{T(item.name)}</span>}
+                            {!collapsed && <span className="text-[11px] font-black uppercase tracking-[3px]">{t(item.name)}</span>}
                             {isActive && collapsed && <div className="absolute left-2 w-1 h-6 bg-white rounded-full opacity-50" />}
                         </button>
                     );
-                    return collapsed ? <Tooltip key={item.id} text={T(item.name)} position="right">{navBtn}</Tooltip> : navBtn;
+                    return collapsed ? <Tooltip key={item.id} text={t(item.name)} position="right">{navBtn}</Tooltip> : navBtn;
                 })}
             </div>
 
             <div className="p-6 border-t border-[var(--border)]">
                 <button onClick={onLogout} className={cn("flex items-center h-12 text-red-500 hover:bg-red-500/10 rounded-2xl transition-all", collapsed ? "justify-center" : "px-4 gap-4 w-full")}>
                     <LogOut size={20} strokeWidth={2.5} /> 
-                    {!collapsed && <span className="text-[10px] font-black uppercase tracking-widest">{T('nav_signout')}</span>}
+                    {!collapsed && <span className="text-[10px] font-black uppercase tracking-widest">{t('nav_signout')}</span>}
                 </button>
             </div>
         </motion.div>
@@ -107,7 +107,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
 const BottomNav = ({ active, setActive, onFabClick, onResetBook }: any) => {
     const [isVisible, setIsVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
-    const { T } = useTranslation();
+    const { t } = useTranslation();
 
     useEffect(() => {
         const handleScroll = () => {
@@ -178,7 +178,7 @@ export const DashboardLayout = (props: any) => {
     const [mounted, setMounted] = useState(false);
     
     const prefs = currentUser?.preferences || {};
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
 
     // 🔥 Optimization: Merged Theme, Midnight, and Compact Mode Effects
     useEffect(() => {
@@ -261,7 +261,7 @@ export const DashboardLayout = (props: any) => {
                         <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="w-24 h-24 bg-orange-500 rounded-[35px] flex items-center justify-center mb-8">
                             <Fingerprint size={56} strokeWidth={2} />
                         </motion.div>
-                        <h2 className="text-3xl font-black uppercase italic tracking-tighter">{T('session_shield')}</h2>
+                        <h2 className="text-3xl font-black uppercase italic tracking-tighter">{t('session_shield')}</h2>
                         <p className="text-[10px] font-bold text-white/40 uppercase tracking-[4px] mt-4 flex items-center gap-2">
                             <ShieldCheck size={12} /> {t('protocol_locked')}
                         </p>

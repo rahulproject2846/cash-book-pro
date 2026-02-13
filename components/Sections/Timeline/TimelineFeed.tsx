@@ -26,12 +26,12 @@ export const TimelineFeed = ({
     groupedEntries, currencySymbol, isEmpty, 
     isSwitchingPage, pagination, onEdit, onDelete, onToggleStatus 
 }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
 
     if (isEmpty) return (
         <div className="py-40 flex flex-col items-center justify-center text-[var(--text-muted)] gap-6 opacity-20">
             <Inbox size={60} strokeWidth={1} />
-            <p className="font-black uppercase text-[11px] tracking-[5px]">{T('no_timeline_records')}</p>
+            <p className="font-black uppercase text-[11px] tracking-[5px]">{t('no_timeline_records')}</p>
         </div>
     );
 
@@ -62,16 +62,16 @@ export const TimelineFeed = ({
                                 <thead className="border-b border-[var(--border)] bg-[var(--bg-app)]/30">
                                     <tr className="text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">
                                         <th className="py-6 px-6 text-left w-14">#</th>
-                                        <th className="py-6 px-4 text-left w-36">{T('label_date')}</th>
-                                        <th className="py-6 px-4 text-left w-24">{T('label_time')}</th>
-                                        <th className="py-6 px-4 text-left w-32">{T('label_ref_id')}</th>
-                                        <th className="py-6 px-4 text-left">{T('label_protocol')}</th>
-                                        <th className="py-6 px-4 text-left">{T('label_memo')}</th>
-                                        <th className="py-6 px-4 text-left w-32">{T('label_tag')}</th>
-                                        <th className="py-6 px-4 text-left w-28">{T('label_via')}</th>
-                                        <th className="py-6 px-4 text-right w-44">{T('label_amount')}</th>
-                                        <th className="py-6 px-4 text-center w-36">{T('label_status')}</th>
-                                        <th className="py-6 px-6 text-right w-24">{T('label_options')}</th>
+                                        <th className="py-6 px-4 text-left w-36">{t('label_date')}</th>
+                                        <th className="py-6 px-4 text-left w-24">{t('label_time')}</th>
+                                        <th className="py-6 px-4 text-left w-32">{t('label_ref_id')}</th>
+                                        <th className="py-6 px-4 text-left">{t('label_protocol')}</th>
+                                        <th className="py-6 px-4 text-left">{t('label_memo')}</th>
+                                        <th className="py-6 px-4 text-left w-32">{t('label_tag')}</th>
+                                        <th className="py-6 px-4 text-left w-28">{t('label_via')}</th>
+                                        <th className="py-6 px-4 text-right w-44">{t('label_amount')}</th>
+                                        <th className="py-6 px-4 text-center w-36">{t('label_status')}</th>
+                                        <th className="py-6 px-6 text-right w-24">{t('label_options')}</th>
                                     </tr>
                                 </thead>
 
@@ -143,7 +143,7 @@ export const TimelineFeed = ({
                                                 {/* 8. VIA */}
                                                 <td className="py-6 px-4">
                                                     <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2px] bg-[var(--bg-app)] px-3 py-1.5 rounded-xl border border-[var(--border)]">
-                                                        {T(e.paymentMethod || 'cash')}
+                                                        {t(e.paymentMethod || 'cash')}
                                                     </span>
                                                 </td>
 
@@ -170,7 +170,7 @@ export const TimelineFeed = ({
                                                             )}
                                                         >
                                                             {isCompleted ? <Zap size={10} fill="currentColor" strokeWidth={0} /> : <Clock size={10} strokeWidth={3} />}
-                                                            {T(e.status)}
+                                                            {t(e.status)}
                                                         </button>
                                                     </Tooltip>
                                                 </td>
@@ -213,7 +213,7 @@ export const TimelineFeed = ({
                         <Database size={24} />
                     </div>
                     <div className="text-left">
-                        <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[4px] leading-none">{T('protocol_index')}</p>
+                        <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[4px] leading-none">{t('protocol_index')}</p>
                         <p className="text-[13px] font-black text-[var(--text-main)] uppercase tracking-[2px] mt-2">
                             {toBn(pagination.currentPage, language)} <span className="opacity-20 mx-2">/</span> {toBn(pagination.totalPages, language)}
                         </p>

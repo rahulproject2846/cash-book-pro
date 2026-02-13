@@ -31,6 +31,20 @@ export const useVirtualization = <T extends any>(
     items: T[],
     config: VirtualizationConfig
 ): UseVirtualizationReturn<T> => {
+    // 🔒 SAFETY CHECK: Handle undefined input
+    if (!items || !Array.isArray(items)) {
+        return {
+            visibleItems: [],
+            totalItems: 0,
+            startIndex: 0,
+            endIndex: 0,
+            scrollElementRef: { current: null },
+            scrollToIndex: () => {},
+            loadMore: () => {},
+            isNearBottom: false
+        };
+    }
+
     const [scrollTop, setScrollTop] = useState(0);
     const [isNearBottom, setIsNearBottom] = useState(false);
     const scrollElementRef = useRef<HTMLDivElement>(null);
@@ -41,9 +55,12 @@ export const useVirtualization = <T extends any>(
         const { itemHeight, bufferSize } = config;
         
         const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - bufferSize);
+        
+        // 🔒 SSR SAFETY: Only access window.innerHeight if window exists
+        const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
         const endIndex = Math.min(
             items.length - 1,
-            Math.ceil((scrollTop + window.innerHeight) / itemHeight) + bufferSize
+            Math.ceil((scrollTop + windowHeight) / itemHeight) + bufferSize
         );
         
         return { start: startIndex, end: endIndex };
@@ -83,7 +100,10 @@ export const useVirtualization = <T extends any>(
         if (!scrollElementRef.current) return;
         
         const { itemHeight } = config;
-        const targetScrollTop = Math.max(0, index * itemHeight - window.innerHeight / 2);
+        
+        // 🔒 SSR SAFETY: Only access window.innerHeight if window exists
+        const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+        const targetScrollTop = Math.max(0, index * itemHeight - windowHeight / 2);
         
         scrollElementRef.current.scrollTo({
             top: targetScrollTop,
@@ -134,16 +154,21 @@ export const useVirtualization = <T extends any>(
         // Add scroll listener with passive option for better performance
         scrollElement.addEventListener('scroll', handleScroll, { passive: true });
         
-        // Add resize listener
+        // 🔒 SSR SAFETY: Only add resize listener if window exists
         const handleResize = () => {
             handleScroll();
         };
-        window.addEventListener('resize', handleResize);
+        
+        if (typeof window !== 'undefined') {
+            window.addEventListener('resize', handleResize);
+        }
 
         // Cleanup
         return () => {
             scrollElement.removeEventListener('scroll', handleScroll);
-            window.removeEventListener('resize', handleResize);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('resize', handleResize);
+            }
         };
     }, [config.itemHeight]);
 

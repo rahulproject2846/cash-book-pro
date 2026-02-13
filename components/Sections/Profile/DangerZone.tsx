@@ -12,7 +12,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 
 export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [showConfirm, setShowConfirm] = useState(false);
     const [confirmationText, setConfirmationText] = useState('');
     const [isMobile, setIsMobile] = useState(false);
@@ -43,7 +43,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                         </Tooltip>
                         <div>
                             <h4 className="text-base font-black text-red-500 uppercase tracking-[3px] italic leading-none">
-                                {T('danger_zone_title') || "CRITICAL PROTOCOLS"}
+                                {t('danger_zone_title') || "CRITICAL PROTOCOLS"}
                             </h4>
                             <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-50">
                                 Irreversible System Termination
@@ -64,7 +64,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                             </div>
                             <div className="text-center md:text-left space-y-1.5">
                                 <p className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[2px]">
-                                    {T('label_termination') || "IDENTITY TERMINATION"}
+                                    {t('label_termination') || "IDENTITY TERMINATION"}
                                 </p>
                                 <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[1px] opacity-40">
                                     {t('desc_termination') || "Wipe all ledgers and cloud backup records."}
@@ -77,7 +77,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                 onClick={() => setShowConfirm(true)}
                                 className="w-full md:w-auto px-10 h-14 bg-zinc-800 text-red-500 rounded-[20px] font-black text-[10px] uppercase tracking-[3px] hover:bg-red-600 hover:text-white active:scale-95 transition-all shadow-xl"
                             >
-                                {T('btn_delete_identity') || "DELETE IDENTITY"}
+                                {t('btn_delete_identity') || "DELETE IDENTITY"}
                             </button>
                         </Tooltip>
                     </div>
@@ -103,7 +103,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                     <div className="flex items-center gap-3">
                                         <BadgeAlert size={16} className="text-red-500 animate-pulse" />
                                         <h4 className="text-[11px] font-black uppercase tracking-[4px] text-red-500 italic">
-                                            {T('term_confirm_title') || "TERMINATION PROTOCOL"}
+                                            {t('term_confirm_title') || "TERMINATION PROTOCOL"}
                                         </h4>
                                     </div>
                                     <button onClick={() => setShowConfirm(false)} className="w-10 h-10 rounded-full bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-inner">
@@ -118,7 +118,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                         <AlertOctagon size={40} className="animate-pulse" />
                                     </div>
                                     <h4 className="text-sm font-black uppercase tracking-[3px] text-red-500 mb-5">
-                                        {T('critical_auth') || "SECURITY AUTHENTICATION"}
+                                        {t('critical_auth') || "SECURITY AUTHENTICATION"}
                                     </h4>
                                     <ul className="text-[10px] font-bold uppercase leading-relaxed text-red-500/50 text-left space-y-3 list-none px-2 tracking-widest">
                                         <li className="flex items-start gap-3"><Zap size={10} className="shrink-0 mt-0.5" /> {t('warn_ledger_loss')}</li>
@@ -163,7 +163,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                         ) : (
                                             <>
                                                 <ShieldAlert size={22} strokeWidth={2.5} />
-                                                {T('action_auth_termination') || "EXECUTE SYSTEM PURGE"}
+                                                {t('action_auth_termination') || "EXECUTE SYSTEM PURGE"}
                                             </>
                                         )}
                                     </button>

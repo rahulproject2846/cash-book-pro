@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils/helpers';
 
 export const ExperienceModule = ({ preferences, updatePreference }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
 
     const ToggleItem = ({ active, onClick, icon: Icon, label, ttKey, colorClass }: any) => (
         <Tooltip text={preferences.showTooltips !== false ? t(ttKey) : ""}>
@@ -73,7 +73,7 @@ export const ExperienceModule = ({ preferences, updatePreference }: any) => {
                 </div>
                 <div>
                     <h4 className="text-lg font-black text-[var(--text-main)] uppercase tracking-[4px] italic leading-none">
-                        {T('interface_engine') || "INTERFACE ENGINE"}
+                        {t('interface_engine') || "INTERFACE ENGINE"}
                     </h4>
                     <div className="flex items-center gap-2 mt-2.5">
                         <span className="h-[1px] w-6 bg-purple-500/40" />
@@ -85,7 +85,7 @@ export const ExperienceModule = ({ preferences, updatePreference }: any) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 relative z-10">
                 {/* 🚀 New: Turbo Mode Controller */}
                 <ToggleItem 
-                    label={T('turbo_mode_on') || "TURBO MODE"} 
+                    label={t('turbo_mode_on') || "TURBO MODE"} 
                     ttKey="tt_turbo" 
                     active={preferences.turboMode} 
                     onClick={() => updatePreference('turboMode', !preferences.turboMode)} 
@@ -93,14 +93,14 @@ export const ExperienceModule = ({ preferences, updatePreference }: any) => {
                     colorClass="text-cyan-400" 
                 />
 
-                <ToggleItem label={T('amoled_midnight')} ttKey="tt_midnight" active={preferences.isMidnight} onClick={() => updatePreference('isMidnight', !preferences.isMidnight)} icon={Moon} colorClass="text-blue-400" />
-                <ToggleItem label={T('compact_deck')} ttKey="tt_compact" active={preferences.compactMode} onClick={() => updatePreference('compactMode', !preferences.compactMode)} icon={Smartphone} />
-                <ToggleItem label={T('session_shield')} ttKey="tt_autolock" active={preferences.autoLock} onClick={() => updatePreference('autoLock', !preferences.autoLock)} icon={Lock} colorClass="text-red-500" />
-                <ToggleItem label={T('system_pulse')} ttKey="tt_reminders" active={preferences.dailyReminder} onClick={() => updatePreference('dailyReminder', !preferences.dailyReminder)} icon={Monitor} colorClass="text-green-500" />
+                <ToggleItem label={t('amoled_midnight')} ttKey="tt_midnight" active={preferences.isMidnight} onClick={() => updatePreference('isMidnight', !preferences.isMidnight)} icon={Moon} colorClass="text-blue-400" />
+                <ToggleItem label={t('compact_deck')} ttKey="tt_compact" active={preferences.compactMode} onClick={() => updatePreference('compactMode', !preferences.compactMode)} icon={Smartphone} />
+                <ToggleItem label={t('session_shield')} ttKey="tt_autolock" active={preferences.autoLock} onClick={() => updatePreference('autoLock', !preferences.autoLock)} icon={Lock} colorClass="text-red-500" />
+                <ToggleItem label={t('system_pulse')} ttKey="tt_reminders" active={preferences.dailyReminder} onClick={() => updatePreference('dailyReminder', !preferences.dailyReminder)} icon={Monitor} colorClass="text-green-500" />
                 
                 {/* System Guidance */}
                 <ToggleItem 
-                    label={T('system_guidance') || "SYSTEM GUIDANCE"} 
+                    label={t('system_guidance') || "SYSTEM GUIDANCE"} 
                     ttKey="tt_tooltips_global" 
                     active={preferences.showTooltips !== false} 
                     onClick={() => updatePreference('showTooltips', preferences.showTooltips === false)} 

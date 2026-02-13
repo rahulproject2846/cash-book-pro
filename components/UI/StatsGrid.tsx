@@ -26,15 +26,15 @@ export const StatsGrid = ({
     currency = "BDT (৳)",
     isReport = false
 }: StatsProps) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const symbol = currency.match(/\(([^)]+)\)/)?.[1] || "৳";
     const finalSurplus = externalSurplus !== undefined ? externalSurplus : (income - expense);
 
     const cards = [
-        { id: 'inflow', label: T('label_inflow'), value: income, color: 'text-green-500', accent: 'bg-green-500', glow: 'rgba(34, 197, 94, 0.15)', icon: TrendingUp, desc: T('desc_inflow') },
-        { id: 'outflow', label: T('label_outflow'), value: expense, color: 'text-red-500', accent: 'bg-red-500', glow: 'rgba(239, 68, 68, 0.15)', icon: TrendingDown, desc: T('desc_outflow') },
-        { id: 'pending', label: T('label_pending'), value: pending, color: 'text-orange-500', accent: 'bg-orange-500', glow: 'rgba(249, 115, 22, 0.15)', icon: Clock, desc: T('desc_pending') },
-        { id: 'surplus', label: T('label_surplus'), value: finalSurplus, color: finalSurplus >= 0 ? 'text-blue-500' : 'text-red-500', accent: finalSurplus >= 0 ? 'bg-blue-500' : 'bg-red-500', glow: finalSurplus >= 0 ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)', icon: Wallet, desc: T('desc_surplus') },
+        { id: 'inflow', label: t('label_inflow'), value: income, color: 'text-green-500', accent: 'bg-green-500', glow: 'rgba(34, 197, 94, 0.15)', icon: TrendingUp, desc: t('desc_inflow') },
+        { id: 'outflow', label: t('label_outflow'), value: expense, color: 'text-red-500', accent: 'bg-red-500', glow: 'rgba(239, 68, 68, 0.15)', icon: TrendingDown, desc: t('desc_outflow') },
+        { id: 'pending', label: t('label_pending'), value: pending, color: 'text-orange-500', accent: 'bg-orange-500', glow: 'rgba(249, 115, 22, 0.15)', icon: Clock, desc: t('desc_pending') },
+        { id: 'surplus', label: t('label_surplus'), value: finalSurplus, color: finalSurplus >= 0 ? 'text-blue-500' : 'text-red-500', accent: finalSurplus >= 0 ? 'bg-blue-500' : 'bg-red-500', glow: finalSurplus >= 0 ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)', icon: Wallet, desc: t('desc_surplus') },
     ];
 
     return (
@@ -53,7 +53,7 @@ export const StatsGrid = ({
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1.5 opacity-60">
                                 <Zap size={12} className="text-orange-500" fill="currentColor" strokeWidth={0} />
-                                <span className="text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)]">{T('label_surplus')}</span>
+                                <span className="text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)]">{t('label_surplus')}</span>
                             </div>
                             <h3 className={cn("text-3xl font-mono-finance font-black tracking-tighter leading-none", finalSurplus >= 0 ? 'text-blue-500' : 'text-red-500')}>
                                 <span className="text-sm mr-1 opacity-50 font-sans">{symbol}</span>
@@ -61,7 +61,7 @@ export const StatsGrid = ({
                             </h3>
                             <div className="mt-4">
                                 <span className="px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-color)] text-[7px] font-black text-green-500 uppercase tracking-widest">
-                                    {T('status_secured') || "PROTOCOL SECURED"}
+                                    {t('status_secured') || "PROTOCOL SECURED"}
                                 </span>
                             </div>
                         </div>

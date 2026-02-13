@@ -9,7 +9,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn, getTimeAgo } from '@/lib/utils/helpers';
 
 // --- 📦 SUB-COMPONENT: ELITE VAULT CARD ---
-const BookListItem = ({ book, onClick, onQuickAdd, balance, currencySymbol, lang, t, T }: any) => {
+const BookListItem = ({ book, onClick, onQuickAdd, balance, currencySymbol, lang, t }: any) => {
     const bookId = book.reactKey || book._id || book.localId;
     const isPositive = balance >= 0;
 
@@ -58,7 +58,7 @@ const BookListItem = ({ book, onClick, onQuickAdd, balance, currencySymbol, lang
             {/* Financial Stats Area (Design Fix for Mobile Overlap) */}
             <div className="mt-auto relative z-10 space-y-0.5 md:space-y-1">
                 <p className="text-[7px] md:text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2px] opacity-40">
-                    {T('net_asset') || "TOTAL SURPLUS"}
+                    {t('net_asset') || "TOTAL SURPLUS"}
                 </p>
                 <div className={cn(
                     "text-[22px] md:text-3xl font-mono-finance font-black tracking-tighter flex items-baseline gap-1",
@@ -73,12 +73,12 @@ const BookListItem = ({ book, onClick, onQuickAdd, balance, currencySymbol, lang
             <div className="mt-4 md:mt-6 pt-4 md:pt-5 border-t border-[var(--border)]/50 flex justify-between items-center relative z-10">
                 <div className="flex flex-col gap-0.5 md:gap-1">
                     <span className="text-[6px] md:text-[7px] font-black text-[var(--text-muted)] uppercase tracking-widest opacity-30">
-                        {T('label_last_updated')}
+                        {t('label_last_updated')}
                     </span>
                     <div className="flex items-center gap-1.5">
                         <Clock size={10} className="text-orange-500 opacity-60" />
                         <span className="text-[9px] md:text-[11px] font-black text-[var(--text-main)] uppercase tracking-wider">
-                            {getTimeAgo(book.updatedAt, lang, T)}
+                            {getTimeAgo(book.updatedAt, lang, t)}
                         </span>
                     </div>
                 </div>
@@ -106,12 +106,12 @@ export const BooksList = ({
     books = [], isLoading, onAddClick, onBookClick, onQuickAdd, getBookBalance, 
     currencySymbol = "৳"
 }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
 
     if (isLoading) return (
         <div className="py-40 flex flex-col items-center justify-center gap-6 opacity-20">
             <Loader2 className="animate-spin text-orange-500" size={48} />
-            <span className="text-[10px] font-black uppercase tracking-[5px]">Synchronizing Hub...</span>
+            <span className="text-[10px] font-black uppercase tracking-[5px]">{t('synchronizing_hub')}</span>
         </div>
     );
 
@@ -140,7 +140,7 @@ export const BooksList = ({
                                 <Plus size={36} strokeWidth={3.5} />
                             </div>
                             <span className="text-[8px] md:text-[12px] font-black uppercase tracking-[4px] text-center px-6 leading-relaxed">
-                                {T('initialize_ledger') || "INITIALIZE"}
+                                {t('initialize_ledger') || "INITIALIZE"}
                             </span>
                         </motion.div>
                     )}
@@ -155,7 +155,7 @@ export const BooksList = ({
                             balance={getBookBalance(b.reactKey || b._id || b.localId)} 
                             currencySymbol={currencySymbol} 
                             lang={language}
-                            t={t} T={T}
+                            t={t}
                         />
                     ))}
                 </AnimatePresence>

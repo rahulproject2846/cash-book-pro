@@ -24,7 +24,7 @@ const safeCalculate = (expression: string) => {
 };
 
 export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const { checkPotentialDuplicate } = useVault(currentUser, currentBook);
     
     // States
@@ -319,8 +319,8 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
-                                        <ModalEliteDropdown label={T('classification')} current={form.category} options={userCategories} onChange={(v:any) => setForm({...form, category: v})} icon={Layers} />
-                                        <ModalEliteDropdown label={T('via_protocol')} current={form.paymentMethod} options={['CASH', 'BANK', 'BKASH', 'NAGAD']} onChange={(v:any) => setForm({...form, paymentMethod: v})} icon={CreditCard} />
+                                        <ModalEliteDropdown label={t('classification')} current={form.category} options={userCategories} onChange={(v:any) => setForm({...form, category: v})} icon={Layers} />
+                                        <ModalEliteDropdown label={t('via_protocol')} current={form.paymentMethod} options={['CASH', 'BANK', 'BKASH', 'NAGAD']} onChange={(v:any) => setForm({...form, paymentMethod: v})} icon={CreditCard} />
                                     </div>
                                     
                                     <OSInput value={form.note} onChange={(v:any) => setForm({...form, note: v})} placeholder={t('placeholder_entry_memo')} icon={Info} onFocus={handleTextFocus} />
@@ -389,7 +389,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                         className="group w-full h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-black text-[12px] uppercase tracking-[3px] shadow-[0_10px_30px_-10px_rgba(249,115,22,0.5)] transition-all active:scale-[0.97] flex items-center justify-center gap-2"
                     >
                         <CheckCircle2 size={18} className="group-hover:scale-110 transition-transform" />
-                        {T('execute_protocol')}
+                        {t('execute_protocol')}
                     </button>
                 </div>
             </motion.div>

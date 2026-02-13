@@ -19,7 +19,7 @@ const ModalPortal = ({ children }: { children: React.ReactNode }) => {
 
 // --- 🍃 ২. MAIN MODAL LAYOUT (The Elite Shell) ---
 export const ModalLayout = ({ title, children, onClose }: any) => {
-  const { T } = useTranslation();
+  const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -110,17 +110,17 @@ export const ModalLayout = ({ title, children, onClose }: any) => {
 
 // --- 🗑️ ৩. DELETE CONFIRMATION MODAL (Logic Preserved) ---
 export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [localConfirmName, setLocalConfirmName] = React.useState('');
     const isMatch = localConfirmName?.toLowerCase() === targetName?.toLowerCase();
 
     return (
-        <ModalLayout title={T('term_confirm_title') || "Security Protocol: Termination"} onClose={onClose}>
+        <ModalLayout title={t('term_confirm_title') || "Security Protocol: Termination"} onClose={onClose}>
             <div className="space-y-8" onClick={(e) => e.stopPropagation()}>
                 <div className="flex gap-4 p-5 rounded-[28px] bg-red-500/5 border border-red-500/20 text-red-500">
                     <AlertTriangle size={24} className="shrink-0 animate-pulse" />
                     <div className="space-y-1">
-                        <p className="text-xs font-black uppercase tracking-widest leading-tight">{T('label_termination')}</p>
+                        <p className="text-xs font-black uppercase tracking-widest leading-tight">{t('label_termination')}</p>
                         <p className="text-[10px] font-bold opacity-70 leading-relaxed uppercase">
                             {t('term_warning')} <span className="underline italic text-red-600">"{targetName}"</span>
                         </p>
@@ -141,7 +141,7 @@ export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
                 </div>
                 <div className="flex gap-3 pt-2">
                     <button onClick={onClose} className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[2px] text-[var(--text-muted)] bg-[var(--bg-app)] border border-[var(--border)] hover:bg-[var(--bg-card)] transition-all">
-                        {T('cancel')}
+                        {t('cancel')}
                     </button>
                     <button 
                         onClick={(e) => { e.stopPropagation(); if (isMatch) onConfirm(); }} 
@@ -151,7 +151,7 @@ export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
                                 ? 'bg-red-600 text-white shadow-red-600/30 hover:bg-red-700 active:scale-95' 
                                 : 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 shadow-none'}`}
                     >
-                        {T('btn_delete_identity')}
+                        {t('btn_delete_identity')}
                     </button>
                 </div>
             </div>

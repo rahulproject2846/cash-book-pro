@@ -20,7 +20,7 @@ const toBn = (num: any, lang: string) => {
 };
 
 export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('All');
@@ -125,9 +125,9 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                             <CloudDownload size={24} strokeWidth={2.5} />
                         </div>
                         <div>
-                            <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">{T('export_title')}</h2>
+                            <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">{t('export_title')}</h2>
                             <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-1.5 opacity-70 flex items-center gap-2">
-                                <ShieldCheck size={10} /> {T('identity_secured')}
+                                <ShieldCheck size={10} /> {t('identity_secured')}
                             </p>
                         </div>
                     </div>
@@ -138,7 +138,7 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                     <div className="space-y-4">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] ml-1 flex items-center gap-2">
-                                <Calendar size={12} className="text-orange-500/60" /> {T('range_selector')}
+                                <Calendar size={12} className="text-orange-500/60" /> {t('range_selector')}
                             </span>
                             <div className="flex gap-2 bg-[var(--bg-app)] p-1 rounded-xl border border-[var(--border)]">
                                 {[7, 30, 'all'].map(p => (
@@ -156,7 +156,7 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
 
                     <div className="space-y-4 relative group">
                         <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] ml-1 flex items-center gap-2">
-                            <ListFilter size={12} className="text-orange-500/60" /> {T('filter_class')}
+                            <ListFilter size={12} className="text-orange-500/60" /> {t('filter_class')}
                         </span>
                         <div className="relative">
                             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 pr-10 scroll-smooth">
@@ -175,15 +175,15 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                     </div>
 
                     <div className="space-y-4">
-                        <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] ml-1 flex items-center gap-2"><Zap size={12} className="text-orange-500" /> {T('format_selection')}</span>
+                        <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] ml-1 flex items-center gap-2"><Zap size={12} className="text-orange-500" /> {t('format_selection')}</span>
                         <div className="grid grid-cols-2 gap-4">
                             <button onClick={() => setFormat('pdf')} className={`group relative p-6 rounded-[35px] border-2 transition-all duration-500 flex flex-col items-center gap-3 overflow-hidden ${format === 'pdf' ? 'bg-red-500/5 border-red-500 shadow-xl scale-[1.02]' : 'bg-[var(--bg-app)] border-transparent opacity-40 hover:opacity-100'}`}>
                                 <FileText size={32} className={format === 'pdf' ? 'text-red-500 scale-110' : 'text-[var(--text-muted)]'} />
-                                <span className={`text-[10px] font-black uppercase tracking-[3px] ${format === 'pdf' ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>{T('format_pdf')}</span>
+                                <span className={`text-[10px] font-black uppercase tracking-[3px] ${format === 'pdf' ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>{t('format_pdf')}</span>
                             </button>
                             <button onClick={() => setFormat('excel')} className={`group relative p-6 rounded-[35px] border-2 transition-all duration-500 flex flex-col items-center gap-3 overflow-hidden ${format === 'excel' ? 'bg-green-500/5 border-green-500 shadow-xl scale-[1.02]' : 'bg-[var(--bg-app)] border-transparent opacity-40 hover:opacity-100'}`}>
                                 <FileSpreadsheet size={32} className={format === 'excel' ? 'text-green-500 scale-110' : 'text-[var(--text-muted)]'} />
-                                <span className={`text-[10px] font-black uppercase tracking-[3px] ${format === 'excel' ? 'text-green-500' : 'text-[var(--text-muted)]'}`}>{T('format_excel')}</span>
+                                <span className={`text-[10px] font-black uppercase tracking-[3px] ${format === 'excel' ? 'text-green-500' : 'text-[var(--text-muted)]'}`}>{t('format_excel')}</span>
                             </button>
                         </div>
                     </div>
@@ -193,7 +193,7 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                     <div className="flex items-center justify-center gap-3 mb-6 opacity-40">
                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                          <span className="text-[9px] font-black uppercase tracking-[4px] text-[var(--text-main)]">
-                            {T('status_ready')}: {toBn(filteredCount, language)} {T('protocols_label')}
+                            {t('status_ready')}: {toBn(filteredCount, language)} {t('protocols_label')}
                          </span>
                     </div>
 
@@ -207,12 +207,12 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                             {isExporting ? (
                                 <motion.div key="loader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-4">
                                     <Loader2 className="animate-spin" size={24} />
-                                    <span>{T('extracting_status')}</span>
+                                    <span>{t('extracting_status')}</span>
                                 </motion.div>
                             ) : (
                                 <motion.div key="ready" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-4">
                                     <Fingerprint size={24} strokeWidth={2.5} className="group-hover:rotate-12 transition-transform" />
-                                    <span>{T('btn_extract')}</span>
+                                    <span>{t('btn_extract')}</span>
                                 </motion.div>
                             )}
                         </AnimatePresence>

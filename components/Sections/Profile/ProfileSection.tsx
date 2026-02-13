@@ -24,7 +24,7 @@ import { DangerZone } from './DangerZone';
  * Consistency: 100% Synced with Settings & Dashboard.
  */
 export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     
     // --- 🧬 CORE LOGIC ENGINE (100% Preserved) ---
     const {
@@ -46,7 +46,7 @@ export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) =
         >
             {/* --- ১. MASTER IDENTITY HEADER (Enterprise Standard) --- */}
             <HubHeader 
-                title={T('identity_hub_title') || "IDENTITY HUB"} 
+                title={t('identity_hub_title') || "IDENTITY HUB"} 
                 subtitle={t('master_profile_protocol') || "IDENTITY ENCRYPTION ACTIVE"} 
                 icon={Fingerprint}
                 showSearch={false}
@@ -120,11 +120,11 @@ export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) =
                             <Cpu size={24} className="text-orange-500 group-hover:rotate-180 transition-transform duration-1000" />
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-black uppercase tracking-[10px] leading-none ml-[10px]">
-                                    {T('vault_pro_split_1')} {T('vault_pro_split_2')}
+                                    {t('vault_pro_split_1')} {t('vault_pro_split_2')}
                                 </span>
                                 <span className="text-[8px] font-bold uppercase tracking-[4px] mt-2 flex items-center gap-2">
                                     <BadgeCheck size={10} className="text-blue-500" />
-                                    {T('identity_verified') || "IDENTITY NODE V11.0 STABLE"}
+                                    {t('identity_verified') || "IDENTITY NODE V11.0 STABLE"}
                                 </span>
                             </div>
                         </div>

@@ -15,7 +15,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
  * High-focus input with haptic submission and smooth exit.
  */
 export const ForgotPassView = ({ onBack }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [email, setEmail] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -57,7 +57,7 @@ export const ForgotPassView = ({ onBack }: any) => {
                 </motion.div>
 
                 <h2 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none">
-                    {T('auth_forgot_key_title') || "RECOVER ACCESS"}
+                    {t('auth_forgot_key_title') || "RECOVER ACCESS"}
                 </h2>
                 <p className="text-[9px] font-bold text-[var(--text-muted)] mt-3 uppercase tracking-[2px] opacity-60 max-w-[220px] mx-auto leading-relaxed">
                     {t('auth_forgot_desc')}
@@ -90,7 +90,7 @@ export const ForgotPassView = ({ onBack }: any) => {
                         {isLoading ? (
                             <span className="w-5 h-5 border-3 border-black border-t-transparent rounded-full animate-spin" />
                         ) : (
-                            <>{T('btn_send_recovery')} <Send size={16} strokeWidth={2.5} /></>
+                            <>{t('btn_send_recovery')} <Send size={16} strokeWidth={2.5} /></>
                         )}
                     </motion.button>
                 </Tooltip>
@@ -104,7 +104,7 @@ export const ForgotPassView = ({ onBack }: any) => {
                 >
                     <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                     <span className="text-[var(--text-main)] underline underline-offset-8 decoration-white/10 group-hover:text-[var(--accent)] group-hover:decoration-orange-500 transition-all">
-                        {T('btn_back_to_login')}
+                        {t('btn_back_to_login')}
                     </span>
                 </button>
             </div>

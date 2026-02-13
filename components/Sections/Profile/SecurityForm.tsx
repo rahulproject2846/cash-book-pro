@@ -41,7 +41,7 @@ const SecurityInput = ({ label, value, onChange, placeholder, icon: Icon, type =
 };
 
 export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, isLoading }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const isGoogleUser = currentUser?.authProvider !== 'credentials';
 
     return (
@@ -65,7 +65,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
                     </Tooltip>
                     <div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                            {T('security_protocol_title') || "SECURITY PROTOCOL"}
+                            {t('security_protocol_title') || "SECURITY PROTOCOL"}
                         </h4>
                         <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-60">
                             Identity & Access Configuration
@@ -77,7 +77,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
                 <Tooltip text={t('tt_master_rank') || "Highest privilege access level"}>
                     <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-app)] border border-[var(--border)] rounded-[18px] opacity-60 hover:opacity-100 transition-opacity cursor-help">
                         <Zap size={12} className="text-orange-500" fill="currentColor" strokeWidth={0} />
-                        <span className="text-[9px] font-black uppercase tracking-widest">{T('status_master') || "MASTER LEVEL"}</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">{t('status_master') || "MASTER LEVEL"}</span>
                     </div>
                 </Tooltip>
             </div>
@@ -87,7 +87,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
                 {/* 1. IDENTITY REGISTRY (Name Field) */}
                 <div className="space-y-4">
                     <SecurityInput 
-                        label={T('identity_name_label') || "IDENTITY REGISTRY NAME"}
+                        label={t('identity_name_label') || "IDENTITY REGISTRY NAME"}
                         placeholder={t('placeholder_identity')}
                         value={formData.name}
                         onChange={(e: any) => setForm({...formData, name: e.target.value})}
@@ -112,7 +112,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
                                         </div>
                                         <div className="text-left">
                                             <p className="text-[10px] font-black text-red-500 uppercase tracking-widest leading-none">
-                                                {T('google_locked_label') || "MANAGED BY GOOGLE"}
+                                                {t('google_locked_label') || "MANAGED BY GOOGLE"}
                                             </p>
                                             <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase mt-2 opacity-50">Key Rotation Restricted</p>
                                         </div>
@@ -128,7 +128,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
                     )}>
                         {/* Current Security Key */}
                         <SecurityInput 
-                            label={T('current_key_label') || "CURRENT SECURITY KEY"}
+                            label={t('current_key_label') || "CURRENT SECURITY KEY"}
                             placeholder="••••••••"
                             type="password"
                             value={formData.currentPassword || ''}
@@ -140,7 +140,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
 
                         {/* New Security Key */}
                         <SecurityInput 
-                            label={T('new_key_label') || "NEW ACCESS KEY"}
+                            label={t('new_key_label') || "NEW ACCESS KEY"}
                             placeholder="••••••••"
                             type="password"
                             value={formData.newPassword || ''}
@@ -171,7 +171,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
                                         ? <Chrome size={22} strokeWidth={2.5} /> 
                                         : <Fingerprint size={22} strokeWidth={2.5} className="group-hover/btn:rotate-12 transition-transform duration-500" />
                                     }
-                                    <span>{T('action_save_security') || "EXECUTE IDENTITY UPDATE"}</span>
+                                    <span>{t('action_save_security') || "EXECUTE IDENTITY UPDATE"}</span>
                                 </div>
                             )}
                         </button>

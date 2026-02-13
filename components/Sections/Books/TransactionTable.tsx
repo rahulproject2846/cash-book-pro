@@ -36,7 +36,7 @@ interface TableProps {
 export const TransactionTable = ({ 
     items, onEdit, onDelete, onToggleStatus, currencySymbol 
 }: TableProps) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
 
     // তারিখ ফরম্যাটিং প্রোটোকল
     const formatDate = (dateStr: any) => {
@@ -56,16 +56,16 @@ export const TransactionTable = ({
                 <thead>
                     <tr className="whitespace-nowrap border-b border-[var(--border)] bg-[var(--bg-app)]/40">
                         <th className="py-6 px-6 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-14">#</th>
-                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-36">{T('label_date')}</th>
-                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-24">{T('label_time')}</th>
-                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-32">{T('label_ref_id')}</th>
-                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{T('label_protocol')}</th>
-                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{T('label_memo')}</th>
-                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-36">{T('label_tag')}</th>
-                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-28">{T('label_via')}</th>
-                        <th className="py-6 px-4 text-right text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-44">{T('label_amount')}</th>
-                        <th className="py-6 px-4 text-center text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-36">{T('label_status')}</th>
-                        <th className="py-6 px-6 text-right text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-24">{T('label_options')}</th>
+                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-36">{t('label_date')}</th>
+                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-24">{t('label_time')}</th>
+                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50 w-32">{t('label_ref_id')}</th>
+                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{t('label_protocol')}</th>
+                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{t('label_memo')}</th>
+                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{t('label_tag')}</th>
+                        <th className="py-6 px-4 text-left text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{t('label_via')}</th>
+                        <th className="py-6 px-4 text-right text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{t('label_amount')}</th>
+                        <th className="py-6 px-4 text-center text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{t('label_status')}</th>
+                        <th className="py-6 px-6 text-right text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">{t('label_options')}</th>
                     </tr>
                 </thead>
 
@@ -137,7 +137,7 @@ export const TransactionTable = ({
                                 {/* 8. Via (Payment Method) */}
                                 <td className="py-5 px-4">
                                     <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2px] bg-[var(--bg-app)] px-3 py-1 rounded-lg border border-[var(--border)]">
-                                        {T((e.paymentMethod || e.via || 'cash').toLowerCase())}
+                                        {t((e.paymentMethod || e.via || 'cash').toLowerCase())}
                                     </span>
                                 </td>
 
@@ -164,7 +164,7 @@ export const TransactionTable = ({
                                             )}
                                         >
                                             {isCompleted ? <Zap size={10} fill="currentColor" strokeWidth={0} /> : <Clock size={10} strokeWidth={3} />}
-                                            {T(e.status.toLowerCase())}
+                                            {t(e.status.toLowerCase())}
                                         </button>
                                     </Tooltip>
                                 </td>
@@ -202,7 +202,7 @@ export const TransactionTable = ({
                     <div className="h-px w-32 bg-gradient-to-r from-transparent via-[var(--text-main)] to-transparent mb-4" />
                     <div className="flex items-center gap-3">
                         <GitCommit size={14} strokeWidth={3} />
-                        <span className="text-[10px] font-black uppercase tracking-[8px]">{T('ledger_end')}</span>
+                        <span className="text-[10px] font-black uppercase tracking-[8px]">{t('ledger_end')}</span>
                         <GitCommit size={14} strokeWidth={3} />
                     </div>
                 </div>

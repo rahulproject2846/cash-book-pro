@@ -16,7 +16,7 @@ interface EliteDropdownProps {
 }
 
 export const EliteDropdown = ({ label, current, options, onChange, icon: Icon, ttKey }: EliteDropdownProps) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 

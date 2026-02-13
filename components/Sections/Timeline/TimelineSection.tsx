@@ -22,7 +22,7 @@ import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
 import { VirtualizedEntryList } from '@/components/UI/VirtualizedEntryList';
 
 export const TimelineSection = ({ currentUser }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const { openModal, closeModal } = useModal();
     const { saveEntry, deleteEntry, toggleEntryStatus } = useVault(currentUser, undefined);
 
@@ -154,22 +154,22 @@ export const TimelineSection = ({ currentUser }: any) => {
             
             {/* --- ১. MASTER HUB HEADER (Consistent UI) --- */}
             <HubHeader 
-                title={T('nav_timeline') || "LIFE LOG"} 
-                subtitle={`${toBn(filteredStats.count, language)} ${T('records_found') || "ENTRIES DISCOVERED"}`}
+                title={t('nav_timeline') || "LIFE LOG"} 
+                subtitle={`${toBn(filteredStats.count, language)} ${t('records_found') || "ENTRIES DISCOVERED"}`}
                 icon={History}
                 searchQuery={searchQuery}
                 onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
             >
                 <div className="flex items-center gap-3">
                     <EliteDropdown 
-                        label={T('sort_by')}
+                        label={t('sort_by')}
                         current={sortOption}
                         options={['date', 'amount', 'title']}
                         onChange={setSortOption}
                         icon={ArrowDownUp}
                     />
                     <EliteDropdown 
-                        label={T('filter_type')}
+                        label={t('filter_type')}
                         current={filterType}
                         options={['all', 'income', 'expense']}
                         onChange={setFilterType}
@@ -221,7 +221,7 @@ export const TimelineSection = ({ currentUser }: any) => {
                     {entries.length === 0 && (
                         <div className="py-40 flex flex-col items-center justify-center opacity-20 gap-4 text-[var(--text-muted)]">
                             <Zap size={60} strokeWidth={1} />
-                            <p className="text-[10px] font-black uppercase tracking-[5px]">{T('empty_ledger')}</p>
+                            <p className="text-[10px] font-black uppercase tracking-[5px]">{t('empty_ledger')}</p>
                         </div>
                     )}
                 </div>

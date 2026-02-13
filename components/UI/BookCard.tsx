@@ -3,9 +3,10 @@
 import React from 'react';
 import { 
     Layers, BookOpen, Calendar, Edit3, 
-    MoreHorizontal, Settings, Plus,
-    X, CheckCircle2, AlertTriangle, Edit3 as Edit, Trash2 as Trash
+    MoreHorizontal, Settings, Plus, Trash2,
+    X, CheckCircle2, AlertTriangle 
 } from 'lucide-react';
+
 import { cn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -19,7 +20,7 @@ interface BookCardProps {
 
 // 🚀 OPTIMIZED BOOK CARD: Memoized to prevent unnecessary re-renders
 export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser }: BookCardProps) => {
-    const { T } = useTranslation();
+    const { t } = useTranslation();
     
     // 🎯 STABLE PROPS: Memoize based on stable identifiers
     const stableProps = React.useMemo(() => ({
@@ -32,7 +33,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         bookIsDeleted: book.isDeleted,
         bookSynced: book.synced,
         bookSyncAttempts: book.syncAttempts,
-        bookEntryCount: book.entryCount
+        bookEntryCount: book.entryCount,
         bookCreatedAt: book.createdAt
     }), [
         book._id || book.localId,
@@ -48,7 +49,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         book.createdAt
     ]);
 
-    // 🔄 EVENT HANDLERS: Memoized to prevent function recreation
+    // 🔄 EVENT HANDLERS: Memoized to prevent function recreation on every render
     const handleEdit = React.useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         onEdit(book);
@@ -64,10 +65,10 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         onOpen(book);
     }, [onOpen, book]);
 
-    // 📅 ENTRY COUNT: Memoized calculation
+    // 📊 ENTRY COUNT: Memoized calculation
     const entryCountText = React.useMemo(() => {
         const count = stableProps.bookEntryCount || 0;
-        return `${count} ${T(count === 1 ? 'entry' : 'entries')}`;
+        return `${count} ${count === 1 ? 'entry' : 'entries'}`;
     }, [stableProps.bookEntryCount]);
 
     // 🎨 STATUS COLORS: Memoized status indicators
@@ -93,19 +94,20 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
     }, [stableProps.bookColor]);
 
     // 📅 BOOK ICON: Memoized icon based on color
+    const iconColors: { [key: string]: React.FC<{ className?: string }> } = {
+        '#3B82F6': BookOpen,
+        '#EF4444': CheckCircle2,
+        '#10B981': AlertTriangle,
+        '#F59E0B': Edit3,
+        '#8B5CF6': Settings,
+        '#6366F1': Plus,
+        '#14B8A6': MoreHorizontal,
+        '#F97316': Calendar
+    } as const;
+    
+    // 🚀 BOOK ICON COMPONENT: Memoized and defined outside return
     const BookIcon: React.FC<{ className?: string }> = React.memo(({ className }) => {
         const color = stableProps.bookColor || '#3B82F6';
-        const iconColors: { [key: string]: React.FC<{ className?: string }> } = {
-            '#3B82F6': BookOpen,
-            '#EF4444': CheckCircle2,
-            '#10B981': AlertTriangle,
-            '#F59E0B': Edit,
-            '#8B5CF6': Settings,
-            '#6366F1': Plus,
-            '#14B8A6': MoreHorizontal,
-            '#F97316': Calendar
-        };
-        
         const IconComponent = iconColors[color] || BookOpen;
         return <IconComponent className={className || "w-5 h-5"} />;
     });
@@ -124,14 +126,14 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
             <div className="flex justify-between items-start mb-4">
                 <div className="space-y-2">
                     {/* Book Name and Status */}
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-start">
                         <h3 className="text-lg font-bold text-slate-900 truncate">
-                            {stableProps.bookName || T('unnamed_book')}
+                            {stableProps.bookName || t('unnamed_book')}
                         </h3>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm text-slate-500">
                             {statusIcon}
-                            <span className="ml-2 text-sm text-slate-500">
-                                {stableProps.bookIsDeleted ? T('book_deleted') : stableProps.bookSynced ? T('book_synced') : T('book_pending')}
+                            <span className="ml-2">
+                                {stableProps.bookIsDeleted ? t('book_deleted') : stableProps.bookSynced ? t('book_synced') : t('book_pending')}
                             </span>
                         </div>
                     </div>
@@ -151,7 +153,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
                         <BookIcon />
                     </div>
                     <span className="text-sm font-medium text-slate-700">
-                        {stableProps.bookName || T('unnamed_book')}
+                        {stableProps.bookName || t('unnamed_book')}
                     </span>
                 </div>
             </div>
@@ -172,7 +174,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium"
                 >
                     <Calendar className="w-4 h-4" />
-                    <span>{T('btn_open')}</span>
+                    <span>{t('btn_open')}</span>
                 </button>
                 
                 <button
@@ -180,7 +182,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
                     className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200 font-medium"
                 >
                     <Edit3 className="w-4 h-4" />
-                    <span>{T('btn_edit')}</span>
+                    <span>{t('btn_edit')}</span>
                 </button>
                 
                 <button
@@ -188,7 +190,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
                     className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 font-medium"
                 >
                     <Trash2 className="w-4 h-4" />
-                    <span>{T('btn_delete')}</span>
+                    <span>{t('btn_delete')}</span>
                 </button>
             </div>
         </div>

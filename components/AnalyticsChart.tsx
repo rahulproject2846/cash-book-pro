@@ -19,7 +19,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn } from '@/lib/utils/helpers';
 export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     
     // --- 🧬 ১. MEMOIZED LOGIC (লজিক অপরিবর্তিত রাখা হয়েছে) ---
     const { categoryData, totalValue } = useMemo(() => {
@@ -68,7 +68,7 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                     <PieIcon size={40} strokeWidth={1} />
                 </div>
                 <div className="text-center">
-                    <p className="text-[10px] font-black uppercase tracking-[5px]">{T('awaiting_intel') || "NO ANALYTICS DATA"}</p>
+                    <p className="text-[10px] font-black uppercase tracking-[5px]">{t('awaiting_intel') || "NO ANALYTICS DATA"}</p>
                     <p className="text-[8px] font-bold uppercase tracking-[2px] mt-2">Registry is currently empty</p>
                 </div>
             </div>
@@ -106,7 +106,7 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                 {/* --- 🎯 ৩. CENTER LABEL --- */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] opacity-30">
-                        {T('total_expense') || "TOTAL"}
+                        {t('total_expense') || "TOTAL"}
                     </span>
                     <h3 className="text-2xl font-mono-finance font-black text-[var(--text-main)] tracking-tighter mt-1">
                         {toBn(totalValue.toLocaleString(), language)}

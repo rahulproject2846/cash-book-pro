@@ -16,7 +16,7 @@ interface CustomSelectProps {
 }
 
 const CustomSelect = ({ label, value, options, onChange, icon: Icon, ttKey }: CustomSelectProps) => {
-    const { t, T } = useTranslation();
+    const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -30,7 +30,7 @@ const CustomSelect = ({ label, value, options, onChange, icon: Icon, ttKey }: Cu
 
     // ট্রান্সলেশন সাপোর্ট (যদি 'all' হয় তবে 'VIEW ALL' দেখাবে)
     const displayValue = value === 'all' 
-        ? (T('view_all') || 'VIEW ALL') 
+        ? (t('view_all') || 'VIEW ALL') 
         : value.toUpperCase();
 
     return (
@@ -93,7 +93,7 @@ const CustomSelect = ({ label, value, options, onChange, icon: Icon, ttKey }: Cu
                                                 : "text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--text-main)]"
                                         )}
                                     >
-                                        <span className="truncate">{opt === 'all' ? (T('view_all') || 'VIEW ALL') : opt.toUpperCase()}</span>
+                                        <span className="truncate">{opt === 'all' ? (t('view_all') || 'VIEW ALL') : opt.toUpperCase()}</span>
                                         {isSelected && <Check size={14} strokeWidth={3} className="text-orange-500" />}
                                     </button>
                                 );

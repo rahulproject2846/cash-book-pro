@@ -14,7 +14,7 @@ import { ExperienceModule } from './ExperienceModule';
 import { SystemMaintenance } from './SystemMaintenance';
 
 export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const {
         categories, currency, preferences, dbStats,
         isLoading, isCleaning,
@@ -46,8 +46,8 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
         >
             {/* --- 1. SYSTEM IDENTITY HEADER (Enterprise Standard) --- */}
             <HubHeader 
-                title={T('nav_system') || "CONFIGURATION"} 
-                subtitle={T('governance_active') || "SYSTEM REGISTRY SECURED"} 
+                title={t('nav_system') || "CONFIGURATION"} 
+                subtitle={t('governance_active') || "SYSTEM REGISTRY SECURED"} 
                 icon={Settings2}
                 showSearch={false}
             >
@@ -55,7 +55,7 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
                 <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-inner">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                     <span className="text-[9px] font-black text-[var(--text-main)] uppercase tracking-[2px]">
-                        {T('node_online') || "CORE ACTIVE"}
+                        {t('node_online') || "CORE ACTIVE"}
                     </span>
                 </div>
             </HubHeader>
@@ -110,7 +110,7 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
                         <ShieldCheck size={14} className="text-blue-500" />
                     </div>
                     <span className="text-[8px] font-bold uppercase tracking-[4px] text-[var(--text-muted)]">
-                        {T('system_version') || 'BUILD V11.0 STABLE REL'}
+                        {t('system_version') || 'BUILD V11.0 STABLE REL'}
                     </span>
                 </div>
             </div>

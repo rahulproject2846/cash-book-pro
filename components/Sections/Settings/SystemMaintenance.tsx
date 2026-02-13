@@ -10,7 +10,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn } from '@/lib/utils/helpers';
 
 export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 transition-all duration-500">
@@ -35,7 +35,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                     </Tooltip>
                     <div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                            {T('hardware_health') || "HARDWARE HEALTH"}
+                            {t('hardware_health') || "HARDWARE HEALTH"}
                         </h4>
                         <p className="text-[8px] font-bold text-green-500 uppercase tracking-[2px] mt-2 opacity-60">Storage Registry Safe</p>
                     </div>
@@ -47,7 +47,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         <div className="p-4 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] flex justify-between items-center group/item hover:border-orange-500/30 transition-all cursor-help">
                             <div className="flex items-center gap-3">
                                 <HardDrive size={16} className="text-[var(--text-muted)] group-hover/item:text-orange-500 transition-colors" />
-                                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{T('data_weight') || "DATA WEIGHT"}</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{t('data_weight') || "DATA WEIGHT"}</span>
                             </div>
                             <span className="text-xs font-black text-[var(--text-main)] font-mono tracking-tighter">
                                 {toBn(dbStats.storageUsed, language)}
@@ -60,7 +60,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         <div className="p-4 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] flex justify-between items-center group/item hover:border-orange-500/30 transition-all cursor-help">
                             <div className="flex items-center gap-3">
                                 <Database size={16} className="text-[var(--text-muted)] group-hover/item:text-orange-500 transition-colors" />
-                                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{T('local_registry') || "LOCAL REGISTRY"}</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{t('local_registry') || "LOCAL REGISTRY"}</span>
                             </div>
                             <div className="flex items-baseline gap-1">
                                 <span className="text-xs font-black text-[var(--text-main)] font-mono tracking-tighter">
@@ -89,7 +89,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                     </Tooltip>
                     <div>
                         <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
-                            {T('recovery_protocol') || "RECOVERY PROTOCOL"}
+                            {t('recovery_protocol') || "RECOVERY PROTOCOL"}
                         </h4>
                         <p className="text-[8px] font-bold text-blue-500 uppercase tracking-[2px] mt-2 opacity-60">Identity Restoration</p>
                     </div>
@@ -102,7 +102,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                 <Tooltip text={t('tt_generate_hash') || "Create Secure Migration Key"}>
                     <button className="w-full h-14 rounded-[22px] border-2 border-dashed border-blue-500/30 text-blue-500 text-[10px] font-black uppercase tracking-[3px] hover:bg-blue-500/5 hover:border-blue-500 transition-all active:scale-95 flex items-center justify-center gap-3 group/btn">
                         <RefreshCw size={16} className="group-hover/btn:rotate-180 transition-transform duration-700" />
-                        {T('generate_key') || "GENERATE HASH KEY"}
+                        {t('generate_key') || "GENERATE HASH KEY"}
                     </button>
                 </Tooltip>
             </motion.div>
@@ -123,7 +123,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                     </Tooltip>
                     <div>
                         <h4 className="text-base font-black text-red-500 uppercase tracking-[3px] italic leading-none">
-                            {T('hard_reset') || "DANGER ZONE"}
+                            {t('hard_reset') || "DANGER ZONE"}
                         </h4>
                         <p className="text-[8px] font-bold text-red-500/60 uppercase tracking-[2px] mt-2">Irreversible Operations</p>
                     </div>
@@ -148,7 +148,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         ) : (
                             <>
                                 <Zap size={20} fill="currentColor" strokeWidth={0} className="group-hover:scale-125 transition-transform" />
-                                {T('purge_btn') || "EXECUTE SYSTEM PURGE"}
+                                {t('purge_btn') || "EXECUTE SYSTEM PURGE"}
                             </>
                         )}
                     </button>

@@ -17,7 +17,7 @@ export const DetailsToolbar = ({
     searchQuery, setSearchQuery, sortConfig, setSortConfig, 
     categoryFilter, setCategoryFilter, userCategories 
 }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
     // ডাইনামিক প্যাডিং ফিক্স (Elite Spacing)
@@ -82,7 +82,7 @@ export const DetailsToolbar = ({
                         )}
                     >
                         <EliteDropdown 
-                            label={T('sort_by')}
+                            label={t('sort_by')}
                             current={sortConfig.key} 
                             options={['createdAt', 'amount', 'title']} // ফিক্স: ডাটাবেজ ফিল্ড নেম ব্যবহার করা হলো
                             onChange={(val: string) => setSortConfig({ key: val, direction: 'desc' })} 
@@ -91,7 +91,7 @@ export const DetailsToolbar = ({
                         />
 
                         <EliteDropdown 
-                            label={T('classification')}
+                            label={t('classification')}
                             current={categoryFilter} 
                             options={userCategories} 
                             onChange={setCategoryFilter} 

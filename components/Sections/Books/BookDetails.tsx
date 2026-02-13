@@ -19,7 +19,7 @@ export const BookDetails = ({
     currentBook, items, onBack, onAdd, onEdit, onDelete, onToggleStatus, 
     searchQuery, setSearchQuery, pagination, currentUser, stats
 }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     
     // ১. ফিল্টার ও সর্ট স্টেট
     const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
@@ -102,7 +102,7 @@ export const BookDetails = ({
                             <div className="p-2 bg-orange-500/10 rounded-xl">
                                 <Zap size={16} className="text-orange-500 animate-pulse" />
                             </div>
-                            <span className="text-[10px] font-black uppercase tracking-[4px] text-[var(--text-main)]">{T('ledger_live_feed')}</span>
+                            <span className="text-[10px] font-black uppercase tracking-[4px] text-[var(--text-main)]">{t('ledger_live_feed')}</span>
                         </div>
                         <div className="flex items-center gap-2 opacity-30">
                             <ShieldCheck size={14} className="text-green-500" />
@@ -132,7 +132,7 @@ export const BookDetails = ({
                                 <div className="w-24 h-24 bg-[var(--bg-app)] rounded-[40px] flex items-center justify-center border border-[var(--border)] shadow-inner opacity-20">
                                     <Inbox size={48} strokeWidth={1} />
                                 </div>
-                                <p className="font-black uppercase text-[11px] tracking-[5px] opacity-40">{T('empty_ledger')}</p>
+                                <p className="font-black uppercase text-[11px] tracking-[5px] opacity-40">{t('empty_ledger')}</p>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -145,7 +145,7 @@ export const BookDetails = ({
                              <GitCommit size={20} strokeWidth={3} />
                         </div>
                         <div className="text-left">
-                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[4px] leading-none">{T('protocol_archive')}</p>
+                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[4px] leading-none">{t('protocol_archive')}</p>
                             <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-1.5 opacity-60">Sequence Verified</p>
                         </div>
                     </div>

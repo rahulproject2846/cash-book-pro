@@ -14,7 +14,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip'; 
 
 export default function PublicLedgerPage() {
-    const { T, t } = useTranslation(); // Translation Hook Injected
+    const { t } = useTranslation(); // Translation Hook Injected
     const params = useParams();
     const token = params.token as string;
     
@@ -56,7 +56,7 @@ export default function PublicLedgerPage() {
             <div className="w-20 h-20 bg-red-500/5 rounded-3xl flex items-center justify-center text-red-500 mb-6 border border-red-500/10 shadow-sm">
                 <AlertTriangle size={32} />
             </div>
-            <h1 className="text-xl font-black uppercase text-white tracking-tight">{T('access_denied')}</h1>
+            <h1 className="text-xl font-black uppercase text-white tracking-tight">{t('access_denied')}</h1>
             <p className="text-sm text-slate-400 mt-2 font-medium max-w-xs mx-auto uppercase tracking-wide">{error}</p>
         </div>
     );
@@ -82,7 +82,7 @@ export default function PublicLedgerPage() {
             <div className="bg-[#1A1A1B] border-b border-[#2D2D2D] pt-12 pb-8 px-4 md:px-8">
                 <div className="max-w-5xl mx-auto">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-700/50 border border-slate-700/80 text-slate-300 text-[10px] font-black uppercase tracking-widest mb-4">
-                        <ShieldCheck size={12} /> {T('secure_read_only')}
+                        <ShieldCheck size={12} /> {t('secure_read_only')}
                     </div>
                     <div className="flex flex-col md:flex-row justify-between items-end gap-6">
                         <div>
@@ -90,7 +90,7 @@ export default function PublicLedgerPage() {
                                 {book.name}
                             </h1>
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-[3px] mt-2 ml-1">
-                                {book.description || T('digital_financial_protocol')}
+                                {book.description || t('digital_financial_protocol')}
                             </p>
                         </div>
                         <Tooltip text={t('tt_export_archive')}>
@@ -98,7 +98,7 @@ export default function PublicLedgerPage() {
                                 onClick={() => setShowExportModal(true)}
                                 className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-orange-600/30 active:scale-95"
                             >
-                                <Download size={14} /> {T('export_archive')}
+                                <Download size={14} /> {t('export_archive')}
                             </button>
                         </Tooltip>
                     </div>
@@ -112,21 +112,21 @@ export default function PublicLedgerPage() {
                     {/* Inflow */}
                     <div className="bg-[#1A1A1B] p-[var(--card-padding,1.75rem)] rounded-2xl border border-[#2D2D2D] shadow-sm flex flex-col justify-between h-36 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><ArrowDownLeft size={64} className="text-green-600"/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{T('total_inflow')}</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('total_inflow')}</p>
                         <h3 className="text-3xl font-mono font-bold text-green-500 tracking-tight">+{totalIn.toLocaleString()}</h3>
                     </div>
                     
                     {/* Outflow */}
                     <div className="bg-[#1A1A1B] p-[var(--card-padding,1.75rem)] rounded-2xl border border-[#2D2D2D] shadow-sm flex flex-col justify-between h-36 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><ArrowUpRight size={64} className="text-red-600"/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{T('total_outflow')}</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('total_outflow')}</p>
                         <h3 className="text-3xl font-mono font-bold text-red-500 tracking-tight">-{totalOut.toLocaleString()}</h3>
                     </div>
 
                     {/* Net Balance */}
                     <div className="bg-orange-900/20 p-[var(--card-padding,1.75rem)] rounded-2xl border border-orange-900 shadow-2xl flex flex-col justify-between h-36 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10"><Wallet size={64} className="text-white"/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{T('net_balance')}</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('net_balance')}</p>
                         <h3 className={`text-3xl font-mono font-bold tracking-tight ${balance >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
                             {balance < 0 ? '-' : '+'}{Math.abs(balance).toLocaleString()}
                         </h3>
@@ -151,10 +151,10 @@ export default function PublicLedgerPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-[#121212]/50 border-b border-[#2D2D2D]">
-                                    <th className="py-5 px-8 text-[10px] font-black uppercase tracking-widest text-slate-400">{T('timestamp')}</th>
-                                    <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-slate-400">{T('transaction_detail')}</th>
-                                    <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-slate-400">{T('classification')}</th>
-                                    <th className="py-5 px-8 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">{T('amount')}</th>
+                                    <th className="py-5 px-8 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('timestamp')}</th>
+                                    <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('transaction_detail')}</th>
+                                    <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('classification')}</th>
+                                    <th className="py-5 px-8 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">{t('amount')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#2D2D2D]/50">
@@ -203,17 +203,17 @@ export default function PublicLedgerPage() {
 
                     {filteredEntries.length === 0 && (
                         <div className="text-center py-20 bg-[#1A1A1B] rounded-[32px] border border-[#2D2D2D] border-dashed">
-                            <p className="text-xs font-black uppercase tracking-[4px] text-slate-600">{T('no_protocol_records')}</p>
+                            <p className="text-xs font-black uppercase tracking-[4px] text-slate-600">{t('no_protocol_records')}</p>
                         </div>
                     )}
                 </div>
 
                 <div className="text-center pt-12 pb-6 opacity-40 hover:opacity-100 transition-opacity">
                     <p className="text-[10px] font-black uppercase tracking-[5px] text-white mb-1">
-                        {T('secure_vault_interface')}
+                        {t('secure_vault_interface')}
                     </p>
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest italic">
-                        {T('design_by_rahul')}
+                        {t('design_by_rahul')}
                     </p>
                 </div>
             </div>

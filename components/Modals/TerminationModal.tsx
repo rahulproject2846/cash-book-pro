@@ -17,7 +17,7 @@ export const ToastCountdown = ({ initialSeconds }: { initialSeconds: number }) =
 };
 
 export const TerminationModal = ({ isOpen, onClose, onConfirm, targetName, title, desc }: any) => {
-    const { T } = useTranslation();
+    const { t } = useTranslation();
     const [confirmText, setConfirmText] = useState('');
     const isMatch = confirmText.trim().toLowerCase() === targetName?.trim().toLowerCase();
 

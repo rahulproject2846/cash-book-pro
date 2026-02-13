@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils/helpers';
 export const MobileFilterSheet = ({ 
     isOpen, onClose, categoryFilter, setCategoryFilter, userCategories, sortConfig, setSortConfig 
 }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const { openModal } = useModal(); // গ্লোবাল মডাল হুক
 
     // স্মার্ট অ্যাকশন হ্যান্ডলার
@@ -75,7 +75,7 @@ export const MobileFilterSheet = ({
                                 <div className="flex flex-col gap-1">
                                     <span className="text-[10px] font-black uppercase tracking-[3px] text-orange-500 flex items-center gap-2">
                                         <Zap size={14} fill="currentColor" strokeWidth={0} />
-                                        {T('config_vault')}
+                                        {t('config_vault')}
                                     </span>
                                     <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] opacity-40">
                                         Protocol Settings V11.5
@@ -93,7 +93,7 @@ export const MobileFilterSheet = ({
                                 {/* 1. CATEGORY SELECTOR (Layered for Z-Index) */}
                                 <div className="relative z-50">
                                     <CustomSelect 
-                                        label={T('classification')} 
+                                        label={t('classification')} 
                                         value={categoryFilter} 
                                         options={userCategories} 
                                         onChange={setCategoryFilter} 
@@ -105,7 +105,7 @@ export const MobileFilterSheet = ({
                                 {/* 2. SORT TOGGLE (Elite Button) */}
                                 <div className="space-y-2">
                                     <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] ml-1">
-                                        {T('sort_order') || "ORDERING"}
+                                        {t('sort_order') || "ORDERING"}
                                     </label>
                                     <button 
                                         onClick={() => setSortConfig({ ...sortConfig, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })} 
@@ -124,7 +124,7 @@ export const MobileFilterSheet = ({
                                                 <ArrowUpDown size={18} className={cn("transition-transform duration-500", sortConfig.direction === 'asc' ? "" : "rotate-180")} />
                                             </div>
                                             <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)]">
-                                                {T('action_toggle_sort')}
+                                                {t('action_toggle_sort')}
                                             </span> 
                                         </div>
                                         <div className="text-[9px] font-black uppercase text-orange-500 opacity-60 tracking-[2px]">
@@ -140,7 +140,7 @@ export const MobileFilterSheet = ({
                                         className="h-24 rounded-[28px] bg-blue-500/5 border border-blue-500/10 flex flex-col items-center justify-center gap-3 text-blue-500 active:scale-95 transition-all hover:bg-blue-500/10 hover:border-blue-500/30"
                                     >
                                         <BarChart3 size={26} strokeWidth={2} />
-                                        <span className="text-[9px] font-black uppercase tracking-[2px]">{T('nav_analytics')}</span>
+                                        <span className="text-[9px] font-black uppercase tracking-[2px]">{t('nav_analytics')}</span>
                                     </button>
 
                                     <button 
@@ -148,7 +148,7 @@ export const MobileFilterSheet = ({
                                         className="h-24 rounded-[28px] bg-green-500/5 border border-green-500/10 flex flex-col items-center justify-center gap-3 text-green-500 active:scale-95 transition-all hover:bg-green-500/10 hover:border-green-500/30"
                                     >
                                         <Download size={26} strokeWidth={2} />
-                                        <span className="text-[9px] font-black uppercase tracking-[2px]">{T('label_export')}</span>
+                                        <span className="text-[9px] font-black uppercase tracking-[2px]">{t('label_export')}</span>
                                     </button>
                                 </div>
                             </div>

@@ -16,7 +16,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
  * Fully integrated with Global Spacing, Language, and Guidance.
  */
 export const MasterTransactionCard = ({ e, currencySymbol, onEdit, onDelete, onToggleStatus }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [showActions, setShowActions] = useState(false);
     const isIncome = e.type === 'income';
     const isCompleted = e.status === 'completed';
@@ -36,13 +36,13 @@ export const MasterTransactionCard = ({ e, currencySymbol, onEdit, onDelete, onT
                         <span>{new Date(e.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}</span>
                         <span className="opacity-20">•</span>
                         <span className="text-orange-500/60 flex items-center gap-0.5">
-                            # {T('label_ref') || "REF"}: {String(e.localId || e._id).slice(-4).toUpperCase()}
+                            # {t('label_ref') || "REF"}: {String(e.localId || e._id).slice(-4).toUpperCase()}
                         </span>
                     </div>
                 </div>
                 <div className="px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-full shrink-0">
                     <span className="text-[8px] font-black uppercase tracking-[2px] text-orange-500">
-                        {e.category ? e.category.toUpperCase() : T('category_general')}
+                        {e.category ? e.category.toUpperCase() : t('category_general')}
                     </span>
                 </div>
             </div>
@@ -55,7 +55,7 @@ export const MasterTransactionCard = ({ e, currencySymbol, onEdit, onDelete, onT
                     </h4>
                     <div className="mt-2.5 flex items-center gap-1.5 opacity-40">
                         <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] truncate max-w-[180px]">
-                            {e.note ? `# ${T('label_note') || "NOTE"}: "${e.note}"` : `# ${T('no_memo') || "NO PROTOCOL MEMO"}`}
+                            {e.note ? `# ${t('label_note') || "NOTE"}: "${e.note}"` : `# ${t('no_memo') || "NO PROTOCOL MEMO"}`}
                         </span>
                     </div>
                 </div>
@@ -66,7 +66,7 @@ export const MasterTransactionCard = ({ e, currencySymbol, onEdit, onDelete, onT
                     </div>
                     {e.time && (
                         <p className="text-[8px] font-black text-[var(--text-muted)] opacity-30 uppercase tracking-widest mt-1">
-                            {T('label_at') || "AT"} {e.time}
+                            {t('label_at') || "AT"} {e.time}
                         </p>
                     )}
                 </div>

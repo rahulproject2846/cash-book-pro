@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { useVirtualization } from '@/hooks/useVirtualization';
 import { EntryCard } from './EntryCard';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface VirtualizedEntryListProps {
     entries: any[];
@@ -26,10 +27,12 @@ export const VirtualizedEntryList = React.memo(({
     itemHeight = 60,
     bufferSize = 5
 }: VirtualizedEntryListProps) => {
+    const { language, t } = useTranslation();
     // 🚀 VIRTUALIZATION CONFIG
-    const virtualization = useVirtualization(entries, {
-        itemHeight,
-        bufferSize
+    const virtualization = useVirtualization(entries || [], {
+        itemHeight: itemHeight || 60,
+        bufferSize: bufferSize || 5,
+        overscan: 5
     });
 
     // 🔄 LOAD MORE: Handle infinite scroll with loading

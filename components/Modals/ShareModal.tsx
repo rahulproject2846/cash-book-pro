@@ -22,7 +22,7 @@ const ModalPortal = ({ children }: { children: React.ReactNode }) => {
 
 
 export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     const [copied, setCopied] = useState(false);
     const [loading, setLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
@@ -96,11 +96,11 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                             <div>
                                 <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none flex items-center gap-2">
                                     <Terminal size={14} className="text-orange-500" />
-                                    {T('share_vault_title') || "Access Protocol"}
+                                    {t('share_vault_title') || "Access Protocol"}
                                 </h2>
                                 <div className="flex items-center gap-2 mt-1.5 opacity-60">
                                     <ShieldCheck size={10} className="text-orange-500" />
-                                    <span className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px]">{T('identity_secured') || "IDENTITY VERIFIED"}</span>
+                                    <span className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px]">{t('identity_secured') || "IDENTITY VERIFIED"}</span>
                                 </div>
                             </div>
                             <button onClick={onClose} className="w-10 h-10 rounded-full bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-sm"><X size={20} /></button>
@@ -118,7 +118,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                         </div>
                                         <div className="text-left">
                                             <p className={`text-[10px] font-black uppercase tracking-[3px] transition-colors ${isPublic ? 'text-green-500' : 'text-[var(--text-muted)]'}`}>
-                                                {isPublic ? T('status_live') : T('status_private')}
+                                                {isPublic ? t('status_live') : t('status_private')}
                                             </p>
                                             <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest mt-1 opacity-40 leading-relaxed">
                                                 {isPublic ? t('desc_public') : t('desc_private')}
@@ -134,7 +134,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                         {loading ? <Loader2 size={18} className="animate-spin" /> : (
                                             <>
                                                 <Fingerprint size={18} strokeWidth={2.5} />
-                                                {isPublic ? T('btn_disable') : T('btn_enable')}
+                                                {isPublic ? t('btn_disable') : t('btn_enable')}
                                             </>
                                         )}
                                     </button>
@@ -154,7 +154,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                     >
                                         <div className="flex flex-col gap-3">
                                             <span className="text-[8px] font-black text-orange-500 uppercase tracking-[3px] ml-1 flex items-center gap-2">
-                                                <Link2 size={12} strokeWidth={3} /> {T('label_access_url') || "PUBLIC ENDPOINT URL"}
+                                                <Link2 size={12} strokeWidth={3} /> {t('label_access_url') || "PUBLIC ENDPOINT URL"}
                                             </span>
                                             
                                             <div className="relative group">
@@ -183,7 +183,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                             <div className="flex items-center justify-between px-2 opacity-30">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                                    <span className="text-[8px] font-black uppercase tracking-widest text-green-500">{T('status_online') || "ONLINE"}</span>
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-green-500">{t('status_online') || "ONLINE"}</span>
                                                 </div>
                                                 <span className="text-[8px] font-bold uppercase italic tracking-widest">EXT: {toBn('SHA256v5', language)}</span>
                                             </div>

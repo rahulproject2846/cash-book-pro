@@ -13,20 +13,24 @@ import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helper
 import { db } from '@/lib/offlineDB';
 
 export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUser, fileInputRef }: any) => {
-    const { T, t, language } = useTranslation();
+    const { t, language } = useTranslation();
     
     // --- 🧬 ১. DYNAMIC INTEGRITY SCORE CALCULATION ---
     const [syncPercentage, setSyncPercentage] = useState(0);
     const [backupStatus, setBackupStatus] = useState(false);
+    const [hasPendingItems, setHasPendingItems] = useState(false);
+    const [isVerifiedSession, setIsVerifiedSession] = useState(false);
 
-    // Calculate sync percentage from Dexie
+    // Calculate sync percentage and pending items from Dexie
     const calculateSyncPercentage = useCallback(async () => {
         try {
-            const [totalBooks, syncedBooks, totalEntries, syncedEntries] = await Promise.all([
+            const [totalBooks, syncedBooks, totalEntries, syncedEntries, pendingBooks, pendingEntries] = await Promise.all([
                 db.books.where('isDeleted').equals(0).count(),
                 db.books.where('isDeleted').equals(0).and(item => item.synced === 1).count(),
                 db.entries.where('isDeleted').equals(0).count(),
-                db.entries.where('isDeleted').equals(0).and(item => item.synced === 1).count()
+                db.entries.where('isDeleted').equals(0).and(item => item.synced === 1).count(),
+                db.books.where('isDeleted').equals(0).and(item => item.synced === 0).count(),
+                db.entries.where('isDeleted').equals(0).and(item => item.synced === 0).count()
             ]);
 
             const bookSyncPercentage = totalBooks > 0 ? (syncedBooks / totalBooks) * 100 : 100;
@@ -34,9 +38,14 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
             const overallSyncPercentage = (bookSyncPercentage + entrySyncPercentage) / 2;
 
             setSyncPercentage(Math.round(overallSyncPercentage));
+            
+            // Check if there are any pending items
+            const totalPending = pendingBooks + pendingEntries;
+            setHasPendingItems(totalPending > 0);
         } catch (err) {
             console.error('Failed to calculate sync percentage:', err);
             setSyncPercentage(0);
+            setHasPendingItems(true);
         }
     }, []);
 
@@ -46,11 +55,18 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
         setBackupStatus(!!hasBackup);
     }, []);
 
+    // Check if user has verified session (Google or Credentials)
+    const checkVerifiedSession = useCallback(() => {
+        const isVerified = currentUser?.authProvider === 'google' || currentUser?.authProvider === 'credentials';
+        setIsVerifiedSession(!!isVerified);
+    }, [currentUser]);
+
     // Initialize values on mount
     useEffect(() => {
         calculateSyncPercentage();
         checkBackupStatus();
-    }, [calculateSyncPercentage, checkBackupStatus]);
+        checkVerifiedSession();
+    }, [calculateSyncPercentage, checkBackupStatus, checkVerifiedSession]);
 
     // Listen for sync events and profile changes
     useEffect(() => {
@@ -77,18 +93,28 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
     const healthScore = useMemo(() => {
         let score = 0;
         
-        // Profile completion (40% weight)
-        if (formData.name) score += 20; // 20% for name
-        if (formData.image) score += 20; // 20% for image
+        // +25% if formData.name and formData.image exist
+        if (formData.name && formData.image) {
+            score += 25;
+        }
         
-        // Sync percentage (40% weight)
-        score += Math.round((syncPercentage / 100) * 40); // 0-40 points based on sync
+        // +25% if current entries in Dexie have 0 pending items
+        if (!hasPendingItems) {
+            score += 25;
+        }
         
-        // Backup status (20% weight)
-        if (backupStatus) score += 20; // 20% for having backup
+        // +25% if a backup timestamp is present in localStorage
+        if (backupStatus) {
+            score += 25;
+        }
+        
+        // +25% for a verified Google or Credentials session
+        if (isVerifiedSession) {
+            score += 25;
+        }
         
         return Math.min(score, 100); // Cap at 100%
-    }, [formData.name, formData.image, syncPercentage, backupStatus]);
+    }, [formData.name, formData.image, hasPendingItems, backupStatus, isVerifiedSession]);
 
     const handleRemovePhoto = () => {
         setForm({ ...formData, image: '' });
@@ -105,7 +131,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                 <Tooltip text={t('tt_integrity_score') || "System Integrity Measurement"}>
                     <div className="flex flex-col items-start gap-1.5 cursor-help">
                         <span className="text-[8px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-40">
-                            {T('label_integrity') || "INTEGRITY"}
+                            {t('label_integrity') || "INTEGRITY"}
                         </span>
                         <div className="flex items-center gap-2 bg-[var(--bg-app)] px-2.5 py-1 rounded-lg border border-[var(--border)] shadow-inner">
                             <div className={cn(
@@ -130,6 +156,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                     <svg className="w-full h-full -rotate-90 drop-shadow-[0_0_15px_rgba(249,115,22,0.1)]">
                         <circle cx="110" cy="110" r="95" stroke="var(--border)" strokeWidth="1" fill="transparent" strokeDasharray="8 8" />
                         <motion.circle 
+                            key={healthScore} // Key ensures smooth re-animation on score changes
                             cx="110" cy="110" r="95" 
                             stroke="var(--accent)" 
                             strokeWidth="3" 
@@ -219,7 +246,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                             <div className="px-6 py-3 rounded-[22px] bg-blue-500/5 border border-blue-500/10 text-blue-400 flex items-center gap-4 shadow-inner group/badge hover:border-blue-500/30 transition-all duration-500 cursor-help">
                                 <div className="p-2 bg-blue-500/10 rounded-xl group-hover/badge:scale-110 transition-transform"><Chrome size={18} strokeWidth={2.5} /></div>
                                 <div className="text-left">
-                                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">{T('label_google_verified') || "GOOGLE VERIFIED"}</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">{t('label_google_verified') || "GOOGLE VERIFIED"}</p>
                                     <p className="text-[8px] font-bold uppercase opacity-40 mt-2 tracking-wider">{t('identity_secured')}</p>
                                 </div>
                             </div>
@@ -229,7 +256,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                             <div className="px-6 py-3 rounded-[22px] bg-orange-500/5 border border-orange-500/10 text-orange-500 flex items-center gap-4 group/badge hover:border-orange-500/30 transition-all duration-500 cursor-help">
                                 <div className="p-2 bg-orange-500/10 rounded-xl group-hover/badge:scale-110 transition-transform"><MailCheck size={18} strokeWidth={2.5} /></div>
                                 <div className="text-left">
-                                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">{T('label_standard_identity') || "VAULT IDENTITY"}</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">{t('label_standard_identity') || "VAULT IDENTITY"}</p>
                                     <p className="text-[8px] font-bold uppercase opacity-40 mt-2 tracking-wider">{t('email_auth_active')}</p>
                                 </div>
                             </div>
@@ -241,20 +268,20 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                 <div className="mt-8 grid grid-cols-2 gap-4 w-full">
                     <Tooltip text={t('tt_network_status') || "Live Connection Monitor"}>
                         <div className="p-5 rounded-[30px] bg-[var(--bg-app)] border border-[var(--border)] group/item hover:border-orange-500/30 transition-all cursor-help">
-                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase mb-2 opacity-40 tracking-[3px]">{T('label_connection')}</p>
+                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase mb-2 opacity-40 tracking-[3px]">{t('label_connection')}</p>
                             <div className="flex items-center justify-center gap-2 text-green-500">
                                 <Activity size={14} className="animate-pulse" />
-                                <span className="text-[11px] font-black uppercase tracking-[2px]">{T('label_status_stable') || "STABLE"}</span>
+                                <span className="text-[11px] font-black uppercase tracking-[2px]">{t('label_status_stable') || "STABLE"}</span>
                             </div>
                         </div>
                     </Tooltip>
 
                     <Tooltip text={t('tt_access_rank') || "Permission Tier Level"}>
                         <div className="p-5 rounded-[30px] bg-[var(--bg-app)] border border-[var(--border)] group/item hover:border-orange-500/30 transition-all cursor-help">
-                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase mb-2 opacity-40 tracking-[3px]">{T('label_hierarchy')}</p>
+                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase mb-2 opacity-40 tracking-[3px]">{t('label_hierarchy')}</p>
                             <div className="flex items-center justify-center gap-2 text-orange-500">
                                 <Zap size={14} fill="currentColor" strokeWidth={0} />
-                                <span className="text-[11px] font-black uppercase tracking-[2px]">{T('label_rank_master') || "MASTER"}</span>
+                                <span className="text-[11px] font-black uppercase tracking-[2px]">{t('label_rank_master') || "MASTER"}</span>
                             </div>
                         </div>
                     </Tooltip>

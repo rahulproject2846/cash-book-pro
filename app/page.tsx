@@ -35,7 +35,7 @@ type NavSection = 'books' | 'reports' | 'timeline' | 'settings' | 'profile';
 
 export default function CashBookApp() {
   const { openModal, closeModal } = useModal();
-  const { T, t } = useTranslation();
+  const { t } = useTranslation();
   const { pusher } = usePusher(); // 🔥 পুশার ইনস্ট্যান্স নেওয়া হলো
 
   // 1. Core States
@@ -143,7 +143,7 @@ useEffect(() => {
 
   // --- ৫. গ্লোবাল এন্ট্রি লজিক ---
   const handleSaveEntryLogic = async (data: any) => {
-    if (!currentBook?._id && !currentBook?.localId) return toast.error(T('err_select_vault'));
+    if (!currentBook?._id && !currentBook?.localId) return toast.error(t('err_select_vault'));
     
     const timestamp = Date.now();
     const bKey = currentBook?.localId || currentBook?._id;
@@ -156,10 +156,10 @@ useEffect(() => {
                 await db.books.update(Number(bKey) || bKey, { updatedAt: timestamp, synced: 0 });
             }
             closeModal();
-            toast.success(T('success_entry_secured'));
+            toast.success(t('success_entry_secured'));
             orchestrator.triggerSync(currentUser._id);
         }
-    } catch (err) { toast.error("Entry Protocol Fault"); }
+    } catch (err) { toast.error(t('error_entry_protocol_fault')); }
   };
 
   // ৫.১ এন্ট্রি ডিলিট লজিক (Undo Toast with 10-second buffer)
@@ -180,7 +180,7 @@ useEffect(() => {
                         <RotateCcw size={22} className="animate-spin-slow" />
                     </div>
                     <div className="flex flex-col min-w-[130px]">
-                        <p className="text-[11px] font-black uppercase text-white tracking-[2px]">{T('success_entry_terminated')}</p>
+                        <p className="text-[11px] font-black uppercase text-white tracking-[2px]">{t('success_entry_terminated')}</p>
                         <p className="text-[8px] font-bold text-white/40 uppercase mt-1">
                             Server sync in <span className="text-orange-500"><ToastCountdown initialSeconds={10} /></span>
                         </p>
@@ -191,17 +191,17 @@ useEffect(() => {
                             if (restored) {
                                 toast.dismiss(tObj.id);
                                 window.dispatchEvent(new Event('vault-updated'));
-                                toast.success(T("PROTOCOL RESTORED"), { icon: '🛡️' });
+                                toast.success(t("PROTOCOL RESTORED"), { icon: '🛡️' });
                             }
                         }}
                         className="ml-2 px-6 h-12 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] active:scale-90 transition-all"
                     >
-                        {T('btn_undo')} 
+                        {t('btn_undo')} 
                     </button>
                 </div>
             ), { duration: 10000, position: 'bottom-center' });
         }
-    } catch (err) { toast.error(T("Process Fault")); }
+    } catch (err) { toast.error(t("Process Fault")); }
   };
 
   // ৫.২ ভল্ট টার্মিনেশন লজিক (Book Soft-Delete)
@@ -233,7 +233,7 @@ useEffect(() => {
                     }}
                     className="ml-2 px-6 h-12 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] active:scale-90 transition-all shadow-lg"
                 >
-                    {T('btn_undo')}
+                    {t('btn_undo')}
                 </button>
             </div>
         ), { duration: 6000, position: 'bottom-center' });
@@ -259,7 +259,7 @@ useEffect(() => {
   };
 
   const handleOpenGlobalModal = async (type: any) => {
-    if (!currentBook?._id) return toast.error(T('err_select_vault'));
+    if (!currentBook?._id) return toast.error(t('err_select_vault'));
     const bookId = String(currentBook._id);
     const entries = await db.entries.where('bookId').equals(bookId).and(e => e.isDeleted === 0).toArray();
     openModal(type, { entries, bookName: currentBook.name, currentBook });
@@ -345,8 +345,8 @@ useEffect(() => {
                         <div className="mb-6 p-5 bg-orange-500/10 border border-orange-500/20 rounded-[28px] flex items-center gap-4 text-orange-500 shadow-xl backdrop-blur-md">
                             <WifiOff size={20} strokeWidth={2.5} />
                             <div className="flex flex-col">
-                                <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">{T('status_offline')}</span>
-                                <span className="text-[8px] font-bold uppercase opacity-60 mt-1">{T('err_no_internet')}</span>
+                                <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">{t('status_offline')}</span>
+                                <span className="text-[8px] font-bold uppercase opacity-60 mt-1">{t('err_no_internet')}</span>
                             </div>
                         </div>
                     )}

@@ -15,7 +15,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
  * High-integrity form handling with dynamic layout adjustment.
  */
 export const RegisterView = ({ onSwitch, onOtpSent }: any) => {
-    const { T, t } = useTranslation();
+    const { t } = useTranslation();
     const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState({ username: '', email: '', password: '' });
 
@@ -56,11 +56,11 @@ export const RegisterView = ({ onSwitch, onOtpSent }: any) => {
                     animate={{ scale: 1, opacity: 1 }}
                     className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-black uppercase tracking-[3px] mb-4"
                 >
-                    <ShieldCheck size={10} /> {T('auth_secure_transaction')}
+                    <ShieldCheck size={10} /> {t('auth_secure_transaction')}
                 </motion.div>
                 
                 <h2 className="text-3xl md:text-4xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none">
-                    {T('title_protocol_init') || "INITIALIZATION"}
+                    {t('title_protocol_init') || "INITIALIZATION"}
                 </h2>
                 <p className="text-[9px] font-bold text-[var(--text-muted)] mt-2 uppercase tracking-[3px] opacity-60">
                     {t('auth_create_identity')}
@@ -126,7 +126,7 @@ export const RegisterView = ({ onSwitch, onOtpSent }: any) => {
                         {isLoading ? (
                             <span className="w-5 h-5 border-3 border-black border-t-transparent rounded-full animate-spin" />
                         ) : (
-                            <>{T('btn_request_code')} <ArrowRight size={18} strokeWidth={3} /></>
+                            <>{t('btn_request_code')} <ArrowRight size={18} strokeWidth={3} /></>
                         )}
                     </motion.button>
                 </Tooltip>
@@ -141,7 +141,7 @@ export const RegisterView = ({ onSwitch, onOtpSent }: any) => {
                     <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                     {t('auth_existing_operator')} 
                     <span className="text-[var(--text-main)] underline underline-offset-8 decoration-orange-500/30 group-hover:text-[var(--accent)] group-hover:decoration-orange-500 transition-all">
-                        {T('btn_unseal')}
+                        {t('btn_unseal')}
                     </span>
                 </button>
             </div>

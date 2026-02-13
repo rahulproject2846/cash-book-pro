@@ -3,11 +3,12 @@
 import React from 'react';
 import { 
     CreditCard, Layers, Info, ArrowDownLeft, ArrowUpRight, 
-    Calendar, Clock, X, PlusCircle, Calculator, 
+    Calendar, Clock, X, PlusCircle, Calculator, Trash2,
     SlidersHorizontal, ChevronDown, CheckCircle2, AlertTriangle 
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils/helpers';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface EntryCardProps {
     entry: any;
@@ -20,7 +21,7 @@ interface EntryCardProps {
 
 // 🚀 OPTIMIZED ENTRY CARD: Memoized to prevent unnecessary re-renders
 export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, currentUser, currentBook }: EntryCardProps) => {
-    const { T } = useTranslation();
+    const { t } = useTranslation();
     
     // 🎯 STABLE PROPS: Memoize based on stable identifiers
     const stableProps = React.useMemo(() => ({
@@ -161,7 +162,7 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
                     {/* Title and Date */}
                     <div className="flex justify-between items-start">
                         <h3 className="text-lg font-bold text-slate-900 truncate">
-                            {stableProps.entryTitle || T('untitled_entry')}
+                            {stableProps.entryTitle || t('untitled_entry')}
                         </h3>
                         <div className="flex items-center gap-2 text-sm text-slate-500">
                             <Calendar className="w-4 h-4" />
@@ -200,7 +201,7 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
             {/* Note */}
             {stableProps.entryNote && (
                 <div className="mt-4 p-4 bg-[#2D2D2D] rounded-lg border border-[#2D2D2D]">
-                    <p className="text-sm text-slate-600 mb-2">{T('note')}</p>
+                    <p className="text-sm text-slate-600 mb-2">{t('note')}</p>
                     <p className="text-xs text-slate-500 whitespace-pre-wrap break-words">
                         {stableProps.entryNote}
                     </p>
@@ -214,7 +215,7 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium"
                 >
                     <Info className="w-4 h-4" />
-                    <span>{T('btn_edit')}</span>
+                    <span>{t('btn_edit')}</span>
                 </button>
                 
                 <button
@@ -222,7 +223,7 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
                     className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 font-medium"
                 >
                     <Trash2 className="w-4 h-4" />
-                    <span>{T('btn_delete')}</span>
+                    <span>{t('btn_delete')}</span>
                 </button>
             </div>
         </div>
