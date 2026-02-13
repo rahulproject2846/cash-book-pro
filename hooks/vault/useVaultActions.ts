@@ -263,22 +263,25 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
     }, [userId, setForceRefresh]);
 
     // 🔍 CHECK DUPLICATE: Check for potential duplicate entries
-    const checkPotentialDuplicate = useCallback((entryData: any) => {
+    const checkPotentialDuplicate = useCallback(async (amount: number, type: string, category: string) => {
         // 🔒 SAFETY CHECK: Don't run if user is not logged in
         if (!userId || (typeof userId !== 'string')) {
-            logVaultError('checkPotentialDuplicate', new Error('Invalid user ID'), { userId, entryData });
+            logVaultError('checkPotentialDuplicate', new Error('Invalid user ID'), { userId, amount, type, category });
             return null;
         }
 
-        if (!entryData.title || !entryData.amount || !entryData.date) return null;
+        if (!amount || !type || !category) return null;
         
         // 🔒 SAFETY CHECK: Get current entries safely
-        const allEntries = [] as any[]; // Placeholder for type safety
+        const allEntries = await db.entries.where('userId').equals(userId).toArray();
         
+        // Check for duplicates within last 10 minutes
+        const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
         const potentialDuplicates = allEntries.filter(e => 
-            e.title?.toLowerCase().trim() === entryData.title?.toLowerCase().trim() &&
-            e.amount === entryData.amount &&
-            e.date === entryData.date &&
+            e.amount === amount &&
+            e.type === type &&
+            e.category === category &&
+            e.createdAt > tenMinutesAgo &&
             !e.isDeleted
         );
         
@@ -297,7 +300,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
             deleteBook: () => ({ success: false, error: new Error('Invalid user ID') }),
             restoreEntry: () => ({ success: false, error: new Error('Invalid user ID') }),
             restoreBook: () => ({ success: false, error: new Error('Invalid user ID') }),
-            checkPotentialDuplicate: () => null,
+            checkPotentialDuplicate: async (amount: number, type: string, category: string) => null,
             debounceTimer,
             lastRefreshTime
         };
