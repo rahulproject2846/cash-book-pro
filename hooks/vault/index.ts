@@ -114,6 +114,7 @@ const handleTotalCashUpdate = useCallback((event: any) => {
         deleteEntry,
         restoreEntry,
         toggleEntryStatus,
+        saveBook,
         deleteBook,
         restoreBook,
         togglePin,

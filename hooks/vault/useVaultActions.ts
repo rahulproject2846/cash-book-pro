@@ -35,16 +35,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
             // 🔐 GENERATE CHECKSUM: Create checksum using consistent final values
             const finalAmount = Number(entryData.amount);
             const finalDate = entryData.date || new Date().toISOString().split('T')[0];
-            
-            // 🔧 AUTO-TITLE LOGIC: Ensure no empty titles
-            let finalTitle;
-            if (entryData.title && entryData.title.trim() !== '') {
-                finalTitle = entryData.title.trim();
-            } else if (entryData.category) {
-                finalTitle = `${entryData.category.toUpperCase()} RECORD`;
-            } else {
-                finalTitle = 'GENERAL RECORD';
-            }
+            const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category.toUpperCase()} RECORD` : 'GENERAL RECORD');
             
             const checksum = await generateEntryChecksum({
                 amount: finalAmount,
@@ -53,7 +44,10 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
             });
 
             const newEntry = {
-                ...entryData, // Spread first
+                ...entryData,
+                title: finalTitle, // Ensure title is never empty
+                date: finalDate,
+                amount: finalAmount,
                 userId,
                 bookId,
                 cid: generateCID(),
@@ -63,10 +57,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
                 updatedAt: Date.now(),
                 vKey: nextVKey, // 🔧 CRITICAL: Include vKey for server acceptance
                 checksum, // 🔧 CRITICAL: Include checksum for server validation
-                syncAttempts: 0,
-                title: finalTitle, // 🔧 OVERWRITE: Ensure finalTitle is used
-                date: finalDate, // 🔧 OVERWRITE: Ensure finalDate is used
-                amount: finalAmount // 🔧 OVERWRITE: Ensure finalAmount is used
+                syncAttempts: 0
             } as any; // 🔧 TYPE FIX: Cast to any to resolve type conflicts
 
             const id = await db.entries.put(newEntry);
