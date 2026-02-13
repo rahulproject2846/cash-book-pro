@@ -3,10 +3,11 @@
 import React from 'react';
 import { 
     Layers, BookOpen, Calendar, Edit3, 
-    MoreHorizontal, Settings, Plus 
+    MoreHorizontal, Settings, Plus,
+    X, CheckCircle2, AlertTriangle, Edit3 as Edit, Trash2 as Trash
 } from 'lucide-react';
-
 import { cn } from '@/lib/utils/helpers';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface BookCardProps {
     book: any;
@@ -92,22 +93,22 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
     }, [stableProps.bookColor]);
 
     // 📅 BOOK ICON: Memoized icon based on color
-    const BookIcon = React.useMemo(() => {
+    const BookIcon: React.FC<{ className?: string }> = React.memo(({ className }) => {
         const color = stableProps.bookColor || '#3B82F6';
-        const iconColors: { [key: string]: string } = {
-            '#3B82F6': 'text-blue-600',
-            '#EF4444': 'text-green-600',
-            '#10B981': 'text-yellow-600',
-            '#F59E0B': 'text-red-600',
-            '#8B5CF6': 'text-purple-600',
-            '#6366F1': 'text-pink-600',
-            '#14B8A6': 'text-indigo-600',
-            '#F97316': 'text-teal-600'
+        const iconColors: { [key: string]: React.FC<{ className?: string }> } = {
+            '#3B82F6': BookOpen,
+            '#EF4444': CheckCircle2,
+            '#10B981': AlertTriangle,
+            '#F59E0B': Edit,
+            '#8B5CF6': Settings,
+            '#6366F1': Plus,
+            '#14B8A6': MoreHorizontal,
+            '#F97316': Calendar
         };
         
         const IconComponent = iconColors[color] || BookOpen;
-        return <IconComponent className="w-5 h-5" />;
-    }, [stableProps.bookColor]);
+        return <IconComponent className={className || "w-5 h-5"} />;
+    });
 
     return (
         <div 
