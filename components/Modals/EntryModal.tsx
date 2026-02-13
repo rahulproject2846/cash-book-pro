@@ -55,7 +55,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                     activeInput === 'in' ? 'income' : 'expense',
                     form.category
                 );
-                setShowDuplicateWarning(isDuplicate);
+                setShowDuplicateWarning(!!isDuplicate);
             } else {
                 setShowDuplicateWarning(false);
             }
