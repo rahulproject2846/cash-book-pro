@@ -102,22 +102,22 @@ export const TimelineSection = ({ currentUser }: any) => {
     // ৩. মাস্টার ফিল্টারিং ও ক্যালকুলেশন ইঞ্জিন
     const { grouped, totalPages, filteredStats } = useMemo(() => {
         // ক. ফিল্টারিং
-        let filtered = entries.filter(e => {
+        let filtered = entries.filter((e: any) => {
             const matchesSearch = (e.title || "").toLowerCase().includes(searchQuery.toLowerCase());
             const matchesType = filterType === 'all' || e.type.toLowerCase() === filterType.toLowerCase();
             return matchesSearch && matchesType;
         });
 
         // খ. সর্টিং
-        filtered.sort((a, b) => {
+        filtered.sort((a: any, b: any) => {
             if (sortOption === 'amount') return b.amount - a.amount;
             if (sortOption === 'title') return (a.title || "").localeCompare(b.title || "");
             return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
 
         // গ. স্ট্যাটাস ক্যালকুলেশন
-        const inF = filtered.filter(e => e.type === 'income' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
-        const outF = filtered.filter(e => e.type === 'expense' && e.status === 'completed').reduce((s, e) => s + Number(e.amount), 0);
+        const inF = filtered.filter((e: any) => e.type === 'income' && e.status === 'completed').reduce((s: number, e: any) => s + Number(e.amount), 0);
+        const outF = filtered.filter((e: any) => e.type === 'expense' && e.status === 'completed').reduce((s: number, e: any) => s + Number(e.amount), 0);
 
         // ঘ. প্যাজিনেশন ও গ্রুপিং
         const totalPagesCount = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
@@ -125,7 +125,7 @@ export const TimelineSection = ({ currentUser }: any) => {
         const pageData = filtered.slice(start, start + ITEMS_PER_PAGE);
 
         const groupedData: { [key: string]: any[] } = {};
-        pageData.forEach(entry => {
+        pageData.forEach((entry: any) => {
             const dateStr = new Date(entry.date).toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-GB', { 
                 day: '2-digit', month: 'short', year: 'numeric' 
             });

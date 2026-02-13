@@ -1,32 +1,22 @@
 "use client";
 import { db } from '@/lib/offlineDB';
+import { 
+    normalizeTimestamp, 
+    dispatchDatabaseUpdate, 
+    safeNumber, 
+    safeDexieLookup, 
+    isNewerRecord, 
+    safeDexiePut 
+} from '../core/VaultUtils';
+import type { LocalEntry, LocalBook } from '@/lib/offlineDB';
 
 /**
- * VAULT PRO: REALTIME ENGINE (V25.0 - UNBREAKABLE INTEGRITY)
+ * VAULT PRO: REALTIME ENGINE (V25.2 - UNBREAKABLE INTEGRITY)
  * ----------------------------------------------------
- * Pusher integration and real-time signal processing
+ * Pusher integration and real-time signal processing.
+ * Fixed: Function signatures for VaultUtils.ts compliance.
+ * Fixed: ID Bridge logic block and bracket integrity.
  */
-
-// 🔧 HELPER: Normalize timestamps to consistent number format
-const normalizeTimestamp = (timestamp: any): number => {
-    if (!timestamp) return 0;
-    if (typeof timestamp === 'number') return timestamp;
-    if (typeof timestamp === 'string') {
-        const parsed = new Date(timestamp).getTime();
-        return isNaN(parsed) ? 0 : parsed;
-    }
-    return 0;
-};
-
-// 🌐 GLOBAL DATABASE EVENT DISPATCHER
-const dispatchDatabaseUpdate = (operation: string, type: 'book' | 'entry', data?: any) => {
-    // 🔍 CIRCULAR UPDATE CHECK: Only dispatch if this is a genuine external change
-    // This prevents infinite loops where our own database updates trigger real-time events
-    console.log(`🌐 DATABASE UPDATE: ${operation} - ${type}`, data);
-    window.dispatchEvent(new CustomEvent('database-updated', { 
-        detail: { operation, type, data, timestamp: Date.now() } 
-    }));
-};
 
 export class RealtimeEngine {
   private userId: string;
@@ -34,9 +24,13 @@ export class RealtimeEngine {
   private securityGate: any;
   private broadcastCallback: () => void;
   
-  // � EVENT COUNTER: Track all received events for investigation
+  // 🔍 EVENT COUNTER: Track all received events for investigation
   private eventCounter: { [key: string]: number } = {};
   private lastEventTime: { [key: string]: number } = {};
+  
+  // 🔥 IDEMPOTENCY SHIELD: Prevent duplicate CID processing
+  private processingCids = new Set<string>();
+  private processingIds = new Set<string>();
 
   constructor(
     userId: string, 
@@ -55,130 +49,160 @@ export class RealtimeEngine {
     console.log(`🔒 SERVER-FIRST: Enforcing ${type} authority from server`, serverData);
     
     try {
-      // 🔍 STRICT KEY VALIDATION: Check for required fields before DB operations
+      // 🔍 STRICT KEY VALIDATION
       const hasValidId = serverData._id || serverData.cid;
       const hasValidCid = serverData.cid;
       
       if (!hasValidId || !hasValidCid) {
         console.error('🔒 SERVER-FIRST: Missing required keys for lookup', {
-          missingFields: {
-            _id: !serverData._id,
-            cid: !serverData.cid
-          },
+          missingFields: { _id: !serverData._id, cid: !serverData.cid },
           serverData,
           willTriggerEmergencyHydration: true
         });
-        
-        // 🚨 EMERGENCY HYDRATION: Skip DB operation and trigger full sync
-        console.log('🚨 EMERGENCY HYDRATION TRIGGERED: Missing keys in server data');
         setTimeout(() => this.hydrateCallback(this.userId), 100);
         return;
       }
       
       if (type === 'entry') {
-        const localRecord = await db.entries.where('cid').equals(serverData.cid || "").or('_id').equals(serverData._id).first();
-        if (localRecord) {
-          // 🔧 VKEY FIX: Allow update if vKey >= local vKey OR timestamp is different
-          const serverVKey = Number(serverData.vKey || 0);
-          const localVKey = Number(localRecord.vKey || 0);
-          const serverUpdatedAt = normalizeTimestamp(serverData.updatedAt);
-          const localUpdatedAt = normalizeTimestamp(localRecord.updatedAt || 0);
+        try {
+          // 🔍 LOOKUP-FIRST STRATEGY: Find existing records before any operation
+          const lookupResult = await safeDexieLookup('entries', serverData.cid, serverData._id);
+          const localRecord = lookupResult.byCid || lookupResult.byId || null;
           
-          const shouldUpdate = serverVKey > localVKey || 
-                           (serverVKey === localVKey && serverUpdatedAt > localUpdatedAt) ||
-                           serverUpdatedAt > localUpdatedAt;
-          
-          console.log('🔧 VKEY COMPARISON FIXED:', {
-            serverVKey,
-            localVKey,
-            vKeyMatch: serverVKey === localVKey,
-            serverUpdatedAt,
-            localUpdatedAt,
-            timeDiff: serverUpdatedAt - localUpdatedAt,
-            shouldUpdate,
-            reason: serverVKey > localVKey ? 'Server vKey is higher' :
-                     serverVKey === localVKey && serverUpdatedAt > localUpdatedAt ? 'Same vKey but newer timestamp' :
-                     serverUpdatedAt > localUpdatedAt ? 'Server timestamp is newer' : 'Local data is newer'
-          });
-          
-          if (shouldUpdate) {
+          if (localRecord) {
+            // 🔒 CONSTRAINT PROTECTION: Compare versions using isNewerRecord(serverData, localRecord || null)
+            const shouldUpdate = isNewerRecord(serverData, localRecord || null);
+            
+            if (shouldUpdate) {
+              // 🛡️ SHADOW BUFFER SAFETY: Check if entry is currently in deleted but buffered state
+              if (localRecord.isDeleted && (localRecord as any)._emergencyFlushed) {
+                console.log('🔧 SKIPPING UPDATE: Entry is in ShadowBuffer deleted state');
+                return;
+              }
+              
+              // 🔧 UPDATE STRATEGY: Use update() instead of put() to preserve localId and prevent ConstraintError
+              const normalizedServerData = {
+                ...serverData,
+                updatedAt: normalizeTimestamp(serverData.updatedAt),
+                createdAt: normalizeTimestamp(serverData.createdAt),
+                synced: 1
+              };
+              
+              await db.entries.update(localRecord.localId!, normalizedServerData);
+              dispatchDatabaseUpdate('server-overwrite', 'entry', normalizedServerData);
+            } else {
+              console.log('🔧 SKIPPING UPDATE: Local data is newer or identical');
+            }
+          } else {
+            // 🔧 NEW RECORD: Only use safeDexiePut when no existing record found
             const normalizedServerData = {
               ...serverData,
-              updatedAt: serverUpdatedAt,
+              updatedAt: normalizeTimestamp(serverData.updatedAt),
               createdAt: normalizeTimestamp(serverData.createdAt),
-              localId: localRecord.localId,
               synced: 1
             };
-            await db.entries.put(normalizedServerData);
-            dispatchDatabaseUpdate('server-overwrite', 'entry', normalizedServerData);
-          } else {
-            console.log('🔧 SKIPPING UPDATE: Local data is newer');
+            
+            await safeDexiePut('entries', normalizedServerData, null);
+            dispatchDatabaseUpdate('server-create', 'entry', normalizedServerData);
           }
-        } else {
-          const normalizedServerData = {
-            ...serverData,
-            updatedAt: normalizeTimestamp(serverData.updatedAt),
-            createdAt: normalizeTimestamp(serverData.createdAt),
-            synced: 1
-          };
-          await db.entries.put(normalizedServerData);
-          dispatchDatabaseUpdate('server-create', 'entry', normalizedServerData);
+        } catch (error) {
+          // 🔥 CONSTRAINT ERROR HANDLING: Specifically handle ConstraintError
+          if (error instanceof Error && error.name === 'ConstraintError') {
+            // 🔥 SILENT GUARD: Log as INFO instead of warning
+            const { logVault } = await import('@/lib/vault/core/VaultUtils');
+            logVault('Realtime Guard: Duplicate signal ignored (Data already safe)', {
+              cid: serverData.cid,
+              _id: serverData._id,
+              error: error.message
+            }, 'INFO');
+            return; // Skip this operation but don't crash
+          }
+          console.error('🔒 SERVER-FIRST ENTRY ERROR:', error);
+          setTimeout(() => this.hydrateCallback(this.userId), 100);
         }
       } else if (type === 'book') {
-        const localRecord = await db.books.where('cid').equals(serverData.cid || "").or('_id').equals(serverData._id).first();
-        if (localRecord) {
-          // 🔧 VKEY FIX: Allow update if vKey >= local vKey OR timestamp is different
-          const serverVKey = Number(serverData.vKey || 0);
-          const localVKey = Number(localRecord.vKey || 0);
-          const serverUpdatedAt = normalizeTimestamp(serverData.updatedAt);
-          const localUpdatedAt = normalizeTimestamp(localRecord.updatedAt || 0);
+        try {
+          // 🔍 LOOKUP-FIRST STRATEGY: Find existing records before any operation
+          const lookupResult = await safeDexieLookup('books', serverData.cid, serverData._id);
+          const localRecord = lookupResult.byCid || lookupResult.byId || null;
           
-          const shouldUpdate = serverVKey > localVKey || 
-                           (serverVKey === localVKey && serverUpdatedAt > localUpdatedAt) ||
-                           serverUpdatedAt > localUpdatedAt;
-          
-          console.log('🔧 BOOK VKEY COMPARISON FIXED:', {
-            serverVKey,
-            localVKey,
-            vKeyMatch: serverVKey === localVKey,
-            serverUpdatedAt,
-            localUpdatedAt,
-            timeDiff: serverUpdatedAt - localUpdatedAt,
-            shouldUpdate,
-            reason: serverVKey > localVKey ? 'Server vKey is higher' :
-                     serverVKey === localVKey && serverUpdatedAt > localUpdatedAt ? 'Same vKey but newer timestamp' :
-                     serverUpdatedAt > localUpdatedAt ? 'Server timestamp is newer' : 'Local data is newer'
-          });
-          
-          if (shouldUpdate) {
+          if (localRecord) {
+            // 🔒 CONSTRAINT PROTECTION: Compare versions using isNewerRecord(serverData, localRecord || null)
+            const shouldUpdate = isNewerRecord(serverData, localRecord || null);
+            
+            if (shouldUpdate) {
+              // 🛡️ SHADOW BUFFER SAFETY: Check if book is currently in deleted state
+              if (localRecord.isDeleted) {
+                console.log('🔧 SKIPPING UPDATE: Book is in deleted state');
+                return;
+              }
+              
+              // 🔧 UPDATE STRATEGY: Use update() instead of put() to preserve localId and prevent ConstraintError
+              const normalizedServerData = {
+                ...serverData,
+                updatedAt: normalizeTimestamp(serverData.updatedAt),
+                createdAt: normalizeTimestamp(serverData.createdAt),
+                synced: 1
+              };
+              
+              await db.books.update(localRecord.localId!, normalizedServerData);
+              dispatchDatabaseUpdate('server-overwrite', 'book', normalizedServerData);
+              
+              // 🔥 THE ID BRIDGE (Crucial): Update all entries where bookId equals old ID/localId
+              if (localRecord.localId && serverData._id && String(localRecord.localId) !== String(serverData._id)) {
+                await db.entries.where('bookId').equals(String(localRecord.localId)).modify({
+                  bookId: serverData._id,
+                  synced: 1,
+                  updatedAt: Date.now()
+                });
+                
+                // Also update entries that might be using old _id if it existed
+                if (localRecord._id && localRecord._id !== serverData._id) {
+                  await db.entries.where('bookId').equals(String(localRecord._id)).modify({
+                    bookId: serverData._id,
+                    synced: 1,
+                    updatedAt: Date.now()
+                  });
+                }
+                
+                console.log(`🔗 ID BRIDGE: Updated book entries from bookId ${localRecord.localId}/${localRecord._id} to ${serverData._id}`);
+              }
+            } else {
+              console.log('🔧 SKIPPING UPDATE: Local data is newer or identical');
+            }
+          } else {
+            // 🔧 NEW RECORD: Only use safeDexiePut when no existing record found
             const normalizedServerData = {
               ...serverData,
-              updatedAt: serverUpdatedAt,
-              localId: localRecord.localId,
+              updatedAt: normalizeTimestamp(serverData.updatedAt),
+              createdAt: normalizeTimestamp(serverData.createdAt),
               synced: 1
             };
-            await db.books.put(normalizedServerData);
-            dispatchDatabaseUpdate('server-overwrite', 'book', normalizedServerData);
-          } else {
-            console.log('🔧 SKIPPING UPDATE: Local data is newer');
+            
+            await safeDexiePut('books', normalizedServerData, null);
+            dispatchDatabaseUpdate('server-create', 'book', normalizedServerData);
           }
-        } else {
-          const normalizedServerData = {
-            ...serverData,
-            updatedAt: normalizeTimestamp(serverData.updatedAt),
-            synced: 1
-          };
-          await db.books.put(normalizedServerData);
-          dispatchDatabaseUpdate('server-create', 'book', normalizedServerData);
+        } catch (error) {
+          // 🔥 CONSTRAINT ERROR HANDLING: Specifically handle ConstraintError
+          if (error instanceof Error && error.name === 'ConstraintError') {
+            console.warn('🔑 CONSTRAINT ERROR: Duplicate CID detected, skipping operation', {
+              cid: serverData.cid,
+              _id: serverData._id,
+              error: error.message
+            });
+            return; // Skip this operation but don't crash
+          }
+          console.error('🔒 SERVER-FIRST BOOK ERROR:', error);
+          setTimeout(() => this.hydrateCallback(this.userId), 100);
         }
       }
+      
       window.dispatchEvent(new CustomEvent('totals-recalculate', { 
         detail: { type, serverData, timestamp: Date.now() } 
       }));
+      
     } catch (error) {
-      console.error('🔒 SERVER-FIRST: Failed to enforce server authority', error);
-      // 🚨 EMERGENCY HYDRATION: Fallback to full sync on any error
-      console.log('🚨 EMERGENCY HYDRATION TRIGGERED: Server-first authority failed');
+      console.error('🔒 SERVER-FIRST Error:', error);
       setTimeout(() => this.hydrateCallback(this.userId), 100);
     }
   }
@@ -191,299 +215,140 @@ export class RealtimeEngine {
     const channel = pusher.subscribe(`vault_channel_${this.userId}`);
     
     channel.bind('sync_signal', async (data: any) => {
-            // 🔍 EVENT COUNTER: Track all received events
             const dataType = typeof data;
-            const dataKeys = data && typeof data === 'object' ? Object.keys(data) : [];
-            
             this.eventCounter[data.type] = (this.eventCounter[data.type] || 0) + 1;
             this.lastEventTime[data.type] = Date.now();
             
-            // 🔧 BRUTE FORCE PAYLOAD EXTRACTION: Check ALL possible locations
+            // � IDEMPOTENCY SHIELD: Check if CID is already being processed
+            const eventCid = data.payload?.cid || data.cid || data.entry?.cid || data.book?.cid;
+            const eventId = data.payload?._id || data._id || data.entry?._id || data.book?._id;
+            
+            if (eventCid && this.processingCids.has(eventCid)) {
+              console.log('🛡️ [IDEMPOTENCY] Skipping duplicate CID processing:', {
+                cid: eventCid,
+                id: eventId,
+                type: data.type,
+                timeSinceLastEvent: Date.now() - this.lastEventTime[data.type]
+              });
+              return; // Silently drop duplicate
+            }
+            
+            if (eventId && this.processingIds.has(String(eventId))) {
+              console.log('🛡️ [IDEMPOTENCY] Skipping duplicate ID processing:', {
+                id: eventId,
+                cid: eventCid,
+                type: data.type,
+                timeSinceLastEvent: Date.now() - this.lastEventTime[data.type]
+              });
+              return; // Silently drop duplicate
+            }
+            
+            // Add to processing sets
+            if (eventCid) this.processingCids.add(eventCid);
+            if (eventId) this.processingIds.add(String(eventId));
+            
+            // �🔧 BRUTE FORCE PAYLOAD EXTRACTION: Normalizing incoming signals
             console.log('🔧 RAW DATA INVESTIGATION:', {
                 fullRawData: JSON.parse(JSON.stringify(data)),
                 dataType: dataType,
-                dataKeys,
                 hasPayload: !!data.payload,
-                hasData: !!data.data,
-                hasEntry: !!data.entry,
-                hasBook: !!data.book,
-                hasRecord: !!data.record,
-                isString: dataType === 'string'
+                hasData: !!data.data
             });
             
             let eventType = data.type;
             let payload = data.payload;
             
-            // 🔧 DEEP SEARCH: Try every possible payload location
+            // 🛠️ NORMALIZATION SYMBOL: Extracting eventType and payload from fallbacks
             if (!payload) {
-                // Check nested in data.data
                 if (data.data?.payload) {
-                    console.log('🔧 FOUND PAYLOAD: data.data.payload');
                     payload = data.data.payload;
                     eventType = data.data.type || data.type;
-                }
-                // Check if data itself is the payload
-                else if (data && typeof data === 'object' && (data._id || data.cid || data.amount || data.bookId)) {
-                    console.log('🔧 FOUND PAYLOAD: data itself is payload');
+                } else if (data && typeof data === 'object' && (data._id || data.cid)) {
                     payload = data;
                     eventType = data.type;
-                }
-                // Check other common locations
-                else if (data.entry) {
-                    console.log('🔧 FOUND PAYLOAD: data.entry');
+                } else if (data.entry) {
                     payload = data.entry;
-                    eventType = 'ENTRY_UPDATE'; // Assume update if entry exists
-                }
-                else if (data.book) {
-                    console.log('🔧 FOUND PAYLOAD: data.book');
+                    eventType = 'ENTRY_UPDATE';
+                } else if (data.book) {
                     payload = data.book;
-                    eventType = 'BOOK_UPDATE'; // Assume update if book exists
-                }
-                else if (data.record) {
-                    console.log('🔧 FOUND PAYLOAD: data.record');
-                    payload = data.record;
-                    eventType = data.type && data.type.includes('ENTRY') ? 'ENTRY_UPDATE' : 'BOOK_UPDATE';
-                }
-                // 🔧 JSON PARSING FALLBACK: Try parsing string data
-                else if (dataType === 'string') {
+                    eventType = 'BOOK_UPDATE';
+                } else if (dataType === 'string') {
                     try {
-                        console.log('🔧 ATTEMPTING: JSON.parse on string data');
                         const parsedData = JSON.parse(data);
-                        payload = parsedData.payload || parsedData.entry || parsedData.book || parsedData.record || parsedData;
+                        payload = parsedData.payload || parsedData.entry || parsedData.book || parsedData;
                         eventType = parsedData.type || data.type;
-                        console.log('🔧 JSON PARSE SUCCESS:', { parsedData, extractedPayload: payload });
-                    } catch (parseError) {
-                        console.error('🔧 JSON PARSE FAILED:', parseError);
+                    } catch (e) {
+                        console.error('🔧 JSON PARSING FALLBACK FAILED');
                     }
                 }
             }
             
-            // 🔍 PAYLOAD VALIDATION: Ensure we have valid data before proceeding
             if (!payload || typeof payload !== 'object') {
-                console.error('🔧 PAYLOAD ERROR: Invalid or missing payload', {
-                    originalData: JSON.parse(JSON.stringify(data)),
-                    extractedPayload: payload,
-                    eventType,
-                    payloadType: typeof payload
-                });
-                
-                // 🚨 EMERGENCY HYDRATION: Trigger full sync if we have valid event type but no payload
                 if (eventType && (eventType.includes('ENTRY') || eventType.includes('BOOK'))) {
-                    console.log('🚨 EMERGENCY HYDRATION TRIGGERED:', { 
-                        eventType, 
-                        reason: 'Missing payload but valid event type',
-                        willHydrate: true 
-                    });
-                    setTimeout(() => this.hydrateCallback(this.userId), 100); // Quick hydration fallback
+                    setTimeout(() => this.hydrateCallback(this.userId), 100);
                 }
-                
-                return; // Exit early if no valid payload
+                return;
             }
             
-            // 🔍 RAW PUSHER INVESTIGATION: Log EVERY event at the entry point
-            console.log('🔍 RAW PUSHER EVENT RECEIVED:', {
-                timestamp: new Date().toISOString(),
-                eventType,
-                eventCount: this.eventCounter[eventType],
-                timeSinceLastEvent: this.lastEventTime[eventType] - (this.lastEventTime[eventType] || Date.now()),
-                hasId: !!data.id,
-                hasPayload: !!payload,
-                payloadKeys: payload ? Object.keys(payload) : [],
-                fullData: JSON.parse(JSON.stringify(data)), // Deep clone to avoid mutations
-                extractedPayload: payload,
-                stackTrace: new Error().stack?.split('\n').slice(1, 4) // Track caller
-            });
-            
-            // 🔍 EVENT SUMMARY: Show running totals every 5 events
-            const totalEvents = Object.values(this.eventCounter).reduce((sum, count) => sum + count, 0);
-            if (totalEvents % 5 === 0) {
-                console.log('🔍 EVENT SUMMARY:', {
-                    totalEvents,
-                    eventBreakdown: this.eventCounter,
-                    lastEvents: Object.entries(this.lastEventTime).map(([type, time]) => ({ type, lastReceived: new Date(time).toISOString() }))
-                });
-            }
-            
-            // 🔍 PAYLOAD COMPARISON: Detailed logging for CREATE vs UPDATE
-            if (eventType === 'ENTRY_CREATE' || eventType === 'ENTRY_UPDATE') {
-                console.log(`🔍 ENTRY ${eventType.replace('ENTRY_', '')} PAYLOAD ANALYSIS:`, {
-                    type: eventType,
-                    payloadStructure: payload,
-                    vKey: payload?.vKey,
-                    _id: payload?._id,
-                    cid: payload?.cid,
-                    amount: payload?.amount,
-                    updatedAt: payload?.updatedAt,
-                    createdAt: payload?.createdAt,
-                    bookId: payload?.bookId,
-                    status: payload?.status,
-                    isDeleted: payload?.isDeleted,
-                    synced: payload?.synced,
-                    // Check for missing fields
-                    missingFields: ['vKey', '_id', 'cid', 'amount', 'updatedAt', 'createdAt', 'bookId', 'status'].filter(field => !(field in (payload || {}))),
-                    // Type analysis
-                    vKeyType: typeof payload?.vKey,
-                    amountType: typeof payload?.amount,
-                    updatedAtType: typeof payload?.updatedAt
-                });
-            }
-            
-            if (eventType === 'BOOK_CREATE' || eventType === 'BOOK_UPDATE') {
-                console.log(`🔍 BOOK ${eventType.replace('BOOK_', '')} PAYLOAD ANALYSIS:`, {
-                    type: eventType,
-                    payloadStructure: payload,
-                    vKey: payload?.vKey,
-                    _id: payload?._id,
-                    cid: payload?.cid,
-                    name: payload?.name,
-                    updatedAt: payload?.updatedAt,
-                    isDeleted: payload?.isDeleted,
-                    synced: payload?.synced,
-                    missingFields: ['vKey', '_id', 'cid', 'name', 'updatedAt'].filter(field => !(field in (payload || {}))),
-                    vKeyType: typeof payload?.vKey,
-                    updatedAtType: typeof payload?.updatedAt
-                });
-            }
+            console.log('🔍 RAW PUSHER EVENT RECEIVED:', { eventType, extractedPayload: payload });
 
-            // 🔥 TARGETED SIGNAL HANDLING - Instant Actions for Security & UX
             switch (eventType) {
                 case 'USER_DEACTIVATED':
-                    // 🚨 IMMEDIATE SECURITY ACTION - Logout without delay
                     this.securityGate.logout();
                     break;
                 
-            case 'BOOK_DELETED':
-                // 📚 INSTANT BOOK DELETION - Remove from local DB immediately
-                if (data.id) {
-                    await db.books.delete(data.id);
-                    await this.broadcastCallback(); // 🔄 UI FIX: Broadcast after DB operation
-                    // Dispatch custom event for UI updates
-                    window.dispatchEvent(new CustomEvent('resource-deleted', { 
-                        detail: { type: 'book', id: data.id } 
-                    }));
-                }
-                break;
+                case 'BOOK_DELETED':
+                    if (data.id) {
+                        await db.books.delete(data.id);
+                        await this.broadcastCallback();
+                        window.dispatchEvent(new CustomEvent('resource-deleted', { 
+                            detail: { type: 'book', id: data.id } 
+                        }));
+                    }
+                    break;
                 
-            case 'ENTRY_DELETED':
-                // 📝 INSTANT ENTRY DELETION - Remove from local DB immediately
-                if (data.id) {
-                    // Get entry before deletion to find parent book
-                    const entry = await db.entries.get(Number(data.id));
-                    await db.entries.delete(data.id);
-                    dispatchDatabaseUpdate('delete', 'entry', { localId: data.id, entry }); // 🌐 GLOBAL EVENT
-                    await this.broadcastCallback(); // 🔄 UI FIX: Broadcast after DB operation
-                    
-                    // 🔄 ACTIVITY-BASED DYNAMIC SORTING: Update parent book's timestamp
-                    if (entry?.bookId) {
-                        const book = await db.books.where('_id').equals(entry.bookId).or('localId').equals(Number(entry.bookId) || 0).first();
-                        if (book?.localId) {
-                            await db.books.update(book.localId, { 
-                                updatedAt: Date.now(), 
-                                vKey: (book.vKey || 0) + 1 
-                            });
+                case 'ENTRY_DELETED':
+                    const safeId = safeNumber(data.id);
+                    if (safeId > 0) {
+                        const entry = await db.entries.get(safeId);
+                        await db.entries.delete(safeId);
+                        dispatchDatabaseUpdate('delete', 'entry', { localId: safeId, entry });
+                        await this.broadcastCallback();
+                        
+                        if (entry?.bookId) {
+                            const lookupResult = await safeDexieLookup('books', undefined, entry.bookId);
+                            const book = lookupResult.byCid || lookupResult.byId;
+                            if (book?.localId) {
+                                await db.books.update(book.localId, { 
+                                    updatedAt: Date.now(), 
+                                    vKey: (book.vKey || 0) + 1 
+                                });
+                            }
                         }
                     }
-                }
-                break;
+                    break;
                 
-            case 'ENTRY_CREATE':
-            case 'ENTRY_UPDATE':
-                // � RELIABLE FALLBACK: Always trigger hydration if payload is missing
-                if (!payload) {
-                    console.log('🚨 EMERGENCY HYDRATION TRIGGERED: Missing payload for ENTRY event', {
-                        eventType,
-                        reason: 'Payload extraction failed, falling back to API sync',
-                        willHydrate: true
-                    });
-                    setTimeout(() => this.hydrateCallback(this.userId), 100);
-                    return;
-                }
-                
-                // 🔒 SERVER-FIRST AUTHORITY: Always overwrite with server data
-                try {
-                    console.log('🔒 SERVER-FIRST: Enforcing entry authority from server', payload);
-                    
-                    // 🔍 VKEY INVESTIGATION: Compare server vKey with local record
-                    const localRecord = await db.entries.where('cid').equals(payload.cid || "").or('_id').equals(payload._id).first();
-                    if (localRecord) {
-                        console.log('🔍 VKEY COMPARISON:', {
-                            serverVKey: payload?.vKey,
-                            localVKey: localRecord?.vKey,
-                            vKeyMatch: payload?.vKey === localRecord?.vKey,
-                            serverVKeyType: typeof payload?.vKey,
-                            localVKeyType: typeof localRecord?.vKey,
-                            serverUpdatedAt: payload?.updatedAt,
-                            localUpdatedAt: localRecord?.updatedAt,
-                            timeDiff: payload?.updatedAt && localRecord?.updatedAt ? 
-                                normalizeTimestamp(payload.updatedAt) - normalizeTimestamp(localRecord.updatedAt) : 'N/A',
-                            wouldUpdate: Number(payload?.vKey || 0) > Number(localRecord?.vKey || 0) || 
-                                       normalizeTimestamp(payload?.updatedAt) > normalizeTimestamp(localRecord?.updatedAt || 0)
-                        });
-                    } else {
-                        console.log('🔍 VKEY COMPARISON: No local record found, treating as new entry');
-                    }
-                    
+                case 'ENTRY_CREATE':
+                case 'ENTRY_UPDATE':
                     await this.enforceServerFirstAuthority('entry', payload);
-                    await this.broadcastCallback(); // 🔄 UI FIX: Broadcast after DB operation
-                } catch (err) {
-                    console.error('🔒 SERVER-FIRST: Entry authority enforcement failed:', err);
-                    // Fallback to hydration on error
-                    setTimeout(() => this.hydrateCallback(this.userId), 500); // 🔄 DELAY: Wait for server commit
-                }
-                break;
+                    await this.broadcastCallback();
+                    break;
                 
-            case 'BOOK_UPDATE':
-                // � RELIABLE FALLBACK: Always trigger hydration if payload is missing
-                if (!payload) {
-                    console.log('🚨 EMERGENCY HYDRATION TRIGGERED: Missing payload for BOOK event', {
-                        eventType,
-                        reason: 'Payload extraction failed, falling back to API sync',
-                        willHydrate: true
-                    });
-                    setTimeout(() => this.hydrateCallback(this.userId), 100);
-                    return;
-                }
-                
-                // 🔒 SERVER-FIRST AUTHORITY: Always overwrite with server data
-                try {
-                    console.log('🔒 SERVER-FIRST: Enforcing book authority from server', payload);
-                    
-                    // 🔍 VKEY INVESTIGATION: Compare server vKey with local record
-                    const localRecord = await db.books.where('cid').equals(payload.cid || "").or('_id').equals(payload._id).first();
-                    if (localRecord) {
-                        console.log('🔍 BOOK VKEY COMPARISON:', {
-                            serverVKey: payload?.vKey,
-                            localVKey: localRecord?.vKey,
-                            vKeyMatch: payload?.vKey === localRecord?.vKey,
-                            serverVKeyType: typeof payload?.vKey,
-                            localVKeyType: typeof localRecord?.vKey,
-                            serverUpdatedAt: payload?.updatedAt,
-                            localUpdatedAt: localRecord?.updatedAt,
-                            timeDiff: payload?.updatedAt && localRecord?.updatedAt ? 
-                                normalizeTimestamp(payload.updatedAt) - normalizeTimestamp(localRecord.updatedAt) : 'N/A',
-                            wouldUpdate: Number(payload?.vKey || 0) > Number(localRecord?.vKey || 0) || 
-                                       normalizeTimestamp(payload?.updatedAt) > normalizeTimestamp(localRecord?.updatedAt || 0)
-                        });
-                    } else {
-                        console.log('🔍 BOOK VKEY COMPARISON: No local record found, treating as new book');
-                    }
-                    
+                case 'BOOK_UPDATE':
                     await this.enforceServerFirstAuthority('book', payload);
-                    await this.broadcastCallback(); // 🔄 UI FIX: Broadcast after DB operation
-                } catch (err) {
-                    console.error('🔒 SERVER-FIRST: Book authority enforcement failed:', err);
-                    // Fallback to hydration on error
-                    setTimeout(() => this.hydrateCallback(this.userId), 500); // 🔄 DELAY: Wait for server commit
-                }
-                break;
+                    await this.broadcastCallback();
+                    break;
                 
-            default:
-                // ❓ UNKNOWN SIGNAL - Fallback to full hydration
-                this.hydrateCallback(this.userId);
-                break;
-        }
-        
-        window.dispatchEvent(new Event('vault-updated'));
+                default:
+                    this.hydrateCallback(this.userId);
+                    break;
+            }
+            
+            // 🔥 IDEMPOTENCY CLEANUP: Remove from processing sets after handling
+            if (eventCid) this.processingCids.delete(eventCid);
+            if (eventId) this.processingIds.delete(String(eventId));
+            
+            window.dispatchEvent(new Event('vault-updated'));
     });
   }
 }

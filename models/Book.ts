@@ -1,31 +1,43 @@
-// src/models/Book.ts
 import mongoose, { Schema, model, models, Document } from 'mongoose';
 
 /**
  * VAULT (BOOK) SCHEMA PROTOCOL - V11.0 (Stability Upgrade)
  * -----------------------------------------------
- * Architecture: Logical Clock (vKey) integrated for Sync Conflict Resolution.
- * Logic B: If Server vKey > Local vKey, client triggers background hydration.
+ * Fix: Removed duplicate updatedAt and matched Interface with Schema fields.
  */
 
 // ১. টাইপস্ক্রিপ্ট ইন্টারফেস
 export interface IBook extends Document {
+  cid: string;        
   name: string;
   description?: string;
-  userId: mongoose.Types.ObjectId;
+  vKey: number;         
+  syncAttempts: number; 
+  lastAttempt?: number; 
+  isPinned?: number;     
+  userId: string; 
   isPublic: boolean;
   shareToken?: string;
-  // --- নতুন প্রোটোকল ফিল্ডস ---
   type: 'general' | 'customer' | 'supplier';
   phone?: string;
-  image?: string; // Base64 বা ইমেজ URL
-  // --- Stability Upgrade Field ---
-  vKey: number; // Logic B: Logical Clock for Conflict Resolution
+  image?: string; 
   createdAt: Date;
-  updatedAt: Date;
+  updatedAt: Date; // কেবল একবার রাখা হয়েছে
 }
 
 const BookSchema = new Schema<IBook>({
+  // সিঙ্ক প্রোটোকল ফিল্ডস (ইন্টারফেসের সাথে মিল রেখে যোগ করা হয়েছে)
+  cid: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    index: true 
+  },
+  userId: { 
+    type: String, // Interface এর সাথে মিল রাখতে String করা হয়েছে (Casting Error এড়াতে)
+    required: true,
+    index: true 
+  },
   name: { 
     type: String, 
     required: [true, "Vault identity name is required"],
@@ -38,13 +50,23 @@ const BookSchema = new Schema<IBook>({
     maxlength: [200, "Description cannot exceed 200 characters"],
     default: ""
   },
-  userId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true,
-    index: true 
+  vKey: {
+    type: Number,
+    default: 1,
+    required: true
   },
-  // পাবলিক শেয়ারিং প্রোটোকল
+  syncAttempts: {
+    type: Number,
+    default: 0
+  },
+  lastAttempt: {
+    type: Number
+  },
+  isPinned: {
+    type: Number,
+    default: 0
+  },
+  // পাবলিক শেয়ারিং ও অন্যান্য প্রোটোকল
   isPublic: { 
     type: Boolean, 
     default: false 
@@ -55,12 +77,11 @@ const BookSchema = new Schema<IBook>({
     sparse: true, 
     index: true
   },
-  // --- ২. নতুন ডাইনামিক ফিল্ডস (Elite OS Upgrade) ---
   type: { 
     type: String, 
-    enum: ['general', 'customer', 'supplier'], // প্রোটোকল ভ্যালিডেশন
+    enum: ['general', 'customer', 'supplier'],
     default: 'general',
-    lowercase: true, // Strict Protocol: Always lowercase in DB
+    lowercase: true,
     index: true
   },
   phone: { 
@@ -70,22 +91,16 @@ const BookSchema = new Schema<IBook>({
   },
   image: { 
     type: String, 
-    default: "" // ভল্ট আইডেন্টিটি ইমেজ (Base64)
-  },
-  // --- ৩. Stability Protocol Field ---
-  vKey: {
-    type: Number,
-    default: 1, // Default to 1 for backward compatibility
-    required: true
+    default: "" 
   }
 }, { 
   timestamps: true, 
-  versionKey: false // Mongoose default __v off (We use our custom vKey)
+  versionKey: false 
 });
 
 // ৪. ইনডেক্সিং: সার্চ এবং সর্টিং পারফরম্যান্স অপ্টিমাইজেশন
 BookSchema.index({ userId: 1, updatedAt: -1 });
-BookSchema.index({ userId: 1, type: 1 }); // টাইপ অনুযায়ী দ্রুত খোঁজার জন্য
-BookSchema.index({ userId: 1, vKey: 1 }); // Logic D: Health Check performance
+BookSchema.index({ userId: 1, type: 1 }); 
+BookSchema.index({ userId: 1, vKey: 1 }); 
 
 export default models.Book || model<IBook>('Book', BookSchema);

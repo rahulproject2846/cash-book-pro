@@ -31,7 +31,7 @@ export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUse
 
     const fetchVaults = async () => {
         const data = await db.books.where('isDeleted').equals(0).toArray();
-        setBooks(data.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+        setBooks(data.sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0)));
     };
 
     const allItems = useMemo<CommandItem[]>(() => { 

@@ -35,6 +35,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
     const [isLoading, setIsLoading] = useState(false);
     const [showKeypad, setShowKeypad] = useState(false);
     const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+    const [duplicateWarningBlink, setDuplicateWarningBlink] = useState(false);
 
     const [form, setForm] = useState({ 
         title: '', category: 'GENERAL', paymentMethod: 'CASH', 
@@ -56,8 +57,18 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                     form.category
                 );
                 setShowDuplicateWarning(!!isDuplicate);
+                if (isDuplicate) {
+                    setDuplicateWarningBlink(true);
+                    const intervalId = setInterval(() => {
+                        setDuplicateWarningBlink(!duplicateWarningBlink);
+                    }, 500);
+                    return () => clearInterval(intervalId);
+                } else {
+                    setDuplicateWarningBlink(false);
+                }
             } else {
                 setShowDuplicateWarning(false);
+                setDuplicateWarningBlink(false);
             }
         };
 
@@ -347,7 +358,10 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                                     >
                                         <AlertTriangle size={18} className="text-orange-500 shrink-0" />
                                         <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wider leading-tight">
-                                            {t('duplicate_warning')}
+                                            <span className="inline-flex items-center gap-2">
+                                                {t('duplicate_warning')}
+                                                <span className="inline-block w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+                                            </span>
                                         </p>
                                     </motion.div>
                                 )}

@@ -40,7 +40,7 @@ const BooksSection = memo(({
     
     // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন (Direct Connection to V13 Engine)
     const {
-        books, allEntries, entries, stats, isLoading,
+        books, allEntries, entries, globalStats, isLoading,
         saveEntry, deleteEntry, toggleEntryStatus, togglePin // 🔥 পিন ফাংশন যোগ করা হলো
     } = useVault(currentUser, currentBook);
 
@@ -48,7 +48,7 @@ const BooksSection = memo(({
     const unsyncedCount = useLiveQuery(
         () => db.entries
             .where('synced').equals(0)
-            .and(e => e.isDeleted === 0) 
+            .and((e: any) => e.isDeleted === 0) 
             .count(),
         []
     ) || 0;
@@ -98,11 +98,11 @@ const BooksSection = memo(({
             
             const inF = bEntries
                 .filter((e: any) => e.type === 'income' && String(e.status).toLowerCase() === 'completed')
-                .reduce((s, e) => s + Number(e.amount), 0);
+                .reduce((s: number, e: any) => s + Number(e.amount), 0);
             
             const outF = bEntries
                 .filter((e: any) => e.type === 'expense' && String(e.status).toLowerCase() === 'completed')
-                .reduce((s, e) => s + Number(e.amount), 0);
+                .reduce((s: number, e: any) => s + Number(e.amount), 0);
             
             return { 
                 ...book, 
@@ -237,7 +237,7 @@ const BooksSection = memo(({
                         <BookDetails 
                             currentBook={currentBook} 
                             items={entries} 
-                            stats={stats} 
+                            stats={globalStats} 
                             currentUser={currentUser} 
                             onBack={() => setCurrentBook(null)}
                             onAdd={() => openModal('addEntry', { currentUser, currentBook, onSubmit: onSaveEntry })}

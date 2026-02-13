@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, ChevronLeft, ChevronRight, Inbox, Zap, GitCommit, ShieldCheck, Activity } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 
 // Sub Components
 import { StatsGrid } from '@/components/UI/StatsGrid'; 
@@ -17,9 +18,21 @@ import { Tooltip } from '@/components/UI/Tooltip';
 
 export const BookDetails = ({ 
     currentBook, items, onBack, onAdd, onEdit, onDelete, onToggleStatus, 
-    searchQuery, setSearchQuery, pagination, currentUser, stats
+    searchQuery, setSearchQuery, pagination, currentUser, bookStats
 }: any) => {
     const { t, language } = useTranslation();
+    const params = useParams();
+    const router = useRouter();
+    const bookIdFromUrl = params.id as string;
+    
+    // URL-FIRST: Use URL parameter, fallback to prop only if URL is empty
+    const effectiveBookId = bookIdFromUrl || (currentBook?._id || currentBook?.localId);
+    
+    // REDIRECT: If no valid ID, redirect to books list
+    if (!effectiveBookId && !bookIdFromUrl) {
+        router.push('/');
+        return null;
+    }
     
     // ১. ফিল্টার ও সর্ট স্টেট
     const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
@@ -35,7 +48,7 @@ export const BookDetails = ({
 
         let list = items.filter((item: any) => {
             const matchesSearch = (item.title || "").toLowerCase().includes(searchQuery.toLowerCase());
-            const currentBookId = String(currentBook?._id || currentBook?.localId);
+            const currentBookId = String(effectiveBookId);
             const entryBookId = String(item.bookId);
             return matchesSearch && currentBookId === entryBookId;
         });
@@ -51,11 +64,21 @@ export const BookDetails = ({
         });
 
         return list;
-    }, [items, searchQuery, categoryFilter, sortConfig, currentBook]);
+    }, [items, searchQuery, categoryFilter, sortConfig, effectiveBookId]);
 
     const currentItems = processedItems.slice(((pagination?.currentPage || 1) - 1) * 10, (pagination?.currentPage || 1) * 10);
 
-    if (!currentBook) return null;
+    if (!currentBook) {
+        console.log('🔍 DEBUG: Waiting for valid currentBook ID');
+        return (
+            <div className="flex items-center justify-center py-20">
+                <div className="text-center">
+                    <div className="w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center text-white animate-spin"></div>
+                    <p className="mt-4 text-[var(--text-muted)]">Loading book details...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <motion.div 
@@ -66,10 +89,10 @@ export const BookDetails = ({
                 
                 {/* --- ১. DYNAMIC STATS GRID --- */}
                 <StatsGrid 
-                    income={stats?.inflow || 0} 
-                    expense={stats?.outflow || 0} 
-                    pending={stats?.pending || 0}
-                    surplus={(stats?.inflow || 0) - (stats?.outflow || 0)}
+                    income={bookStats?.stats?.inflow || 0} 
+                    expense={bookStats?.stats?.outflow || 0} 
+                    pending={bookStats?.stats?.pending || 0}
+                    surplus={(bookStats?.stats?.inflow || 0) - (bookStats?.stats?.outflow || 0)}
                     currency={currentUser?.currency} 
                 />
 

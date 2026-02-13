@@ -122,7 +122,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                 <motion.div 
                                     whileTap={{ scale: 0.94 }}
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="w-24 h-24 rounded-[35px] bg-[var(--bg-input)] border border-[var(--border)] flex items-center justify-center cursor-pointer overflow-hidden transition-all hover:border-orange-500/50 shadow-inner group/img"
+                                    className="w-24 h-24 rounded-[35px] bg-[var(--bg-input)] border border-[var(--border)] flex items-center justify-center cursor-pointer overflow-hidden transition-all hover:border-orange-500/50 shadow-md group/img"
                                 >
                                     {form.image ? (
                                         <img src={form.image} alt="V" className="w-full h-full object-cover" />
@@ -144,7 +144,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                         </div>
 
                         {/* টাইপ সিলেক্টর */}
-                        <div className="bg-[var(--bg-input)] p-1.5 rounded-[26px] border border-[var(--border)] flex h-14 shadow-inner">
+                        <div className="bg-[var(--bg-input)] p-1.5 rounded-[26px] border border-[var(--border)] flex h-14 shadow-md">
                             {[
                                 { id: 'general', label: t('type_general'), icon: BookOpen },
                                 { id: 'customer', label: t('type_customer'), icon: User },
@@ -191,7 +191,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                         <input 
                                             type="tel" 
                                             placeholder="+880 1XXX XXXXXX" 
-                                            className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] rounded-[24px] text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-inner" 
+                                            className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] rounded-[24px] text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-md" 
                                             value={form.phone} 
                                             onChange={e => setForm({...form, phone: e.target.value})} 
                                             onKeyDown={handleKeyDown}
@@ -204,7 +204,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                 <div className="absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-orange-500 transition-colors z-10"><Info size={18} /></div>
                                 <input 
                                     placeholder={t('placeholder_vault_memo')} 
-                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] rounded-[24px] text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-inner" 
+                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] rounded-[24px] text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-md" 
                                     value={form.description} 
                                     onChange={e => setForm({...form, description: e.target.value})} 
                                     onKeyDown={handleKeyDown}

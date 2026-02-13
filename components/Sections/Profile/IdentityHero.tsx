@@ -26,11 +26,11 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
         try {
             const [totalBooks, syncedBooks, totalEntries, syncedEntries, pendingBooks, pendingEntries] = await Promise.all([
                 db.books.where('isDeleted').equals(0).count(),
-                db.books.where('isDeleted').equals(0).and(item => item.synced === 1).count(),
+                db.books.where('isDeleted').equals(0).and((item: any) => item.synced === 1).count(),
                 db.entries.where('isDeleted').equals(0).count(),
-                db.entries.where('isDeleted').equals(0).and(item => item.synced === 1).count(),
-                db.books.where('isDeleted').equals(0).and(item => item.synced === 0).count(),
-                db.entries.where('isDeleted').equals(0).and(item => item.synced === 0).count()
+                db.entries.where('isDeleted').equals(0).and((item: any) => item.synced === 1).count(),
+                db.books.where('isDeleted').equals(0).and((item: any) => item.synced === 0).count(),
+                db.entries.where('isDeleted').equals(0).and((item: any) => item.synced === 0).count()
             ]);
 
             const bookSyncPercentage = totalBooks > 0 ? (syncedBooks / totalBooks) * 100 : 100;

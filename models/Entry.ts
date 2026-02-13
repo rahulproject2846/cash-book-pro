@@ -1,17 +1,16 @@
-// src/models/Entry.ts
 import mongoose, { Schema, model, models, Document } from 'mongoose';
 
 /**
- * VAULT PRO: ENTRY SCHEMA PROTOCOL - V11.0 (Stability Upgrade)
+ * VAULT PRO: ENTRY SCHEMA PROTOCOL - V11.1 (Stability Upgrade)
  * ----------------------------------------------------------
- * Logic B: Logical Clock (vKey) for Conflict Resolution.
- * Logic C: Checksum for Data Solidarity (Integrity Protection).
+ * Fix: Removed conflicting _id, aligned bookId types, and added missing sync fields.
  */
 
 // ১. টাইপস্ক্রিপ্ট ইন্টারফেস আপডেট
 export interface IEntry extends Document {
+  // _id?: string;  <-- মঙ্গুজ ডকুমেন্টের সাথে কনফ্লিক্ট এড়াতে এটি মুছে ফেলা হয়েছে
   cid: string; 
-  bookId: mongoose.Types.ObjectId;
+  bookId: string; 
   userId: string; 
   title: string;
   amount: number;
@@ -23,9 +22,15 @@ export interface IEntry extends Document {
   time?: string;
   status: 'completed' | 'pending';
   isDeleted: boolean; 
-  // --- Stability Upgrade Fields ---
-  vKey: number;       // Logical Clock
-  checksum: string;   // Data Solidarity (Hash of Amount+Date+Title)
+  vKey: number; 
+  checksum: string; 
+  synced: 0 | 1;
+  syncAttempts: number; 
+  lastAttempt?: number; 
+  _emergencyFlushed?: boolean; 
+  _emergencyFlushAt?: number; 
+  isPinned?: number; 
+  localId?: number; 
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,12 +40,12 @@ const EntrySchema = new Schema<IEntry>({
   cid: { 
     type: String, 
     required: [true, "Client ID (cid) is required"],
+    unique: true, // CID গ্লোবালি ইউনিক হতে হবে
     index: true 
   },
-  // বুক আইডি রেফারেন্স
+  // বুক আইডি (সিঙ্ক এরর এড়াতে String করা হয়েছে, যা ইন্টারফেসের সাথে সামঞ্জস্যপূর্ণ)
   bookId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Book', 
+    type: String, 
     required: true,
     index: true
   },
@@ -59,7 +64,6 @@ const EntrySchema = new Schema<IEntry>({
     type: Number, 
     required: true 
   },
-  // Strict lowercase convention for V3 engine
   type: { 
     type: String, 
     required: true, 
@@ -88,20 +92,18 @@ const EntrySchema = new Schema<IEntry>({
     type: String, 
     default: "" 
   },
-  // Status protocol: Always lowercase
   status: { 
     type: String, 
     default: 'completed',
     lowercase: true,
     index: true
   },
-  // সফট ডিলিট লজিক (সিঙ্ক ইন্টিগ্রিটির জন্য)
   isDeleted: {
     type: Boolean,
     default: false,
     index: true
   },
-  // --- ২. Stability Upgrade Fields (Elite Logic) ---
+  // --- ২. Stability & Sync Fields (ইন্টারফেসের সাথে মিল রেখে যোগ করা হয়েছে) ---
   vKey: {
     type: Number,
     default: 1,
@@ -112,6 +114,29 @@ const EntrySchema = new Schema<IEntry>({
     type: String,
     required: [true, "Data checksum is required for solidarity"],
     index: true
+  },
+  synced: {
+    type: Number,
+    enum: [0, 1],
+    default: 0
+  },
+  syncAttempts: {
+    type: Number,
+    default: 0
+  },
+  lastAttempt: {
+    type: Number
+  },
+  isPinned: {
+    type: Number,
+    default: 0
+  },
+  _emergencyFlushed: {
+    type: Boolean,
+    default: false
+  },
+  _emergencyFlushAt: {
+    type: Number
   }
 }, { 
   timestamps: true,
@@ -121,10 +146,10 @@ const EntrySchema = new Schema<IEntry>({
 /**
  * ৩. ইনডেক্সিং কনফিগারেশন
  */
-// প্রোটেকশন: একই বুকে একই CID দুইবার থাকতে পারবে না
+// প্রোটেকশন: একই আইডি দিয়ে ডুপ্লিকেট রোধ
 EntrySchema.index({ bookId: 1, cid: 1 }, { unique: true }); 
 
-// হেলথ চেক অপ্টিমাইজেশন: দ্রুত ভ্যালিডেশন এর জন্য
+// হেলথ চেক অপ্টিমাইজেশন
 EntrySchema.index({ userId: 1, bookId: 1, vKey: 1 });
 
 export default models.Entry || model<IEntry>('Entry', EntrySchema);

@@ -6,9 +6,14 @@ import toast from 'react-hot-toast';
 
 // --- Core Logic & Storage ---
 import { db } from '@/lib/offlineDB';
-import { orchestrator } from '@/lib/vault/SyncOrchestrator'; 
+import { orchestrator } from '@/lib/vault/SyncOrchestrator';
 import AuthScreen from '@/components/Auth/AuthScreen';
-import { cn } from '@/lib/utils/helpers'; 
+import { cn } from '@/lib/utils/helpers';
+
+// 🔥 EXPOSE TO WINDOW: Make orchestrator available globally for useVaultActions
+if (typeof window !== 'undefined') {
+  window.syncOrchestrator = orchestrator;
+} 
 
 // --- UI Shell & Layout ---
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
@@ -261,7 +266,7 @@ useEffect(() => {
   const handleOpenGlobalModal = async (type: any) => {
     if (!currentBook?._id) return toast.error(t('err_select_vault'));
     const bookId = String(currentBook._id);
-    const entries = await db.entries.where('bookId').equals(bookId).and(e => e.isDeleted === 0).toArray();
+    const entries = await db.entries.where('bookId').equals(bookId).and((e: any) => e.isDeleted === 0).toArray();
     openModal(type, { entries, bookName: currentBook.name, currentBook });
   };
 

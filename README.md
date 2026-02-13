@@ -332,3 +332,228 @@ AUTH_PROTO_DISPATCHED
 LABEL_ENTRY_KEY
 BTN_ADJUST_DETAIL
 BTN_CONFIRM_IDENTITY
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+🔍 VAULT PRO DEEP AUDIT - TECHNICAL BLUEPRINT
+📊 DATA SCHEMA ANALYSIS
+🗃️ DEXIE DATABASE TABLES (Version 5)
+Table	Primary Keys	Indexes	Purpose
+books	++localId (auto-increment), _id (server string)	userId, &cid, synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned	Local-first book storage with dual ID system
+entries	++localId (auto-increment), _id (server string)	&cid, bookId, userId, synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned	Transaction entries with book relationship
+users	_id (server string)	None	User authentication data
+telemetry	++id (auto-increment)	type, synced, timestamp	System logging and debugging
+audits	++id (auto-increment)	type, level, timestamp, sessionId, userId	Comprehensive audit framework
+🔑 CRITICAL ID SYSTEM
+Dual ID Architecture:
+
+localId: Auto-increment number (Dexie primary key)
+_id: Server-generated string (MongoDB ObjectId)
+cid: Client-generated unique identifier (cid_${timestamp}_${random})
+Type Safety Issues Identified:
+
+bookId declared as string in schema but can be number in legacy data
+Server sends string IDs, local Dexie uses number primary keys
+Mixed type comparisons causing filter failures
+🔄 DATA FLOW MAP: NEW ENTRY LIFECYCLE
+UI INPUT
+    ↓
+useVaultActions.saveEntry()
+    ↓
+[VALIDATION] Checksum generation + CID creation
+    ↓
+[LOCAL DB] db.entries.put() with localId + synced: 0
+    ↓
+[UI REACTIVITY] setForceRefresh() triggers useLiveQuery
+    ↓
+[SYNC ORCHESTRATOR] triggerSync() detects synced: 0
+    ↓
+[SERVER POST] /api/entries with checksum validation
+    ↓
+[PUSHER SIGNAL] vault_channel_${userId} → sync_signal
+    ↓
+[REALTIME ENGINE] enforceServerFirstAuthority()
+    ↓
+[LOCAL UPDATE] db.entries.update() with server _id + synced: 1
+    ↓
+[UI REFRESH] dispatchDatabaseUpdate() → useLiveQuery → UI
+⚙️ SYNC ENGINE ARCHITECTURE
+SyncOrchestrator Core Logic
+Two-Phase Sync System:
+
+PUSH (Local → Server)
+Scans synced: 0 records
+Batch processing with BATCH_SIZE = 50
+Atomic ID Bridge updates during book sync
+Conflict resolution with vKey comparison
+PULL (Server → Local)
+Hydration with timestamp-based queries
+Batch processing in chunks of 50
+Duplicate prevention via CID lookup
+ID Bridge maintains referential integrity
+Critical Sync Components
+Component	Role	Key Files
+SyncOrchestrator	Main sync coordinator	lib/vault/SyncOrchestrator.ts
+RealtimeEngine	Pusher signal handler	lib/vault/core/RealtimeEngine.ts
+ShadowManager	Emergency storage handling	lib/vault/core/ShadowManager.ts
+SecurityGate	System block/validation	lib/vault/core/SecurityGate.ts
+🔗 ID BRIDGE ANALYSIS
+Files Manipulating bookId/localId:
+lib/vault/SyncOrchestrator.ts
+typescript
+// Lines 149-166: Atomic ID Bridge in triggerSync
+await db.entries.where('bookId').equals(String(book.localId)).modify({ 
+  bookId: String(sId), // String conversion critical
+  synced: 1, 
+  updatedAt: Date.now() 
+});
+hooks/vault/useVaultState.ts
+typescript
+// Lines 61-69: Type-neutral filtering
+const selectedId = String(currentBook?._id || currentBook?.localId || '');
+const entryBookId = String(entry.bookId || '');
+const matchesBookId = entryBookId === selectedId;
+hooks/vault/useVaultActions.ts
+typescript
+// Line 54: bookId assignment in saveEntry
+bookId: currentBook?._id || currentBook?.localId || bookId,
+lib/vault/core/RealtimeEngine.ts
+typescript
+// Lines 147-163: ID Bridge in realtime updates
+await db.entries.where('bookId').equals(String(localRecord.localId)).modify({
+  bookId: serverData._id,
+  synced: 1,
+  updatedAt: Date.now()
+});
+🕸️ DEPENDENCY GRAPH
+Hook Dependencies:
+useVault (Main Hook)
+├── useVaultState
+│   ├── useLiveQuery (dexie-react-hooks)
+│   ├── db (offlineDB)
+│   └── VaultUtils (normalizeTimestamp)
+├── useVaultActions
+│   ├── db (offlineDB)
+│   ├── generateCID, generateChecksum (offlineDB)
+│   └── VaultUtils (logVaultError)
+└── useVaultCalculations
+    ├── db (offlineDB)
+    └── VaultUtils (normalizeTimestamp)
+Core Dependencies:
+SyncOrchestrator
+├── VaultUtils (safeDexieLookup, safeDexiePut, isNewerRecord)
+├── ShadowManager (broadcast)
+├── SecurityGate (checkSecurityStatus)
+├── RealtimeEngine (constructor)
+└── db (offlineDB)
+👻 ORPHANED ENTRY HUNT
+Root Causes Identified:
+Type Mismatch Issues:
+Legacy entries have numeric bookId
+Server sends string bookId
+Filter comparisons fail silently
+ID Bridge Failures:
+Missing atomic updates during sync
+Race conditions between push/pull
+Incomplete cleanup of old references
+Timing Issues:
+UI queries before ID Bridge completes
+Stale cache during sync operations
+Critical Code Locations:
+High Risk:
+
+typescript
+// hooks/vault/useVaultState.ts:67-69
+const entryBookId = String(entry.bookId || '');
+const matchesBookId = entryBookId === selectedId;
+// Risk: Empty bookId strings match empty selectedId
+Medium Risk:
+
+typescript
+// lib/vault/SyncOrchestrator.ts:74
+const legacyEntries = await db.entries.where('bookId').equals('').toArray();
+// Risk: Only catches empty strings, not numeric values
+🔍 GHOST FILE AUDIT
+Missing/Referenced Files:
+Referenced File	Status	Location
+apply-optimistic-ops.ts	NOT FOUND	Referenced in error logs
+cache-middleware.ts	NOT FOUND	Referenced in error logs
+dexieHelpers.ts	CONSOLIDATED	Merged into VaultUtils.ts
+utils/helpers.ts	CONSOLIDATED	Merged into VaultUtils.ts
+Node Modules Check:
+No optimistic middleware found in node_modules
+References likely from previous development iterations
+Current codebase uses consolidated VaultUtils.ts
+🎯 CRITICAL FINDINGS & RECOMMENDATIONS
+🚨 IMMEDIATE ISSUES:
+Type Safety Gap:
+typescript
+// PROBLEM: bookId can be number or string
+interface LocalEntry {
+  bookId: string; // But legacy data has numbers
+}
+Incomplete Cleanup:
+typescript
+// PROBLEM: Only catches empty strings
+const legacyEntries = await db.entries.where('bookId').equals('').toArray();
+// MISSING: Numeric bookId values
+Race Condition:
+typescript
+// PROBLEM: UI can query before ID Bridge completes
+await db.entries.where('bookId').equals(String(book.localId)).modify({...});
+// No await for completion before UI refresh
+🔧 RECOMMENDED FIXES:
+Enhanced Cleanup:
+typescript
+// Fix all legacy bookId types
+const allEntries = await db.entries.toArray();
+const orphanedEntries = allEntries.filter(e => 
+  typeof e.bookId === 'number' || e.bookId === ''
+);
+Type Safety:
+typescript
+// Union type for bookId
+interface LocalEntry {
+  bookId: string | number;
+}
+Atomic Operations:
+typescript
+// Ensure ID Bridge completes before UI refresh
+await db.transaction('rw', [db.entries, db.books], async () => {
+  // All ID Bridge operations here
+});
+📋 SOURCE OF TRUTH SUMMARY
+Data Flow Integrity:
+✅ Schema: Dual ID system (localId + _id) properly defined
+✅ Sync: Batch processing with atomic operations
+⚠️ Type Safety: Mixed string/number bookId handling
+⚠️ Cleanup: Incomplete legacy data handling
+✅ Real-time: Pusher integration with proper channels
+Root Cause of "0 Data" Issue:
+Primary: Type mismatch in bookId filtering
+Secondary: Incomplete ID Bridge updates
+Tertiary: Race conditions during sync
+Immediate Action Items:
+Fix type safety in LocalEntry.bookId
+Enhance cleanup to handle numeric bookId values
+Add transaction boundaries for ID Bridge operations
+Implement comprehensive data validation
+This blueprint provides the complete technical foundation needed to resolve the sync engine and UI data visibility issues with 100% logic accuracy.

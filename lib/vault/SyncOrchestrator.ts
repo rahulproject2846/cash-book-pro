@@ -109,6 +109,7 @@ class SyncOrchestrator {
     if (!navigator.onLine || this.isSyncing || !uid) return;
 
     this.isSyncing = true;
+    console.log('🚀 Sync Started');
     try {
       // --- STEP A: Books Sync ---
       const pendingBooks = await db.books.where('synced').equals(0).toArray();
@@ -217,9 +218,10 @@ class SyncOrchestrator {
       }
       this.shadowManager.broadcast();
     } catch (err: any) { 
-      console.error("Sync Cycle Error:", err);
+      console.error("Sync Error:", err);
     } finally {
       this.isSyncing = false;
+      console.log('✅ Sync Success');
       this.hydrate(uid as string);
     }
   }

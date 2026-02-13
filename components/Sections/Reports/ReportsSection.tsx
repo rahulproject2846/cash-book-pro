@@ -35,7 +35,7 @@ export const ReportsSection = ({ currentUser }: any) => {
         try {
             if (!db.isOpen()) await db.open();
             const data = await db.entries.where('isDeleted').equals(0).toArray();
-            setAllEntries(data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+            setAllEntries(data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
         } catch (error) { 
             console.error("ANALYSIS_PROTOCOL_FAULT"); 
         } finally { 

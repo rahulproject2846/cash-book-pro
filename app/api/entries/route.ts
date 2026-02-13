@@ -64,6 +64,9 @@ export async function POST(req: Request) {
     const data = await req.json();
     const { cid, bookId, userId, amount, date, title, category, checksum, vKey } = data;
 
+    // 🔥 API LOGGING: Show received payload for debugging
+    console.log('📦 [API-ENTRIES] Received Payload:', JSON.stringify(data));
+
     if (!bookId || !userId || amount === undefined || !date || !checksum) {
         return NextResponse.json({ message: "Solidarity fields missing" }, { status: 400 });
     }
@@ -88,6 +91,19 @@ export async function POST(req: Request) {
                 message: "Duplicate prevented" 
             }, { status: 409 });
         }
+    }
+
+    // 🔥 SERVER-SIDE DEDUPLICATION: Additional CID check before creation
+    if (cid) {
+      const existingByCid = await Entry.findOne({ cid });
+      if (existingByCid) {
+        return NextResponse.json({ 
+            success: true, 
+            entry: existingByCid,
+            isActive: true,
+            message: "CID match found" 
+        }, { status: 200 });
+      }
     }
 
     // Logic C: SHA-256 Checksum Validation
@@ -136,6 +152,7 @@ export async function POST(req: Request) {
     }, { status: 201 });
 
   } catch (error: any) { 
-    return NextResponse.json({ message: "Sync Engine Error" }, { status: 500 }); 
+    console.error('❌ [API-ENTRIES-POST] Error:', error.message);
+    return NextResponse.json({ message: error.message || "Sync Engine Error" }, { status: 500 }); 
   }
 }

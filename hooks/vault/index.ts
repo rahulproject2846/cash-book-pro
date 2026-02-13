@@ -22,10 +22,8 @@ export const useVault = (currentUser: any, currentBook?: any) => {
     } = useVaultState(currentUser, forceRefresh, currentBook);
 
     // 💰 CALCULATIONS
-    const {
-        totalCash,
-        stats
-    } = useVaultCalculations(allEntries, forceRefresh);
+    const globalStats = useVaultCalculations(allEntries, forceRefresh);
+    const bookStats = useVaultCalculations(entries, forceRefresh);
 
     // 🔥 ACTIONS
     const {
@@ -106,8 +104,8 @@ const handleTotalCashUpdate = useCallback((event: any) => {
         books: books || [],
         allEntries: allEntries || [],
         entries: entries || [],
-        stats,
-        totalCash,
+        globalStats,
+        bookStats,
         isLoading: isLoading || false,
         unsyncedCount: unsyncedCount || 0,
         saveEntry,

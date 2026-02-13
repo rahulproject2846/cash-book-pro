@@ -113,6 +113,7 @@ export class VaultProDB extends Dexie {
   entries!: Table<LocalEntry>;
   users!: Table<LocalUser>; 
   telemetry!: Table<LocalTelemetry>; // Phase 3 Table
+  audits!: Table<any>; // Audit Framework Table
 
   constructor() {
     super('VaultPro_Core_V1'); 
@@ -145,10 +146,23 @@ export class VaultProDB extends Dexie {
         // Upgrade logic: Ensure all books have a userId if missing (Optional safeguard)
         // Dexie automatically handles the schema index update
     });
+
+    // 🎯 Version 6: AUDIT FRAMEWORK (Telemetry System)
+    // Added 'audits' table for centralized logging system
+    this.version(6).stores({
+      books: '++localId, _id, userId, &cid, synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned',
+      entries: '++localId, _id, &cid, bookId, userId, synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId'
+    }).upgrade(async (tx) => {
+        // Initialize audit system
+        console.log('Vault Pro: Audit Framework initialized');
+    });
   }
 }
 
-export const db = new VaultProDB();
+export const db = typeof window !== "undefined" ? new VaultProDB() : null as any;
 
 // --- ৪. কোর সিস্টেম ফাংশনস ---
 
@@ -156,10 +170,12 @@ export const db = new VaultProDB();
  * ডাটাবেজ রিসেট (লগআউটের সময় ব্যবহার্য)
  */
 export const clearVaultData = async () => {
+  if (typeof window === "undefined" || !db) return;
   await Promise.all([
     db.books.clear(),
     db.entries.clear(),
     db.users.clear(),
-    db.telemetry.clear()
+    db.telemetry.clear(),
+    db.audits.clear()
   ]);
 };
