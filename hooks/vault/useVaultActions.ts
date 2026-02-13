@@ -152,7 +152,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
     }, [userId, setForceRefresh]);
 
     // 📚 SAVE BOOK: Create or update book
-    const saveBook = useCallback(async (bookData: any) => {
+    const saveBook = useCallback(async (bookData: any, editTarget?: any) => {
         // 🔒 SAFETY CHECK: Don't run if user is not logged in
         if (!userId || (typeof userId !== 'string')) {
             logVaultError('saveBook', new Error('Invalid user ID'), { userId, bookData });
@@ -161,7 +161,8 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
         try {
             const newBook = {
-                ...bookData,
+                ...editTarget, // Spread existing data first
+                ...bookData,   // Overwrite with form data
                 userId,
                 cid: generateCID(),
                 synced: 0,
@@ -292,7 +293,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
             deleteEntry: () => ({ success: false, error: new Error('Invalid user ID') }),
             toggleEntryStatus: () => ({ success: false, error: new Error('Invalid user ID') }),
             togglePin: () => ({ success: false, error: new Error('Invalid user ID') }),
-            saveBook: () => ({ success: false, error: new Error('Invalid user ID') }),
+            saveBook: (bookData: any, editTarget?: any) => ({ success: false, error: new Error('Invalid user ID') }),
             deleteBook: () => ({ success: false, error: new Error('Invalid user ID') }),
             restoreEntry: () => ({ success: false, error: new Error('Invalid user ID') }),
             restoreBook: () => ({ success: false, error: new Error('Invalid user ID') }),
