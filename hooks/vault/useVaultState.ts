@@ -9,10 +9,10 @@ import { normalizeTimestamp } from './helpers';
  * 🔥 VAULT STATE HOOK (Modularized)
  * Handles all useLiveQuery calls and state management
  */
-export const useVaultState = (currentUser: any, currentBook: any, forceRefresh: number) => {
+export const useVaultState = (currentUser: any, forceRefresh: number, currentBook?: any) => {
     // 🔒 ID VALIDATION: Strict checks for undefined IDs
     const userId = currentUser?._id;
-    const bookId = currentBook?._id || currentBook?.localId;
+    const bookId = currentBook?._id || currentBook?.localId || '';
     
     // 📚 BOOKS: Reactive books list with pinned sorting
     const books = useLiveQuery(

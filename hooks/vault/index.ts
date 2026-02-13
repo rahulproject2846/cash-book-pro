@@ -19,7 +19,7 @@ export const useVault = (currentUser: any, currentBook?: any) => {
         isLoading,
         userId,
         bookId
-    } = useVaultState(currentUser, currentBook, forceRefresh);
+    } = useVaultState(currentUser, forceRefresh, currentBook);
 
     // 💰 CALCULATIONS
     const {

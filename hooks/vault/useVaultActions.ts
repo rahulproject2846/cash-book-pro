@@ -19,7 +19,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
     const bookId = currentBook?._id || currentBook?.localId;
 
     // 🔥 SERVER-FIRST: Save entry with checksum validation and server authority
-    const saveEntry = useCallback(async (entryData: any) => {
+    const saveEntry = useCallback(async (entryData: Partial<LocalEntry>, editTarget?: any) => {
         // 🔒 SAFETY CHECK: Don't run if user is not logged in
         if (!userId || (typeof userId !== 'string')) {
             logVaultError('saveEntry', new Error('Invalid user ID'), { userId, entryData });
@@ -28,7 +28,6 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
         try {
             // 🔍 GET EXISTING: Check for existing record to calculate next vKey
-            const editTarget = entryData._id ? { _id: entryData._id } : { localId: entryData.localId };
             const existingRecord = editTarget?.localId ? await db.entries.get(Number(editTarget.localId)) : null;
             const nextVKey = (existingRecord?.vKey || 0) + 1;
             
@@ -44,7 +43,8 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
             });
 
             const newEntry = {
-                ...entryData,
+                ...editTarget, // Spread existing data first
+                ...entryData,   // Overwrite with form data
                 title: finalTitle, // Ensure title is never empty
                 date: finalDate,
                 amount: finalAmount,
@@ -292,7 +292,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
     if (!userId || (typeof userId !== 'string') || !bookId || (typeof bookId !== 'string')) {
         // 🔇 SILENT MODE: No console log to prevent spam
         return {
-            saveEntry: () => ({ success: false, error: new Error('Invalid user ID') }),
+            saveEntry: (entryData: Partial<LocalEntry>, editTarget?: any) => ({ success: false, error: new Error('Invalid user ID') }),
             deleteEntry: () => ({ success: false, error: new Error('Invalid user ID') }),
             toggleEntryStatus: () => ({ success: false, error: new Error('Invalid user ID') }),
             togglePin: () => ({ success: false, error: new Error('Invalid user ID') }),

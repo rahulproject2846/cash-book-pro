@@ -24,7 +24,7 @@ import { VirtualizedEntryList } from '@/components/UI/VirtualizedEntryList';
 export const TimelineSection = ({ currentUser }: any) => {
     const { T, t, language } = useTranslation();
     const { openModal, closeModal } = useModal();
-    const { saveEntry, deleteEntry, toggleEntryStatus } = useVault(currentUser);
+    const { saveEntry, deleteEntry, toggleEntryStatus } = useVault(currentUser, undefined);
 
     // ১. রিঅ্যাক্টিভ ডাটা ইঞ্জিন (LiveQuery: অটো-আপডেট এনসিওর করে)
     const entries = useLiveQuery(
@@ -58,6 +58,7 @@ export const TimelineSection = ({ currentUser }: any) => {
                     onDelete={deleteEntry}
                     onStatusToggle={toggleEntryStatus}
                     currentUser={currentUser}
+                    currentBook={undefined}
                     itemHeight={60}
                     bufferSize={10}
                 />
