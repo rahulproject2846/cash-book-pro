@@ -18,6 +18,16 @@ export default function PublicLedgerPage() {
     const params = useParams();
     const token = params.token as string;
     
+    // MOUNTED GUARD: Prevent SSR hydration mismatch
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+    
+    // SAFE DATE FORMATTING: Prevent hydration mismatch
+    const formatDate = (dateString: string) => {
+        if (!mounted) return ''; // Don't format on server
+        return new Date(dateString).toLocaleDateString('en-GB');
+    };
+    
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -75,6 +85,13 @@ export default function PublicLedgerPage() {
     const balance = totalIn - totalOut;
 
     // --- RENDER ---
+    if (!mounted) return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-[#0F0F0F] transition-colors">
+            <Loader2 className="animate-spin text-orange-500 mb-3" size={32} />
+            <p className="text-[10px] font-black uppercase tracking-[3px] text-slate-400">{t('verifying_protocol')}</p>
+        </div>
+    );
+
     return (
         // Global Styling for Public Page (Dark Mode Theme)
         <div className="min-h-screen bg-[#0F0F0F] text-white font-sans selection:bg-orange-500/30">
@@ -161,7 +178,7 @@ export default function PublicLedgerPage() {
                                 {filteredEntries.map((e: any) => (
                                     <tr key={e._id} className="hover:bg-[#121212] transition-colors group">
                                         <td className="py-6 px-8 text-xs font-bold text-slate-400 font-mono uppercase tracking-tighter">
-                                            {new Date(e.date).toLocaleDateString('en-GB')}
+                                            {formatDate(e.date)}
                                         </td>
                                         <td className="py-6 px-6">
                                             <div className="font-black text-sm uppercase text-white tracking-tight leading-none">{e.title}</div>
@@ -189,7 +206,7 @@ export default function PublicLedgerPage() {
                                     <div className="space-y-1">
                                         <h4 className="text-base font-black uppercase text-white tracking-tight leading-none">{e.title}</h4>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-2">
-                                            <Calendar size={10} /> {new Date(e.date).toLocaleDateString()} • {e.category}
+                                            <Calendar size={10} /> {formatDate(e.date)} • {e.category}
                                         </p>
                                     </div>
                                     <span className={`text-xl font-mono font-bold ${e.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>

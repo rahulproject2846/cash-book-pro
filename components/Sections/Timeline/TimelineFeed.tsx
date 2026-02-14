@@ -8,6 +8,7 @@ import {
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
+import { EntryCard } from '@/components/UI/EntryCard';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 

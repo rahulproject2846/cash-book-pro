@@ -1,220 +1,151 @@
 "use client";
 
-import { db } from '@/lib/offlineDB';
 import type { LocalEntry, LocalBook } from '@/lib/offlineDB';
+import { telemetry } from '../Telemetry';
 
 /**
- * 🏛️ VAULT PRO: UNIFIED DATABASE UTILITIES (V1.0)
+ * 🛡️ VAULT PRO: SUPREME UTILITIES & NORMALIZER (V3.0)
  * ---------------------------------------------------
- * Single source of truth for all database operations
- * Consolidates helpers from dexieHelpers.ts and utils/helpers.ts
+ * এই ফাইলটি অ্যাপের ডাটা ক্লিনসিং, টাইমস্ট্যাম্প এবং ইভেন্ট ডিসপ্যাচিং হ্যান্ডেল করে।
+ * প্রোডাকশন গ্রেড: টাইপ-সেফ, মেমরি এফিসিয়েন্ট এবং লেগাসি ডাটা রেসকিউ ফ্রেন্ডলি।
  */
 
-// 🔧 TIMESTAMP NORMALIZATION
-export const normalizeTimestamp = (timestamp: any): number => {
-    if (!timestamp) return 0;
-    if (typeof timestamp === 'number') return timestamp;
-    if (typeof timestamp === 'string') {
-        const parsed = new Date(timestamp).getTime();
-        return isNaN(parsed) ? 0 : parsed;
+// --- ১. টাইমস্ট্যাম্প হেল্পারস (EXPORTS) ---
+
+/**
+ * যেকোনো ফরমেটের টাইমস্ট্যাম্পকে Unix Number-এ রূপান্তর করে।
+ */
+export const normalizeTimestamp = (val: any): number => {
+    if (!val) return Date.now();
+    if (typeof val === 'number') return val;
+    const parsed = new Date(val).getTime();
+    return isNaN(parsed) ? Date.now() : parsed;
+};
+
+// --- ২. ডাটা স্যানিটাইজেশন হেল্পারস (INTERNAL) ---
+
+const sanitizeId = (id: any): string => {
+    if (!id) return '';
+    const idStr = String(id);
+    // Regex: ObjectId wrapper এবং কোটেশন পরিষ্কার করে
+    return idStr
+        .replace(/^ObjectId\("(.+?)"\)$/, '$1') 
+        .replace(/['"]/g, '')                   
+        .trim();
+};
+
+// --- ৩. মাস্টার রেকর্ড নরমলাইজার (EXPORT) ---
+
+/**
+ * ডাটাবেজে ঢোকার আগে রেকর্ডকে সলিড ফরমেটে নিয়ে আসে।
+ * লেগাসি ডাটা (admin user, missing CID) উদ্ধার করে।
+ */
+export const normalizeRecord = (data: any, currentUserId?: string): any => {
+    if (!data || typeof data !== 'object') return null;
+
+    const normalized = { ...data };
+
+    // ১. আইডি প্রোটেকশন (যদি _id এবং cid দুটোই না থাকে তবে ডাটা বাদ)
+    if (!normalized._id && !normalized.cid) {
+        console.warn("🚫 [NORMALIZER] Invalid record skipped:", data);
+        return null;
     }
-    return 0;
+
+    // ২. আইডি ইউনিফিকেশন
+    normalized._id = sanitizeId(normalized._id);
+    normalized.userId = sanitizeId(normalized.userId);
+    normalized.bookId = sanitizeId(normalized.bookId);
+
+    // ৩. লেগাসি রেসকিউ (CID & UserID)
+    if (!normalized.cid || String(normalized.cid).trim() === '') {
+        normalized.cid = `cid_legacy_${normalized._id}`;
+    }
+
+    const activeUid = sanitizeId(currentUserId);
+    if (!normalized.userId || normalized.userId === 'admin' || normalized.userId === 'unknown') {
+        if (activeUid) {
+            normalized.userId = activeUid;
+        } else {
+            console.warn("⚠️ [NORMALIZER] Potential orphan record:", normalized.cid);
+        }
+    }
+
+    // ৪. টাইমস্ট্যাম্প ইউনিফিকেশন
+    normalized.createdAt = normalizeTimestamp(normalized.createdAt);
+    normalized.updatedAt = normalizeTimestamp(normalized.updatedAt);
+    if (normalized.date) normalized.date = normalizeTimestamp(normalized.date);
+
+    // ৫. ফিল্ড এলিয়াস (Legacy Support)
+    if (normalized.memo && !normalized.note) normalized.note = normalized.memo;
+    if (normalized.via && !normalized.paymentMethod) normalized.paymentMethod = normalized.via;
+    
+    // 🔧 TYPE CORRECTION: Force type to lowercase and handle 'Entry' -> 'expense'
+    if (normalized.type) {
+        normalized.type = String(normalized.type).toLowerCase();
+        if (normalized.type === 'entry' || normalized.type === 'Entry') {
+            normalized.type = 'expense';
+        }
+    }
+
+    // ৬. ডাটা ইন্টিগ্রিটি (Enforced Rules)
+    // RULE: SERVER DATA IS ALWAYS SYNCED
+    if (normalized.synced !== 0) {
+      normalized.synced = normalized._id ? 1 : 0;
+    }
+    
+    // 🚨 CRITICAL FIX: Force server data to be synced: 1
+    // If data comes from server (has _id but no synced field), mark as synced
+    if (normalized._id && normalized.synced === undefined) {
+      normalized.synced = 1;
+    }
+    
+    // RULE: FORCE Boolean to Number conversion
+    normalized.isDeleted = (data.isDeleted === true || data.isDeleted === 1) ? 1 : 0;
+    
+    // 🚨 CONFLICT SANITIZATION: Handle conflicts on client side
+    normalized.conflicted = (data.conflicted === 1) ? 1 : 0;
+    normalized.conflictReason = data.conflictReason || "";
+    normalized.serverData = data.serverData || null;
+    
+    // অপ্রয়োজনীয় ফিল্ডস ক্লিনআপ
+    delete normalized.memo;
+    delete normalized.via;
+    delete normalized.__v;
+
+    return normalized;
 };
 
-// 🌐 GLOBAL DATABASE EVENT DISPATCHER
-export const dispatchDatabaseUpdate = (operation: string, type: 'book' | 'entry', data?: any) => {
-    // 🔍 CIRCULAR UPDATE CHECK: Only dispatch if this is a genuine external change
-    // This prevents infinite loops where our own database updates trigger real-time events
-    window.dispatchEvent(new CustomEvent('database-updated', { 
-        detail: { operation, type, data, timestamp: Date.now() } 
-    }));
-};
+// --- ৪. জেনারেল ইউটিলিটিস (EXPORTS) ---
 
-// 🔥 SAFE NUMBER CONVERSION: Prevent NaN from undefined values
 export const safeNumber = (value: any): number => {
     if (value === undefined || value === null) return 0;
     const num = Number(value);
     return isNaN(num) ? 0 : num;
 };
 
-// 🔥 UNIFIED DEXIE LOOKUP HELPERS
-export interface SafeLookupResult {
-  byCid: LocalEntry | LocalBook | null;
-  byId: LocalEntry | LocalBook | null;
-  found: boolean;
-}
-
-/**
- * 🔥 SAFE DEXIE LOOKUP: Validates keys before querying
- * Never passes undefined values to .equals() methods
- */
-export const safeDexieLookup = async (
-  tableName: 'entries' | 'books',
-  cid: string | undefined,
-  id: string | undefined
-): Promise<SafeLookupResult> => {
-  const table = tableName === 'entries' ? db.entries : db.books;
-  
-  // Always search by CID first
-  let query = table.where('cid').equals(cid || "");
-  
-  // Add ID search if provided
-  if (id) {
-    query = query.or('_id').equals(id);
-  }
-  
-  const byCid = await query.first();
-  
-  // If CID search failed, try direct ID search
-  const byId = id ? await table.where('_id').equals(id).first() : null;
-  
-  return {
-    byCid: byCid || null,
-    byId: byId || null,
-    found: !!(byCid || byId)
-  };
-};
-
-/**
- * 🔥 SAFE DEXIE PUT: Prevents duplicate CID insertion
- * Handles both create and update operations safely
- */
-export const safeDexiePut = async (
-  tableName: 'entries' | 'books',
-  data: any,
-  existingLocal: LocalEntry | LocalBook | null
-): Promise<void> => {
-  const table = tableName === 'entries' ? db.entries : db.books;
-  
-  // Normalize data for database
-  const normalizedData = {
-    ...data,
-    updatedAt: normalizeTimestamp(data.updatedAt),
-    createdAt: normalizeTimestamp(data.createdAt)
-  };
-  
-  // Remove localId for new records (Dexie will auto-generate)
-  if (!existingLocal?.localId) {
-    delete normalizedData.localId;
-  }
-  
-  // Perform the put operation
-  await table.put(normalizedData);
-};
-
-/**
- * 🔥 RECORD COMPARISON: Determines if server record is newer
- */
-export const isNewerRecord = (
-  serverRecord: any,
-  localRecord: LocalEntry | LocalBook | null
-): boolean => {
-  if (!localRecord) return true;
-  
-  // 🔥 STOP INFINITE LOOP: Strict timestamp comparison
-  const sTime = new Date(serverRecord.updatedAt).getTime();
-  const lTime = new Date(localRecord.updatedAt).getTime();
-  
-  // If timestamps are equal, no update needed
-  if (sTime === lTime) return false;
-  
-  return sTime > lTime;
-};
-
-/**
- * 🔥 ID VALIDATION HELPERS
- */
-export const isValidKey = (key: any): boolean => {
-  return key !== undefined && key !== null && key !== '';
-};
-
 export const isValidId = (id: any): boolean => {
-  return typeof id === 'string' && id.length > 0;
+    return typeof id === 'string' && id.length > 0;
 };
 
 /**
- * 🔥 ERROR LOGGING HELPER
+ * গ্লোবাল ডাটাবেজ আপডেট ইভেন্ট ডিসপ্যাচার।
+ */
+export const dispatchDatabaseUpdate = (operation: string, type: 'book' | 'entry', data?: any) => {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('database-updated', { 
+            detail: { operation, type, data, timestamp: Date.now() } 
+        }));
+    }
+};
+
+/**
+ * সিঙ্ক সাকসেস বা এরর লগ করার স্মার্ট ট্র্যাকার।
  */
 export const logVault = (operation: string, error: any, context?: any): void => {
-  const errorInfo = {
-    operation,
-    error: error?.message || error,
-    context,
-    timestamp: Date.now(),
-    stack: error?.stack
-  };
-  
-  console.error(`Vault Error [${operation}]:`, errorInfo);
-  
-  // Also dispatch as database update for error tracking
-  dispatchDatabaseUpdate('error', 'entry' as any, errorInfo);
-};
-
-export const logVaultInfo = (operation: string, message: string, context?: any): void => {
-  const infoInfo = {
-    operation,
-    message,
-    context,
-    timestamp: Date.now()
-  };
-  
-  console.log(`Vault Info [${operation}]:`, infoInfo);
-  
-  // Also dispatch as database update for info tracking
-  dispatchDatabaseUpdate('info', 'entry' as any, infoInfo);
-};
-
-/**
- * 🔥 BATCH OPERATIONS HELPER
- */
-export const createBatchUpdate = (
-  type: 'create' | 'update' | 'delete',
-  table: 'book' | 'entry',
-  data: any
-) => ({
-  type,
-  table,
-  data
-});
-
-/**
- * 🔥 CLEANUP HELPERS
- */
-export const cleanupOrphanedRecords = async (userId: string): Promise<void> => {
-  try {
-    // Clean up entries with invalid book references
-    const orphanedEntries = await db.entries
-      .where('userId')
-      .equals(userId)
-      .and((entry: any) => !entry.bookId || entry.bookId === '')
-      .toArray();
-    
-    if (orphanedEntries.length > 0) {
-      const orphanedIds = orphanedEntries.map((e: any) => e.localId!).filter(Boolean);
-      await db.entries.bulkDelete(orphanedIds);
-      console.log(`Cleaned up ${orphanedIds.length} orphaned entries`);
-    }
-  } catch (error) {
-    logVault('cleanupOrphanedRecords', error);
-  }
-};
-
-/**
- * 🔥 MIGRATION HELPERS
- */
-export const migrateLegacyIds = async (): Promise<void> => {
-  try {
-    // Update entries that might still be using numeric bookId
-    const legacyEntries = await db.entries
-      .where('bookId')
-      .equals('')
-      .toArray();
-    
-    if (legacyEntries.length > 0) {
-      console.log(`Migrating ${legacyEntries.length} legacy entries`);
-      // Migration logic would go here
-    }
-  } catch (error) {
-    logVault('migrateLegacyIds', error);
-  }
+    telemetry.log({
+        type: 'ERROR',
+        level: 'ERROR',
+        message: `Operation failed: ${operation}`,
+        data: { error: error?.message || error, context }
+    });
 };

@@ -143,7 +143,16 @@ export const ModalRegistry = () => {
       )}
 
       {/* ৮. কনফ্লিক্ট রেজোলভার প্রোটোকল */}
-      {view === 'conflictResolver' && <ConflictResolverModal />}
+      {view === 'conflictResolver' && (
+        <ConflictResolverModal 
+          key="conflict-resolver-modal"
+          isOpen={isOpen}
+          onClose={closeModal}
+          record={data?.record}
+          type={data?.type}
+          onResolve={data?.onResolve}
+        />
+      )}
     </AnimatePresence>
   );
 };

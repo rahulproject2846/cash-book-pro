@@ -38,6 +38,9 @@ export interface LocalBook {
   lastAttempt?: number; 
   isPinned?: number;     // PIN TO TOP: Timestamp for sort order (undefined = not pinned)
   userId: string;        // 🛑 ADDED: Required for query filtering
+  conflicted?: 0 | 1;     // 🚨 CONFLICT TRACKING: 0 = no conflict, 1 = conflict detected
+  conflictReason?: string;    // 🚨 CONFLICT REASON: "VERSION_CONFLICT", "MERGE_CONFLICT", etc.
+  serverData?: any;        // 🚨 SERVER DATA: Original server data that caused conflict
 }
 
 export interface LocalEntry {
@@ -66,6 +69,9 @@ export interface LocalEntry {
   _emergencyFlushed?: boolean;
   _emergencyFlushAt?: number;
   isPinned?: number;     // 📌 PIN TO TOP: Timestamp for sort order (undefined = not pinned)
+  conflicted?: 0 | 1;     // 🚨 CONFLICT TRACKING: 0 = no conflict, 1 = conflict detected
+  conflictReason?: string;    // 🚨 CONFLICT REASON: "VERSION_CONFLICT", "MERGE_CONFLICT", etc.
+  serverData?: any;        // 🚨 SERVER DATA: Original server data that caused conflict
 }
 
 // Phase 3 Prep: সাইলেন্ট অ্যাক্টিভিটি ট্র্যাকিং
@@ -158,6 +164,44 @@ export class VaultProDB extends Dexie {
     }).upgrade(async (tx) => {
         // Initialize audit system
         console.log('Vault Pro: Audit Framework initialized');
+    });
+
+    // 🎯 Version 7: COMPOUND INDEX OPTIMIZATION
+    // Added [userId+isDeleted] compound index for ultra-fast UI filtering
+    this.version(7).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned',
+      entries: '++localId, _id, &cid, bookId, userId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId'
+    }).upgrade(async (tx) => {
+        console.log('Vault Pro: Compound index optimization applied');
+    });
+
+    // 🎯 Version 8: CONFLICT TRACKING SYSTEM
+    // Added conflicted, conflictReason, and serverData fields for both books and entries
+    // Added &conflicted index for efficient conflict queries
+    this.version(8).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, &conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, &conflicted',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId'
+    }).upgrade(async (tx) => {
+      // Initialize conflict tracking system
+      console.log('Vault Pro: Conflict tracking system initialized');
+    });
+
+    // 🎯 Version 9: CONFLICT INDEX FIX
+    // Removed ampersand from conflicted field to make it a regular index (not unique)
+    this.version(9).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId'
+    }).upgrade(async (tx) => {
+      console.log('Vault Pro: Conflict index fixed - conflicted is now a regular index');
     });
   }
 }

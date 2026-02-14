@@ -7,24 +7,40 @@ import { NextResponse } from "next/server";
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const data = await req.json();
+    const { userId, ...updateData } = await req.json();
+
+    console.log('🔍 [API-BOOKS-PUT] Updating Book ID:', id, 'with data:', updateData);
 
     // ১. ভ্যালিডেশন
     if (!id) {
         return NextResponse.json({ message: "Ledger ID is required" }, { status: 400 });
     }
 
+    if (!userId) {
+        return NextResponse.json({ message: "User ID missing" }, { status: 400 });
+    }
+
     await connectDB();
     
-    // ২. আপডেটেড পেলোড তৈরি (নতুন ফিল্ড সহ)
+    // ২. সিকিউরিটি চেক - Ensure book belongs to user
+    const existingBook = await Book.findOne({ _id: id, userId });
+    if (!existingBook) {
+        console.log('❌ [API-BOOKS-PUT] Book not found or access denied. URL ID:', id, 'DB lookup failed for _id:', id, 'userId:', userId);
+        return NextResponse.json({ message: "Access Denied" }, { status: 403 });
+    }
+
+    // 🔍 DEBUG: Check ID mismatch
+    console.log('🔍 [API-BOOKS-PUT] ID Match Check - URL ID:', JSON.stringify(id), 'DB _id:', JSON.stringify(existingBook._id), 'Match:', id === existingBook._id);
+    
+    // ৩. আপডেটেড পেলোড তৈরি (নতুন ফিল্ড সহ)
     const updatePayload: any = {};
-    if (data.name) updatePayload.name = data.name.trim();
-    if (data.description !== undefined) updatePayload.description = data.description.trim();
+    if (updateData.name) updatePayload.name = updateData.name.trim();
+    if (updateData.description !== undefined) updatePayload.description = updateData.description.trim();
     
     // 🔥 নতুন ডাটা সিঙ্ক লজিক
-    if (data.type) updatePayload.type = data.type.toLowerCase();
-    if (data.phone !== undefined) updatePayload.phone = data.phone.trim();
-    if (data.image !== undefined) updatePayload.image = data.image;
+    if (updateData.type) updatePayload.type = updateData.type.toLowerCase();
+    if (updateData.phone !== undefined) updatePayload.phone = updateData.phone.trim();
+    if (updateData.image !== undefined) updatePayload.image = updateData.image;
 
     const updatedBook = await Book.findByIdAndUpdate(
         id, 

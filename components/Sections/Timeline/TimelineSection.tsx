@@ -19,16 +19,15 @@ import { cn, toBn } from '@/lib/utils/helpers';
 // Unified UI Components
 import { TimelineFeed } from './TimelineFeed';
 import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
-import { VirtualizedEntryList } from '@/components/UI/VirtualizedEntryList';
 
 export const TimelineSection = ({ currentUser }: any) => {
     const { t, language } = useTranslation();
     const { openModal, closeModal } = useModal();
-    const { saveEntry, deleteEntry, toggleEntryStatus } = useVault(currentUser, undefined);
+    const { saveEntry, deleteEntry, toggleEntryStatus } = useVault(currentUser);
 
     // ১. রিঅ্যাক্টিভ ডাটা ইঞ্জিন (LiveQuery: অটো-আপডেট এনসিওর করে)
     const entries = useLiveQuery(
-        () => db.entries.where('isDeleted').equals(0).toArray(),
+        () => db.entries.where('userId').equals(String(currentUser?._id)).and((e: any) => e.isDeleted === 0).toArray(),
         []
     ) || [];
 
@@ -51,17 +50,6 @@ export const TimelineSection = ({ currentUser }: any) => {
                         </div>
                     </div>
                 </div>
-                
-                <VirtualizedEntryList
-                    entries={entries}
-                    onEdit={saveEntry}
-                    onDelete={deleteEntry}
-                    onStatusToggle={toggleEntryStatus}
-                    currentUser={currentUser}
-                    currentBook={undefined}
-                    itemHeight={60}
-                    bufferSize={10}
-                />
             </div>
         );
     }

@@ -3,6 +3,7 @@ import connectDB from "@/lib/db";
 import Entry from "@/models/Entry";
 import User from "@/models/User"; // ইউজার মডেল ইমপোর্ট করা হলো
 import { NextResponse } from "next/server";
+import mongoose from "mongoose"; // mongoose import added
 import Pusher from 'pusher';
 import { generateServerChecksum } from "@/lib/serverCrypto";
 
@@ -34,7 +35,14 @@ export async function GET(req: Request) {
         return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
 
+    // 🔥 UNIVERSAL QUERY: Handle both String and ObjectId formats
     let query: any = { userId };
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      query.$or = [
+        { userId }, // String format
+        { userId: new mongoose.Types.ObjectId(userId) } // ObjectId format
+      ];
+    }
 
     if (since && since !== '0') {
         query.updatedAt = { $gt: new Date(Number(since)) };

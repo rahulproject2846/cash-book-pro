@@ -16,6 +16,8 @@ export const useVault = (currentUser: any, currentBook?: any) => {
         allEntries,
         entries,
         unsyncedCount,
+        conflictedCount,    // 🚨 CONFLICT TRACKING: Total conflicted items count
+        hasConflicts,       // 🚨 CONFLICT TRACKING: Boolean flag for any conflicts
         isLoading,
         userId,
         bookId
@@ -68,19 +70,8 @@ export const useVault = (currentUser: any, currentBook?: any) => {
     }, []); 
 
 const handleTotalCashUpdate = useCallback((event: any) => {
-        // 🛡️ SAFETY CHECK: Handle legacy events without detail
-        if (!event.detail) {
-            // If no detail, it means a generic write happened (legacy signal)
-            // So we force a refresh to be safe
-            setForceRefresh(prev => prev + 1);
-            return;
-        }
-
-        const { operation, type } = event.detail;
-        // Only force refresh total cash on specific impactful operations
-        if (type === 'entry' && ['delete', 'restore', 'server-create', 'server-overwrite'].includes(operation)) {
-            setForceRefresh(prev => prev + 1);
-        }
+        // 🛡️ SIMPLIFIED: Always refresh on vault-updated event
+        setForceRefresh(prev => prev + 1);
     }, []);
 
     // 🔄 RE-FETCH LOGIC
@@ -108,6 +99,8 @@ const handleTotalCashUpdate = useCallback((event: any) => {
         bookStats,
         isLoading: isLoading || false,
         unsyncedCount: unsyncedCount || 0,
+        conflictedCount: conflictedCount || 0,    // 🚨 CONFLICT TRACKING: Total conflicted items count
+        hasConflicts: hasConflicts || false,       // 🚨 CONFLICT TRACKING: Boolean flag for any conflicts
         saveEntry,
         deleteEntry,
         restoreEntry,

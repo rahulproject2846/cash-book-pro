@@ -32,7 +32,6 @@ import { useModal } from '@/context/ModalContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { EntryCard } from '@/components/UI/EntryCard';
 import { BookCard } from '@/components/UI/BookCard';
-import { VirtualizedEntryList } from '@/components/UI/VirtualizedEntryList'; 
 import { usePusher } from '@/context/PusherContext'; // 🔥 রিয়েল-টাইম সিঙ্ক হুক
 import { ToastCountdown } from '@/components/Modals/TerminationModal';
 
@@ -43,6 +42,10 @@ export default function CashBookApp() {
   const { t } = useTranslation();
   const { pusher } = usePusher(); // 🔥 পুশার ইনস্ট্যান্স নেওয়া হলো
 
+  // 🚀 MOUNTED GUARD: Prevent SSR hydration mismatch
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   // 1. Core States
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -52,8 +55,8 @@ export default function CashBookApp() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // ২. রিঅ্যাক্টিভ ইঞ্জিন (useVault V12.0)
-  const { saveBook, saveEntry, deleteEntry, restoreEntry, deleteBook, restoreBook } = useVault(currentUser, currentBook);
+  // ২. রিঅ্যাক্টিভ ইঞ্জিন (useVault V12.0) - Only when mounted
+  const { saveBook, saveEntry, deleteEntry, restoreEntry, deleteBook, restoreBook } = useVault(mounted ? currentUser : null, mounted ? currentBook : null);
 
   // --- ৩. লাইফসাইকেল কন্ট্রোল (The Initialization Protocol) ---
   useEffect(() => {
@@ -66,8 +69,13 @@ export default function CashBookApp() {
             
             // ১. ডেল্টা হাইড্রেশন শুরু করো
             if (!isHydrated) {
-                await orchestrator.hydrate(user._id);
-                setIsHydrated(true);
+                // 🔧 USER ID PRIMING: Set ID before operations
+                orchestrator.setUserId(user._id);
+                setIsHydrated(true); // Show UI immediately
+                // Run hydrate in background (non-blocking)
+                orchestrator.hydrate(user._id).catch(err => 
+                    console.warn('Background hydration failed:', err)
+                );
             }
 
             // ২. রিয়েল-টাইম পুশার সিগন্যাল লিসেনার চালু করো
@@ -271,10 +279,15 @@ useEffect(() => {
   };
 
   // --- ৭. রেন্ডার প্রোটেকশন ---
+  // 🚀 STRICT MOUNTED GUARD: Prevent SSR hydration mismatch
+  if (!mounted) return (
+    <div className="min-h-screen bg-[#0F0F0F]" />
+  );
+
   if (isLoading) return (
     <div className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center gap-6">
         <Loader2 className="animate-spin text-orange-500" size={56} />
-        <span className="text-[10px] font-black uppercase tracking-[6px] text-white/20 animate-pulse italic">Initializing Vault Core...</span>
+        <span className="text-[10px] font-black uppercase tracking-[6px] text-white/20 animate-pulse italic">Loading Vault Data...</span>
     </div>
   );
   
@@ -283,7 +296,10 @@ useEffect(() => {
       localStorage.setItem('cashbookUser', JSON.stringify(user));
       setCurrentUser(user); 
       setIsLoggedIn(true); 
-      orchestrator.hydrate(user._id);
+      // Run hydrate in background (non-blocking)
+      orchestrator.hydrate(user._id).catch(err => 
+        console.warn('Login hydration failed:', err)
+      );
     }} />
   );
 

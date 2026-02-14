@@ -95,19 +95,20 @@ export class VaultTelemetry {
   private logToConsole(event: TelemetryEvent): void {
     const prefix = `[${event.type}] ${event.level}`;
     const message = `${prefix}: ${event.message}`;
+    const data = event.data || {}; // Handle undefined data gracefully
     
     switch (event.level) {
       case 'ERROR':
-        console.error(message, event.data);
+        console.error(message, data);
         break;
       case 'WARN':
-        console.warn(message, event.data);
+        console.warn(message, data);
         break;
       case 'DEBUG':
-        console.debug(message, event.data);
+        console.debug(message, data);
         break;
       default:
-        console.log(message, event.data);
+        console.log(message, data);
     }
   }
   

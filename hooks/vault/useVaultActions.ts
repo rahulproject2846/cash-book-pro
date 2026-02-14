@@ -3,6 +3,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { db, generateCID, generateEntryChecksum } from '@/lib/offlineDB';
 import { logVaultError } from '@/lib/vault/Telemetry';
+import { normalizeRecord } from '@/lib/vault/core/VaultUtils';
+import { orchestrator as syncOrchestrator } from '@/lib/vault/SyncOrchestrator';
 import type { LocalEntry } from '@/lib/offlineDB';
 
 /**
@@ -10,16 +12,11 @@ import type { LocalEntry } from '@/lib/offlineDB';
  * Handles all save, delete, and toggle operations with Invalid Key Protection
  */
 export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh: number, setForceRefresh: React.Dispatch<React.SetStateAction<number>>) => {
-    const debounceTimer = useRef<NodeJS.Timeout | null>(null);
-    const lastRefreshTime = useRef(Date.now());
-
+    // 🔒 ID VALIDATION: Use userId as-is (Single Source of Truth in SyncOrchestrator)
     const userId = currentUser?._id;
-    const bookId = currentBook?._id || currentBook?.localId;
+    const bookId = currentBook?._id || currentBook?.localId || '';
 
-    // 🛡️ HELPER: Validate ID to prevent "Invalid Key" error
-    const isValidKey = (id: any) => id !== undefined && id !== null && !isNaN(Number(id));
-
-    // 🔥 SAVE ENTRY: Fixed to handle new vs existing entries correctly
+    //  SAVE ENTRY: Simplified with ID integrity
     const saveEntry = useCallback(async (entryData: Partial<LocalEntry>, editTarget?: any) => {
         if (!userId) {
             logVaultError('saveEntry', new Error('Invalid user ID'), { userId, entryData });
@@ -27,55 +24,6 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
         }
 
         try {
-            const targetId = editTarget?.localId;
-            const existingRecord = isValidKey(targetId) ? await db.entries.get(Number(targetId)) : null;
-            
-            // 🔥 DUPLICATE CHECK: Prevent entries with same cid
-            if (existingRecord && !editTarget?.localId) {
-                // Update existing record instead of creating duplicate
-                const nextVKey = (existingRecord?.vKey || 0) + 1;
-                const finalAmount = Number(entryData.amount) || 0;
-                const finalDate = entryData.date || new Date().toISOString().split('T')[0];
-                const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category.toUpperCase()} RECORD` : 'GENERAL RECORD');
-                
-                const checksum = await generateEntryChecksum({
-                    amount: finalAmount,
-                    date: finalDate,
-                    title: finalTitle
-                });
-                
-                const updatedEntry = {
-                    ...editTarget,
-                    ...entryData,
-                    title: finalTitle,
-                    date: finalDate,
-                    amount: finalAmount,
-                    userId,
-                    bookId: String(currentBook?._id || currentBook?.localId || bookId || ''),
-                    cid: editTarget?.cid || generateCID(),
-                    synced: 0,
-                    isDeleted: 0,
-                    updatedAt: Date.now(),
-                    vKey: nextVKey,
-                    checksum,
-                    syncAttempts: 0
-                } as any;
-                
-                if (!editTarget?.createdAt) updatedEntry.createdAt = Date.now();
-                
-                const id = await db.entries.put(updatedEntry);
-                setForceRefresh(prev => prev + 1);
-                
-                // 🔥 TRIGGER SYNC: Immediately push to server
-                if (typeof window !== 'undefined' && window.syncOrchestrator) {
-                    window.syncOrchestrator.triggerSync(userId);
-                }
-                
-                return { success: true, entry: { ...updatedEntry, localId: id } };
-            }
-            
-            // Original logic for new entries
-            const nextVKey = (existingRecord?.vKey || 0) + 1;
             const finalAmount = Number(entryData.amount) || 0;
             const finalDate = entryData.date || new Date().toISOString().split('T')[0];
             const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category.toUpperCase()} RECORD` : 'GENERAL RECORD');
@@ -86,41 +34,46 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
                 title: finalTitle
             });
 
-            const newEntry = {
-                ...editTarget,
-                ...entryData,
+            const entryPayload = {
                 title: finalTitle,
                 date: finalDate,
                 amount: finalAmount,
-                userId,
-                bookId: String(bookId || ''),
+                type: entryData.type || 'expense',
+                category: entryData.category || 'general',
+                paymentMethod: entryData.paymentMethod || 'cash',
+                note: entryData.note || '',
+                time: entryData.time || new Date().toTimeString().split(' ')[0],
+                status: entryData.status || 'completed',
+                userId: userId, // 🔥 ID INTEGRITY: Use as-is from SyncOrchestrator
+                bookId: bookId, // 🔥 ID INTEGRITY: Use as-is from SyncOrchestrator
                 cid: editTarget?.cid || generateCID(),
-                synced: 0,
+                synced: 0, // 🔥 SYNC STATE: Always mark as unsynced
                 isDeleted: 0,
                 updatedAt: Date.now(),
-                vKey: nextVKey,
+                vKey: (editTarget?.vKey || 0) + 1,
                 checksum,
                 syncAttempts: 0
             } as any;
 
-            if (!editTarget?.createdAt) newEntry.createdAt = Date.now();
+            if (!editTarget?.createdAt) entryPayload.createdAt = Date.now();
 
-            // 🔧 CRITICAL FIX: Only include localId if it's an update
-            if (isValidKey(targetId)) {
-                newEntry.localId = Number(targetId);
+            let id: number;
+            if (editTarget?.localId) {
+                // Update existing entry
+                entryPayload.localId = editTarget.localId;
+                id = await db.entries.put(entryPayload);
             } else {
-                delete newEntry.localId; // New entry must not have undefined localId
+                // Add new entry
+                delete entryPayload.localId;
+                id = await db.entries.put(entryPayload);
             }
 
-            const id = await db.entries.put(newEntry);
+            // 🚀 IMMEDIATE SYNC: Trigger sync as soon as data hits Dexie
+            syncOrchestrator.triggerSync();
+
             setForceRefresh(prev => prev + 1);
             
-            // 🔥 TRIGGER SYNC: Immediately push to server
-            if (typeof window !== 'undefined' && window.syncOrchestrator) {
-                window.syncOrchestrator.triggerSync(userId);
-            }
-            
-            return { success: true, entry: { ...newEntry, localId: id } };
+            return { success: true, entry: { ...entryPayload, localId: id } };
         } catch (error) {
             logVaultError('saveEntry', error, { userId, entryData });
             return { success: false, error: error as Error };
@@ -129,14 +82,26 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
     // 🗑️ DELETE ENTRY
     const deleteEntry = useCallback(async (entry: any) => {
-        if (!userId || !isValidKey(entry?.localId)) return { success: false };
+        if (!userId || !entry?.localId) return { success: false };
 
         try {
+            // Get existing entry to increment vKey
+            const existingEntry = await db.entries.get(Number(entry.localId));
+            const currentVKey = existingEntry?.vKey || 0;
+            
             await db.entries.update(Number(entry.localId), { 
                 isDeleted: 1, 
                 synced: 0, 
+                vKey: Date.now(), // 🚨 CRITICAL: Force timestamp to guarantee server acceptance over any version
                 updatedAt: Date.now()
             });
+            
+            // 🚀 TRIGGER SYNC: Ensure orchestrator.triggerSync() is called immediately after delete
+            if (userId) {
+                const { orchestrator } = await import('@/lib/vault/SyncOrchestrator');
+                await orchestrator.triggerSync(userId);
+            }
+            
             setForceRefresh(prev => prev + 1);
             return { success: true };
         } catch (error) {
@@ -147,7 +112,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
     // 🔄 TOGGLE STATUS
     const toggleEntryStatus = useCallback(async (entry: any) => {
-        if (!userId || !isValidKey(entry?.localId)) return { success: false };
+        if (!userId || !entry?.localId) return { success: false };
 
         try {
             const newStatus = entry.status === 'completed' ? 'pending' : 'completed';
@@ -166,7 +131,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
     // 📌 TOGGLE PIN
     const togglePin = useCallback(async (entry: any) => {
-        if (!userId || !isValidKey(entry?.localId)) return { success: false };
+        if (!userId || !entry?.localId) return { success: false };
 
         try {
             const newPinnedValue = entry.isPinned ? 0 : 1;
@@ -183,47 +148,69 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
         }
     }, [userId, setForceRefresh]);
 
-    // 📚 SAVE BOOK
+    // 📚 SAVE BOOK: Simplified with ID integrity
     const saveBook = useCallback(async (bookData: any, editTarget?: any) => {
         if (!userId) return { success: false };
-
+        
         try {
-            // 🔥 VERSION KEY LOGIC: Preserve CID and increment vKey for edits
-            let nextVKey = 1;
-            if (editTarget?.localId) {
-                const existingBook = await db.books.get(editTarget.localId);
-                nextVKey = (existingBook?.vKey || 0) + 1;
-            }
-            
-            const newBook = {
-                ...editTarget,
+            const bookPayload = {
                 ...bookData,
-                userId,
-                cid: editTarget?.cid || generateCID(),
-                vKey: nextVKey,
+                _id: editTarget?._id || bookData?._id, // ✅ Essential for Server Sync
+                cid: editTarget?.cid || bookData?.cid || generateCID(),
+                userId: String(userId),
+                vKey: (editTarget?.vKey || 0) + 1,
                 synced: 0,
-                isDeleted: 0,
                 updatedAt: Date.now()
-            } as any;
+            };
 
-            if (!editTarget?.createdAt) newBook.createdAt = Date.now();
-            
-            // Handle localId for books
-            if (isValidKey(editTarget?.localId)) {
-                newBook.localId = Number(editTarget.localId);
-            } else {
-                delete newBook.localId;
+            if (!editTarget?.createdAt) bookPayload.createdAt = Date.now();
+
+            // Normalize the payload before saving
+            const normalized = normalizeRecord(bookPayload, String(userId));
+            if (!normalized) {
+                throw new Error('Failed to normalize book data');
             }
 
-            const id = await db.books.put(newBook);
+            // 🔍 CRITICAL DEBUG: Check final object before Dexie
+            console.log('🔍 [SAVEBOOK DEBUG] Final object to Dexie:', {
+                cid: normalized.cid,
+                _id: normalized._id,
+                synced: normalized.synced,
+                userId: normalized.userId,
+                localId: normalized.localId
+            });
+
+            let id: number;
+            if (editTarget?.cid) {
+                // Find existing record by CID to get its localId
+                const existingRecord = await db.books.where('cid').equals(editTarget.cid).first();
+                if (existingRecord) {
+                    // Update existing book
+                    normalized.localId = existingRecord.localId;
+                    console.log('🔍 [SAVEBOOK DEBUG] Updating existing record with localId:', existingRecord.localId);
+                    id = await db.books.put(normalized);
+                } else {
+                    // Add new book (CID not found)
+                    delete normalized.localId;
+                    console.log('🔍 [SAVEBOOK DEBUG] Creating new record (CID not found)');
+                    id = await db.books.put(normalized);
+                }
+            } else {
+                // Add new book (no CID)
+                delete normalized.localId;
+                console.log('🔍 [SAVEBOOK DEBUG] Creating new record (no CID)');
+                id = await db.books.put(normalized);
+            }
+
+            console.log('🔍 [SAVEBOOK DEBUG] Record saved to Dexie. About to call triggerSync...');
+            console.log('🔍 [SAVEBOOK DEBUG] isSyncing flag before triggerSync:', (window as any).syncOrchestrator?.isSyncing);
+
+            // 🚀 IMMEDIATE SYNC: Trigger sync as soon as data hits Dexie
+            syncOrchestrator.triggerSync();
+
             setForceRefresh(prev => prev + 1);
             
-            // 🔥 TRIGGER SYNC: Immediately push to server
-            if (typeof window !== 'undefined' && window.syncOrchestrator) {
-                window.syncOrchestrator.triggerSync(userId);
-            }
-            
-            return { success: true, book: { ...newBook, localId: id } };
+            return { success: true, book: { ...normalized, localId: id } };
         } catch (error) {
             logVaultError('saveBook', error, { userId, bookData });
             return { success: false, error: error as Error };
@@ -232,7 +219,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
     // 🗑️ DELETE BOOK
     const deleteBook = useCallback(async (book: any) => {
-        if (!userId || !isValidKey(book?.localId)) return { success: false };
+        if (!userId || !book?.localId) return { success: false };
 
         try {
             await db.books.update(Number(book.localId), { 
@@ -250,7 +237,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
     // 🔄 RESTORE ENTRY
     const restoreEntry = useCallback(async (entry: any) => {
-        if (!userId || !isValidKey(entry?.localId)) return { success: false };
+        if (!userId || !entry?.localId) return { success: false };
 
         try {
             await db.entries.update(Number(entry.localId), { 
@@ -268,7 +255,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
 
     // 🔄 RESTORE BOOK
     const restoreBook = useCallback(async (book: any) => {
-        if (!userId || !isValidKey(book?.localId)) return { success: false };
+        if (!userId || !book?.localId) return { success: false };
 
         try {
             await db.books.update(Number(book.localId), { 
@@ -310,8 +297,7 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
         return {
             saveEntry, deleteEntry, toggleEntryStatus, togglePin,
             saveBook, deleteBook, restoreEntry, restoreBook,
-            checkPotentialDuplicate: async () => null,
-            debounceTimer, lastRefreshTime
+            checkPotentialDuplicate: async () => null
         };
     }
 
@@ -324,8 +310,6 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
         deleteBook,
         restoreEntry,
         restoreBook,
-        checkPotentialDuplicate,
-        debounceTimer,
-        lastRefreshTime
+        checkPotentialDuplicate
     };
 };

@@ -14,20 +14,14 @@ export async function GET(req: Request) {
     const userId = searchParams.get('userId');
     const since = searchParams.get('since');
 
-    // 🔍 X-RAY LOGGING: Server-side visibility
-    console.log(`🔍 [API-BOOKS] Received Request for UID: ${userId}`);
-    console.log(`🔍 [API-BOOKS] Since parameter: ${since}`);
-
     if (!userId) return NextResponse.json({ message: "User ID missing" }, { status: 400 });
 
     await connectDB();
 
-    // 🔥 BACKWARD COMPATIBILITY: Query both ObjectId and String formats
     let user;
     try {
       user = await User.findById(userId).select('isActive');
     } catch (error) {
-      console.error('User lookup error:', error);
       return NextResponse.json({ message: "Invalid user ID format" }, { status: 400 });
     }
     
@@ -36,14 +30,12 @@ export async function GET(req: Request) {
         return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
 
-    // 🔥 ROBUST FORMAT-AGNOSTIC QUERY: Handle userId formats correctly
-    const queryConditions: any[] = [{ userId: userId }]; // Always check string format
+    const queryConditions: any[] = [{ userId: userId }]; 
     
     if (mongoose.Types.ObjectId.isValid(userId)) {
-      queryConditions.push({ userId: new mongoose.Types.ObjectId(userId) }); // Check ObjectId format
+      queryConditions.push({ userId: new mongoose.Types.ObjectId(userId) }); 
     }
 
-    // Use a simpler approach for query construction
     let query: any = { $or: queryConditions };
     
     if (since && since !== '0') {
@@ -54,40 +46,20 @@ export async function GET(req: Request) {
       }));
     }
 
-    // 🔍 X-RAY LOGGING: Robust query construction
-    console.log('🔍 [API-BOOKS] Robust Format-Agnostic query:', JSON.stringify(query, null, 2));
-    console.log('🔍 [API-BOOKS] Query conditions built:', {
-      userId,
-      isValidObjectId: mongoose.Types.ObjectId.isValid(userId),
-      conditionsCount: queryConditions.length,
-      conditions: queryConditions.map(c => ({ userId: c.userId, userIdType: typeof c.userId }))
-    });
-
     const books = await Book.find(query).lean().sort({ updatedAt: -1 });
     
-    // 🔍 X-RAY LOGGING: Results visibility
-    console.log(`📊 [API-BOOKS] Books found: ${books.length}`);
-    if (books.length > 0) {
-      console.log('💎 RAW BOOK:', JSON.stringify(books[0]));
-      console.log('🔍 [API-BOOKS] Sample book IDs:', books.slice(0, 3).map(b => ({ _id: b._id, userId: b.userId, userIdType: typeof b.userId })));
-    } else {
-      // 🔥 FALLBACK: Try explicit ObjectId and string searches
-      console.log('🔍 [API-BOOKS] No books found, trying fallback searches...');
-      
+    // --- FALLBACK LOGIC ---
+    if (books.length === 0) {
       const stringBooks = await Book.find({ userId: userId }).lean().sort({ updatedAt: -1 });
-      console.log(`📊 [API-BOOKS] String search found: ${stringBooks.length} books`);
       
       let objectIdBooks: any[] = [];
       if (mongoose.Types.ObjectId.isValid(userId)) {
         objectIdBooks = await Book.find({ userId: new mongoose.Types.ObjectId(userId) }).lean().sort({ updatedAt: -1 });
-        console.log(`📊 [API-BOOKS] ObjectId search found: ${objectIdBooks.length} books`);
       }
       
       const allFallbackBooks = [...stringBooks, ...objectIdBooks];
-      console.log(`📊 [API-BOOKS] Total fallback books: ${allFallbackBooks.length}`);
       
       if (allFallbackBooks.length > 0) {
-        console.log('💎 RAW FALLBACK BOOK:', JSON.stringify(allFallbackBooks[0]));
         return NextResponse.json({ 
           success: true, 
           data: allFallbackBooks,
@@ -117,8 +89,8 @@ export async function POST(req: Request) {
     const data = await req.json();
     const { name, description, userId, type, phone, image, vKey, cid } = data;
 
-    // 🔥 API LOGGING: Show received payload for debugging
-    console.log('📦 [API-BOOKS] Received Payload:', JSON.stringify(data));
+    // 🔥 API LOGGING: Show received payload for debugging (SILENCED)
+    // console.log('📦 [API-BOOKS] Received Payload:', JSON.stringify(data));
 
     if (!userId || !name) return NextResponse.json({ message: "Fields missing" }, { status: 400 });
 
@@ -179,7 +151,7 @@ export async function POST(req: Request) {
     
     return NextResponse.json({ success: true, book: newBook, isActive: true }, { status: 201 });
   } catch (error: any) {
-    console.error('❌ [API-BOOKS-POST] Error:', error.message);
+    // console.error('❌ [API-BOOKS-POST] Error:', error.message);
     return NextResponse.json({ message: error.message || "Creation failed" }, { status: 500 });
   }
 }

@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, ChevronRight, LayoutGrid, 
-    CloudSync, RefreshCw, Layout, FileUp 
+    CloudSync, RefreshCw, Layout, FileUp,
+    AlertTriangle, X 
 } from 'lucide-react';
 import { db } from '@/lib/offlineDB';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -19,6 +20,7 @@ import { cn, toBn } from '@/lib/utils/helpers';
 // Domain-Driven Components
 import { BookDetails } from './BookDetails';
 import { BooksList } from './BooksList'; 
+import ConflictManagementList from '@/components/UI/ConflictManagementList'; 
 
 // Core Logic Engine
 import { useVault } from '@/hooks/useVault'; 
@@ -41,7 +43,9 @@ const BooksSection = memo(({
     // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন (Direct Connection to V13 Engine)
     const {
         books, allEntries, entries, globalStats, isLoading,
-        saveEntry, deleteEntry, toggleEntryStatus, togglePin // 🔥 পিন ফাংশন যোগ করা হলো
+        saveEntry, deleteEntry, toggleEntryStatus, togglePin, 
+        conflictedCount,    // � CONFLICT TRACKING: Total conflicted items count
+        hasConflicts       // 🚨 CONFLICT TRACKING: Boolean flag for any conflicts
     } = useVault(currentUser, currentBook);
 
     // ২. রিয়েক্টিভ দারোয়ান (Unsynced Units Counter)
@@ -59,7 +63,12 @@ const BooksSection = memo(({
     const [dashPage, setDashPage] = useState(1);
     const [detailsSearchQuery, setDetailsSearchQuery] = useState(''); 
     const [detailsPage, setDetailsPage] = useState(1);
+    const [showConflictList, setShowConflictList] = useState(false); 
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // ৪. CONFLICT LIST QUERIES
+    const conflictedBooksItems = useLiveQuery(() => db.books.where('conflicted').equals(1).toArray()) || [];
+    const conflictedEntriesItems = useLiveQuery(() => db.entries.where('conflicted').equals(1).toArray()) || [];
 
     useEffect(() => {
         setMounted(true);
@@ -156,26 +165,106 @@ const BooksSection = memo(({
 
             {/* --- ২. SYNC WATCHMAN BAR --- */}
             <AnimatePresence>
-                {unsyncedCount > 0 && (
+                {(unsyncedCount > 0 || hasConflicts) && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-6">
-                        <div className="bg-orange-500/10 border border-orange-500/20 rounded-[28px] p-4 flex items-center justify-between shadow-lg backdrop-blur-md">
+                        <div className={cn(
+                            "rounded-[28px] p-4 flex items-center justify-between shadow-lg backdrop-blur-md",
+                            hasConflicts 
+                                ? "bg-red-500/10 border-red-500/20"  // 🚨 Conflict: Red tint for urgency
+                                : "bg-orange-500/10 border-orange-500/20"  // ⏳ Pending: Orange tint
+                        )}>
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center text-white animate-pulse shadow-lg shadow-orange-500/20">
-                                    <CloudSync size={20} />
+                                <div className={cn(
+                                    "w-10 h-10 rounded-full flex items-center justify-center text-white animate-pulse shadow-lg",
+                                    hasConflicts 
+                                        ? "bg-red-500 shadow-red-500/20"  // 🚨 Conflict: Red icon
+                                        : "bg-orange-500 shadow-orange-500/20"  // ⏳ Pending: Orange icon
+                                )}>
+                                    {hasConflicts ? <AlertTriangle size={20} /> : <CloudSync size={20} />}
                                 </div>
                                 <div className="space-y-0.5">
-                                    <p className="text-[10px] font-black uppercase tracking-[2px] text-orange-500">Vault Buffer Active</p>
-                                    <p className="text-[9px] font-bold text-orange-500/60 uppercase tracking-[1px]">
-                                        {toBn(unsyncedCount, language)} {t('unsynced_units') || "UNITS SECURED IN LOCAL NODE"}
+                                    <p className={cn(
+                                        "text-[10px] font-black uppercase tracking-[2px]",
+                                        hasConflicts ? "text-red-500" : "text-orange-500"
+                                    )}>
+                                        {hasConflicts ? "Vault Conflicts Detected" : "Vault Buffer Active"}
+                                    </p>
+                                    <p className={cn(
+                                        "text-[9px] font-bold uppercase tracking-[1px]",
+                                        hasConflicts ? "text-red-500/60" : "text-orange-500/60"
+                                    )}>
+                                        {hasConflicts 
+                                            ? `${toBn(conflictedCount, language)} conflicts found${unsyncedCount > 0 ? `, ${toBn(unsyncedCount, language)} items pending` : ''}`
+                                            : `${toBn(unsyncedCount, language)} ${t('unsynced_units') || "UNITS SECURED IN LOCAL NODE"}`
+                                        }
                                     </p>
                                 </div>
                             </div>
-                            <Tooltip text={t('tt_force_sync') || "Force protocol refresh"}>
-                                <button onClick={() => window.location.reload()} className="p-3 bg-orange-500/10 rounded-xl text-orange-500 hover:bg-orange-500 hover:text-white transition-all active:scale-90 shadow-inner">
+                            <Tooltip text={hasConflicts 
+                                ? "Red indicates data version mismatch. Orange indicates pending local encryption. Click to manage all conflicts." 
+                                : (t('tt_force_sync') || "Force protocol refresh")
+                            }>
+                                <button 
+                                    onClick={() => hasConflicts ? setShowConflictList(!showConflictList) : window.location.reload()} 
+                                    className={cn(
+                                        "p-3 rounded-xl transition-all active:scale-90 shadow-inner",
+                                        hasConflicts 
+                                            ? "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white"  // 🚨 Conflict: Red button
+                                            : "bg-orange-500/10 text-orange-500 hover:bg-orange-500 hover:text-white"  // ⏳ Pending: Orange button
+                                    )}
+                                >
+                                    {hasConflicts ? 'Manage Conflicts' : 'Force Sync'}
                                     <RefreshCw size={16} />
                                 </button>
                             </Tooltip>
                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* --- 🚨 CONFLICT MANAGEMENT CENTER --- */}
+            <AnimatePresence>
+                {showConflictList && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    >
+                        {/* Backdrop */}
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowConflictList(false)} />
+                        
+                        {/* Modal Container */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 20 }}
+                            className="relative w-full max-w-4xl max-h-[80vh] bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl shadow-red-500/20 overflow-hidden"
+                        >
+                            {/* Header */}
+                            <div className="flex items-center justify-between p-6 border-b border-white/10 bg-gradient-to-r from-red-500/10 to-transparent">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-red-500/20 rounded-2xl flex items-center justify-center border border-red-500/30">
+                                        <AlertTriangle className="w-6 h-6 text-red-400" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">Conflict Management Center</h2>
+                                        <p className="text-sm text-white/60">Resolve all data conflicts in one place</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowConflictList(false)}
+                                    className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-white/60 hover:bg-white/20 transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 overflow-y-auto p-6">
+                                <ConflictManagementList currentUser={currentUser} />
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -255,6 +344,7 @@ const BooksSection = memo(({
                     </motion.div>
                 )}
             </AnimatePresence>
+
             <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" />
         </div>
     );

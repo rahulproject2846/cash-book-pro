@@ -1,353 +1,316 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Clock, Check, X, Zap } from 'lucide-react';
 
-// Global Engine Hooks & Components
-import { useTranslation } from '@/hooks/useTranslation';
-import { useModal } from '@/context/ModalContext';
-import { db } from '@/lib/offlineDB';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, AlertTriangle, Cloud, Save } from 'lucide-react';
 import { cn, toBn } from '@/lib/utils/helpers';
 
-interface ConflictData {
-    id: string;
-    type: 'book' | 'entry';
-    localRecord: {
-        id: string;
-        amount?: number;
-        name?: string;
-        description?: string;
-        createdAt: string;
-        updatedAt: string;
-        vKey: number;
-    };
-    remoteRecord: {
-        id: string;
-        amount?: number;
-        name?: string;
-        description?: string;
-        createdAt: string;
-        updatedAt: string;
-        vKey: number;
-    };
+interface ConflictResolverModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  record: any; // Book or Entry record with serverData
+  type: 'book' | 'entry';
+  onResolve: (resolution: 'local' | 'server') => void;
 }
 
-export const ConflictResolverModal = () => {
-    const { t, language } = useTranslation();
-    const { isOpen, data, closeModal } = useModal();
-    const [selectedVersion, setSelectedVersion] = useState<'local' | 'remote' | null>(null);
-    const [isResolving, setIsResolving] = useState(false);
-    const [conflictData, setConflictData] = useState<ConflictData | null>(null);
+/**
+ * 🚨 CONFLICT RESOLUTION ENGINE (V1.0)
+ * ----------------------------------------
+ * Industrial-grade conflict resolution with side-by-side comparison
+ * Glassmorphism design with Red/White accents
+ */
+export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
+  isOpen,
+  onClose,
+  record,
+  type,
+  onResolve
+}) => {
+  const [isResolving, setIsResolving] = useState(false);
 
-    // Parse conflict data when modal opens
-    useEffect(() => {
-        if (isOpen && data?.type === 'conflictResolver') {
-            setConflictData(data.conflictData);
-            setSelectedVersion(null);
-        } else {
-            setConflictData(null);
-            setSelectedVersion(null);
-        }
-    }, [isOpen, data]);
+  if (!isOpen || !record) return null;
 
-    // Listen for global conflict events
-    useEffect(() => {
-        const handleConflictDetected = (event: CustomEvent) => {
-            const conflictData = event.detail;
-            // Open modal with conflict data
-            // This would be handled by the modal context
-            console.log('Conflict detected:', conflictData);
-        };
+  const localData = {
+    name: record.name || record.title || 'Untitled',
+    description: record.description || '',
+    amount: record.amount || 0,
+    type: record.type || 'expense',
+    phone: record.phone || '',
+    updatedAt: record.updatedAt || new Date().toISOString(),
+    vKey: record.vKey || 0
+  };
 
-        window.addEventListener('sync-conflict-detected', handleConflictDetected as EventListener);
-        return () => {
-            window.removeEventListener('sync-conflict-detected', handleConflictDetected as EventListener);
-        };
-    }, []);
+  const serverData = record.serverData || {};
+  const serverDisplay = {
+    name: serverData.name || serverData.title || 'Untitled',
+    description: serverData.description || '',
+    amount: serverData.amount || 0,
+    type: serverData.type || 'expense',
+    phone: serverData.phone || '',
+    updatedAt: serverData.updatedAt || new Date().toISOString(),
+    vKey: serverData.vKey || 0
+  };
 
-    const handleResolveConflict = async () => {
-        if (!selectedVersion || !conflictData || isResolving) return;
+  const handleKeepLocal = async () => {
+    setIsResolving(true);
+    try {
+      await onResolve('local');
+      onClose();
+    } catch (error) {
+      console.error('Failed to keep local version:', error);
+    } finally {
+      setIsResolving(false);
+    }
+  };
 
-        setIsResolving(true);
-        try {
-            const chosenRecord = selectedVersion === 'local' ? conflictData.localRecord : conflictData.remoteRecord;
-            
-            // Update the chosen record in Dexie with incremented vKey
-            const updatedRecord = {
-                ...chosenRecord,
-                vKey: Math.max(conflictData.localRecord.vKey, conflictData.remoteRecord.vKey) + 1,
-                updatedAt: Date.now(), // Use number timestamp for Dexie
-                synced: 0 as const // Mark as unsynced to trigger sync (use literal 0)
-            };
+  const handleAcceptServer = async () => {
+    setIsResolving(true);
+    try {
+      await onResolve('server');
+      onClose();
+    } catch (error) {
+      console.error('Failed to accept server version:', error);
+    } finally {
+      setIsResolving(false);
+    }
+  };
 
-            // Remove fields that shouldn't be updated
-            const { id, createdAt, ...updateData } = updatedRecord;
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Unknown date';
+    }
+  };
 
-            if (conflictData.type === 'book') {
-                await db.books.update(conflictData.id, updateData);
-            } else if (conflictData.type === 'entry') {
-                await db.entries.update(conflictData.id, updateData);
-            }
+  const formatAmount = (amount: number) => {
+    if (type === 'entry') {
+      return toBn(Math.abs(amount), 'en');
+    }
+    return amount;
+  };
 
-            // Trigger sync event to sync back to server
-            window.dispatchEvent(new CustomEvent('vault-updated', {
-                detail: { action: 'conflict-resolved', type: conflictData.type, id: conflictData.id }
-            }));
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+          />
 
-            // Close modal after successful resolution
-            setTimeout(() => {
-                closeModal();
-                setIsResolving(false);
-            }, 1000);
+          {/* Modal Container */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-6xl max-h-[90vh] bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl shadow-red-500/20 overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/10 bg-gradient-to-r from-red-500/10 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-red-500/20 rounded-2xl flex items-center justify-center border border-red-500/30">
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Data Conflict Detected</h2>
+                  <p className="text-sm text-white/60">
+                    {type === 'book' ? 'Book' : 'Entry'} version mismatch requires manual resolution
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-white/60 hover:bg-white/20 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        } catch (error) {
-            console.error('Failed to resolve conflict:', error);
-            setIsResolving(false);
-        }
-    };
-
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleString(language === 'bn' ? 'bn-BD' : 'en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    };
-
-    if (!isOpen || data?.type !== 'conflictResolver' || !conflictData) return null;
-
-    return (
-        <AnimatePresence mode="popLayout">
-            <motion.div 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4"
-            >
-                <motion.div
-                    initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                    transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
-                    className="bg-[var(--bg-card)] rounded-[32px] border border-[var(--border)] shadow-2xl max-w-2xl w-full p-8 relative"
-                >
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-orange-500/10 rounded-[20px] text-orange-500 border border-orange-500/20 flex items-center justify-center">
-                                <AlertTriangle size={24} strokeWidth={2.5} className="animate-pulse" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-black text-[var(--text-main)] uppercase tracking-tighter leading-none">
-                                    {t('conflict_detected') || "SYNC CONFLICT"}
-                                </h2>
-                                <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[3px] mt-1 opacity-60">
-                                    {t('conflict_subtitle') || "Choose which version to keep"}
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={closeModal}
-                            className="w-10 h-10 rounded-[12px] bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center hover:bg-[var(--border)]/20 transition-all"
-                        >
-                            <X size={18} className="text-[var(--text-muted)]" />
-                        </button>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Side - Local Version */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                      <Save className="w-5 h-5 text-blue-400" />
                     </div>
+                    <div>
+                      <h3 className="font-bold text-white">Your Version</h3>
+                      <p className="text-sm text-white/60">Local changes</p>
+                    </div>
+                  </div>
 
-                    {/* Conflict Type Info */}
-                    <div className="mb-6 p-4 bg-orange-500/5 rounded-[20px] border border-orange-500/10">
-                        <div className="flex items-center gap-3">
-                            <Zap size={16} className="text-orange-500" />
-                            <p className="text-[11px] font-bold text-orange-500 uppercase tracking-[2px]">
-                                {conflictData.type === 'book' ? (t('book_conflict') || "BOOK CONFLICT") : (t('entry_conflict') || "ENTRY CONFLICT")}
+                  <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    {/* Common Fields */}
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Name</label>
+                        <p className="text-white font-medium">{localData.name}</p>
+                      </div>
+
+                      {type === 'book' && (
+                        <div>
+                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Phone</label>
+                          <p className="text-white font-medium">{localData.phone || 'Not set'}</p>
+                        </div>
+                      )}
+
+                      {type === 'entry' && (
+                        <>
+                          <div>
+                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Type</label>
+                            <p className="text-white font-medium capitalize">{localData.type}</p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Amount</label>
+                            <p className="text-white font-medium">
+                              {localData.amount < 0 ? '-' : '+'}
+                              {formatAmount(localData.amount)}
                             </p>
-                            <span className="text-[10px] font-mono text-[var(--text-muted)] opacity-60 ml-auto">
-                                vKey: {conflictData.localRecord.vKey} vs {conflictData.remoteRecord.vKey}
-                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Description</label>
+                        <p className="text-white/80 text-sm">
+                          {localData.description || 'No description'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Last Modified</label>
+                        <p className="text-white/60 text-sm">
+                          {formatDate(localData.updatedAt)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Version</label>
+                        <p className="text-white/60 text-sm font-mono">v{localData.vKey}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Side - Server Version */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-2xl">
+                    <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center">
+                      <Cloud className="w-5 h-5 text-green-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white">Server Version</h3>
+                      <p className="text-sm text-white/60">Cloud data</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    {/* Common Fields */}
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Name</label>
+                        <p className="text-white font-medium">{serverDisplay.name}</p>
+                      </div>
+
+                      {type === 'book' && (
+                        <div>
+                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Phone</label>
+                          <p className="text-white font-medium">{serverDisplay.phone || 'Not set'}</p>
                         </div>
+                      )}
+
+                      {type === 'entry' && (
+                        <>
+                          <div>
+                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Type</label>
+                            <p className="text-white font-medium capitalize">{serverDisplay.type}</p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Amount</label>
+                            <p className="text-white font-medium">
+                              {serverDisplay.amount < 0 ? '-' : '+'}
+                              {formatAmount(serverDisplay.amount)}
+                            </p>
+                          </div>
+                        </>
+                      )}
+
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Description</label>
+                        <p className="text-white/80 text-sm">
+                          {serverDisplay.description || 'No description'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Last Modified</label>
+                        <p className="text-white/60 text-sm">
+                          {formatDate(serverDisplay.updatedAt)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Version</label>
+                        <p className="text-white/60 text-sm font-mono">v{serverDisplay.vKey}</p>
+                      </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                    {/* Version Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                        {/* Local Device Card */}
-                        <motion.div
-                            whileHover={{ scale: 1.02, y: -2 }}
-                            onClick={() => setSelectedVersion('local')}
-                            className={cn(
-                                "relative p-6 rounded-[24px] border-2 cursor-pointer transition-all duration-300",
-                                selectedVersion === 'local' 
-                                    ? "border-orange-500 bg-orange-500/5 shadow-lg shadow-orange-500/20" 
-                                    : "border-[var(--border)] bg-[var(--bg-app)] hover:border-orange-500/30"
-                            )}
-                        >
-                            {selectedVersion === 'local' && (
-                                <div className="absolute top-4 right-4 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                                    <Check size={14} className="text-white" />
-                                </div>
-                            )}
-                            
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-blue-500/10 rounded-[16px] text-blue-500 flex items-center justify-center">
-                                    <Clock size={18} strokeWidth={2.5} />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black text-[var(--text-main)] uppercase tracking-tighter">
-                                        {t('this_device') || "THIS DEVICE"}
-                                    </h3>
-                                    <p className="text-[9px] font-bold text-blue-500 uppercase tracking-[2px] mt-0.5">
-                                        {t('local_version') || "LOCAL"}
-                                    </p>
-                                </div>
-                            </div>
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between p-6 border-t border-white/10 bg-gradient-to-r from-transparent to-red-500/10">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Choose Resolution</p>
+                  <p className="text-xs text-white/60">This action cannot be undone</p>
+                </div>
+              </div>
 
-                            <div className="space-y-3">
-                                {conflictData.localRecord.name && (
-                                    <div>
-                                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mb-1">
-                                            {t('name') || "NAME"}
-                                        </p>
-                                        <p className="text-sm font-black text-[var(--text-main)] truncate">
-                                            {conflictData.localRecord.name}
-                                        </p>
-                                    </div>
-                                )}
+              <div className="flex items-center gap-3">
+                {/* Keep Local Version */}
+                <button
+                  onClick={handleKeepLocal}
+                  disabled={isResolving}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-xl font-semibold hover:bg-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save className="w-4 h-4" />
+                  Keep My Version
+                </button>
 
-                                {conflictData.localRecord.amount !== undefined && (
-                                    <div>
-                                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mb-1">
-                                            {t('amount') || "AMOUNT"}
-                                        </p>
-                                        <p className="text-lg font-black text-[var(--text-main)]">
-                                            {toBn(conflictData.localRecord.amount, language)}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {conflictData.localRecord.description && (
-                                    <div>
-                                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mb-1">
-                                            {t('description') || "DESCRIPTION"}
-                                        </p>
-                                        <p className="text-xs text-[var(--text-main)] opacity-80 line-clamp-2">
-                                            {conflictData.localRecord.description}
-                                        </p>
-                                    </div>
-                                )}
-
-                                <div className="pt-2 border-t border-[var(--border)]/30">
-                                    <p className="text-[9px] font-mono text-[var(--text-muted)]">
-                                        {formatDate(conflictData.localRecord.updatedAt)}
-                                    </p>
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        {/* Remote Device Card */}
-                        <motion.div
-                            whileHover={{ scale: 1.02, y: -2 }}
-                            onClick={() => setSelectedVersion('remote')}
-                            className={cn(
-                                "relative p-6 rounded-[24px] border-2 cursor-pointer transition-all duration-300",
-                                selectedVersion === 'remote' 
-                                    ? "border-orange-500 bg-orange-500/5 shadow-lg shadow-orange-500/20" 
-                                    : "border-[var(--border)] bg-[var(--bg-app)] hover:border-orange-500/30"
-                            )}
-                        >
-                            {selectedVersion === 'remote' && (
-                                <div className="absolute top-4 right-4 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                                    <Check size={14} className="text-white" />
-                                </div>
-                            )}
-                            
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-purple-500/10 rounded-[16px] text-purple-500 flex items-center justify-center">
-                                    <Zap size={18} strokeWidth={2.5} />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black text-[var(--text-main)] uppercase tracking-tighter">
-                                        {t('other_device') || "OTHER DEVICE"}
-                                    </h3>
-                                    <p className="text-[9px] font-bold text-purple-500 uppercase tracking-[2px] mt-0.5">
-                                        {t('remote_version') || "REMOTE"}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                {conflictData.remoteRecord.name && (
-                                    <div>
-                                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mb-1">
-                                            {t('name') || "NAME"}
-                                        </p>
-                                        <p className="text-sm font-black text-[var(--text-main)] truncate">
-                                            {conflictData.remoteRecord.name}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {conflictData.remoteRecord.amount !== undefined && (
-                                    <div>
-                                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mb-1">
-                                            {t('amount') || "AMOUNT"}
-                                        </p>
-                                        <p className="text-lg font-black text-[var(--text-main)]">
-                                            {toBn(conflictData.remoteRecord.amount, language)}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {conflictData.remoteRecord.description && (
-                                    <div>
-                                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mb-1">
-                                            {t('description') || "DESCRIPTION"}
-                                        </p>
-                                        <p className="text-xs text-[var(--text-main)] opacity-80 line-clamp-2">
-                                            {conflictData.remoteRecord.description}
-                                        </p>
-                                    </div>
-                                )}
-
-                                <div className="pt-2 border-t border-[var(--border)]/30">
-                                    <p className="text-[9px] font-mono text-[var(--text-muted)]">
-                                        {formatDate(conflictData.remoteRecord.updatedAt)}
-                                    </p>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-4">
-                        <button
-                            onClick={closeModal}
-                            className="flex-1 px-6 py-3 rounded-[20px] bg-[var(--bg-app)] border border-[var(--border)] text-[var(--text-muted)] font-black uppercase tracking-[2px] hover:bg-[var(--border)]/20 transition-all"
-                        >
-                            {t('cancel') || "CANCEL"}
-                        </button>
-                        <button
-                            onClick={handleResolveConflict}
-                            disabled={!selectedVersion || isResolving}
-                            className={cn(
-                                "flex-1 px-6 py-3 rounded-[20px] font-black uppercase tracking-[2px] transition-all",
-                                selectedVersion && !isResolving
-                                    ? "bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-500/30"
-                                    : "bg-[var(--bg-app)] border border-[var(--border)] text-[var(--text-muted)] opacity-50 cursor-not-allowed"
-                            )}
-                        >
-                            {isResolving ? (
-                                <div className="flex items-center justify-center gap-2">
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    {t('resolving') || "RESOLVING..."}
-                                </div>
-                            ) : (
-                                (t('resolve_conflict') || "RESOLVE CONFLICT")
-                            )}
-                        </button>
-                    </div>
-                </motion.div>
-            </motion.div>
-        </AnimatePresence>
-    );
+                {/* Accept Server Version */}
+                <button
+                  onClick={handleAcceptServer}
+                  disabled={isResolving}
+                  className="flex items-center gap-2 px-6 py-3 bg-green-500/20 border border-green-500/30 text-green-400 rounded-xl font-semibold hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Cloud className="w-4 h-4" />
+                  Accept Cloud Version
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
 };
+
+export default ConflictResolverModal;

@@ -9,6 +9,8 @@ import {
 
 import { cn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useModal } from '@/context/ModalContext';
+import { db } from '@/lib/offlineDB';
 
 interface EntryCardProps {
     entry: any;
@@ -22,6 +24,7 @@ interface EntryCardProps {
 // 🚀 OPTIMIZED ENTRY CARD: Memoized to prevent unnecessary re-renders
 export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, currentUser, currentBook }: EntryCardProps) => {
     const { t } = useTranslation();
+    const { openModal } = useModal();
     
     // 🎯 STABLE PROPS: Memoize based on stable identifiers
     const stableProps = React.useMemo(() => ({
@@ -38,7 +41,8 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
         entryIsDeleted: entry.isDeleted,
         entrySynced: entry.synced,
         entrySyncAttempts: entry.syncAttempts,
-        entryChecksum: entry.checksum
+        entryChecksum: entry.checksum,
+        entryConflicted: entry.conflicted     // 🚨 CONFLICT TRACKING: 0 = no conflict, 1 = conflict detected
     }), [
         entry._id || entry.localId,
         entry.vKey,
@@ -53,7 +57,8 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
         entry.isDeleted,
         entry.synced,
         entry.syncAttempts,
-        entry.checksum
+        entry.checksum,
+        entry.conflicted
     ]);
 
     // 🔄 EVENT HANDLERS: Memoized to prevent function recreation on every render
@@ -72,6 +77,45 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
         onStatusToggle(entry);
     }, [onStatusToggle, entry]);
 
+    // 🚨 CONFLICT RESOLUTION: Handle conflict modal opening
+    const handleConflictResolution = React.useCallback(async () => {
+        if (!entry.conflicted) return;
+        
+        openModal('conflictResolver', {
+            record: entry,
+            type: 'entry',
+            onResolve: async (resolution: 'local' | 'server') => {
+                try {
+                    if (resolution === 'local') {
+                        // Keep My Version: Update Dexie record with conflicted: 0, synced: 0, serverData: null, and vKey = vKey + 1
+                        await db.entries.update(entry.localId!, {
+                            conflicted: 0,
+                            synced: 0,
+                            serverData: null,
+                            vKey: (entry.vKey || 0) + 1,
+                            updatedAt: Date.now()
+                        });
+                    } else {
+                        // Accept Cloud Version: Update Dexie record with all fields from serverData, set conflicted: 0, synced: 1, and serverData: null
+                        const serverData = entry.serverData || {};
+                        await db.entries.update(entry.localId!, {
+                            ...serverData,
+                            conflicted: 0,
+                            synced: 1,
+                            serverData: null,
+                            updatedAt: Date.now()
+                        });
+                    }
+                    
+                    // Trigger UI refresh
+                    window.dispatchEvent(new Event('vault-updated'));
+                } catch (error) {
+                    console.error('Conflict resolution failed:', error);
+                }
+            }
+        });
+    }, [entry, openModal]);
+
     // 🎨 STATUS COLORS: Memoized status calculations
     const statusColor = React.useMemo(() => {
         if (stableProps.entryStatus === 'pending') return 'text-yellow-600';
@@ -80,10 +124,12 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
     }, [stableProps.entryStatus]);
 
     const statusIcon = React.useMemo(() => {
-        if (stableProps.entryStatus === 'pending') return <Clock className="w-4 h-4 animate-spin" />;
-        if (stableProps.entryStatus === 'completed') return <CheckCircle2 className="w-4 h-4 text-green-600" />;
-        return <AlertTriangle className="w-4 h-4 text-yellow-600" />;
-    }, [stableProps.entryStatus]);
+        // 🚨 PRIORITY: Conflict takes precedence over all other states
+        if (stableProps.entryConflicted) return <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />;  // 🚨 Conflict
+        if (stableProps.entryStatus === 'pending') return <Clock className="w-4 h-4 animate-spin" />;           // ⏳ Pending
+        if (stableProps.entryStatus === 'completed') return <CheckCircle2 className="w-4 h-4 text-green-600" />; // ✅ Completed
+        return <AlertTriangle className="w-4 h-4 text-yellow-600" />;  // ⚠️ Unknown/Fallback
+    }, [stableProps.entryConflicted, stableProps.entryStatus]);
 
     // 💰 AMOUNT FORMATTING: Memoized amount display
     const formattedAmount = React.useMemo(() => {
@@ -155,7 +201,15 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
     }, [stableProps.entryCategory]);
 
     return (
-        <div className="bg-[#1A1A1B] p-6 rounded-[24px] border border-[#2D2D2D] shadow-sm flex flex-col gap-5 hover:shadow-md hover:shadow-lg transition-all duration-200">
+        <div 
+            className={cn(
+                "bg-[#1A1A1B] p-6 rounded-3xl border-2 shadow-sm flex flex-col gap-5 hover:shadow-md hover:shadow-lg transition-all duration-200",
+                stableProps.entryConflicted 
+                    ? "border-red-500 bg-red-500/5 cursor-pointer ring-2 ring-red-500/20"  // 🚨 Conflict styling + clickable
+                    : "border-[#2D2D2D]"
+            )}
+            onClick={stableProps.entryConflicted ? handleConflictResolution : undefined}
+        >
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
                 <div className="space-y-1">
@@ -165,6 +219,15 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
                             {stableProps.entryTitle || t('untitled_entry')}
                         </h3>
                         <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <button 
+                                onClick={stableProps.entryConflicted ? handleConflictResolution : handleStatusToggle}
+                                className={cn(
+                                    "flex items-center gap-2 transition-colors",
+                                    stableProps.entryConflicted ? "cursor-pointer hover:text-red-600" : "cursor-pointer hover:text-green-600"
+                                )}
+                            >
+                                {statusIcon}
+                            </button>
                             <Calendar className="w-4 h-4" />
                             <span>{formattedDate}</span>
                             {formattedTime && <span className="ml-2">{formattedTime}</span>}
