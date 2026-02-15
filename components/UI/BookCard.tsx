@@ -33,7 +33,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         bookName: book.name,
         bookDescription: book.description,
         bookColor: book.color,
-        bookIsDeleted: book.isDeleted,
+        bookIsDeleted: Number(book.isDeleted || 0),
         bookSynced: book.synced,
         bookSyncAttempts: book.syncAttempts,
         bookEntryCount: book.entryCount,
@@ -159,6 +159,9 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         const IconComponent = iconColors[color] || BookOpen;
         return <IconComponent className={className || "w-5 h-5"} />;
     });
+
+    // 🛡️ CRASH PREVENTION: Guard against null/deleted book data
+    if (!book || Number(book.isDeleted) === 1) return null;
 
     return (
         <div 

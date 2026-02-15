@@ -159,7 +159,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
         
         setIsLoading(true);
         try {
-            await onSubmit({ ...form, amount: finalAmount, type: activeInput === 'in' ? 'income' : 'expense' });
+            await onSubmit({ ...form, amount: finalAmount, type: activeInput === 'in' ? 'income' : 'expense' }, initialData);
             setShowKeypad(false);
         } finally {
             setIsLoading(false);

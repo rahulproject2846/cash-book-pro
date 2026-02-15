@@ -21,10 +21,10 @@ export async function GET(req: Request) {
     await connectDB();
     
     // 🔥 ROBUST FORMAT-AGNOSTIC QUERY: Handle userId formats correctly for Book.find
-    const queryConditions: any[] = [{ userId: userId }]; // Always check string format
+    const queryConditions: any[] = [{ userId: userId, isDeleted: false }]; // 🚨 CRITICAL: Exclude deleted records
     
     if (mongoose.Types.ObjectId.isValid(userId)) {
-      queryConditions.push({ userId: new mongoose.Types.ObjectId(userId) }); // Check ObjectId format
+      queryConditions.push({ userId: new mongoose.Types.ObjectId(userId), isDeleted: false }); // Check ObjectId format
     }
 
     const bookQuery = { $or: queryConditions };
@@ -53,12 +53,12 @@ export async function GET(req: Request) {
     let entriesQuery: any;
     if (userBooks.length === 0) {
       console.log('🔍 [API-ENTRIES] No books found, using direct userId query for entries (SILENCED)');
-      entriesQuery = { $or: queryConditions }; // Same userId formats as books
+      entriesQuery = { $or: queryConditions, isDeleted: false }; // Same userId formats as books
     } else {
       // Standard bookId-based query
       const baseEntryConditions = [
-        { bookId: { $in: bookIds } }, // New String format
-        { bookId: { $in: bookIds.map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null) } } // Legacy ObjectId format
+        { bookId: { $in: bookIds }, isDeleted: false }, // New String format
+        { bookId: { $in: bookIds.map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null) }, isDeleted: false } // Legacy ObjectId format
       ].filter(q => q.bookId && q.bookId.$in && q.bookId.$in.length > 0);
 
       entriesQuery = { $or: baseEntryConditions };

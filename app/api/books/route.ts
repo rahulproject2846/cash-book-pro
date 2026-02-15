@@ -4,6 +4,15 @@ import mongoose from "mongoose";
 import Book from "@/models/Book";
 import User from "@/models/User"; // ইউজার মডেল ইমপোর্ট
 import { NextResponse } from "next/server";
+import Pusher from 'pusher';
+
+const pusher = new Pusher({
+  appId: process.env.PUSHER_APP_ID!,
+  key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
+  secret: process.env.PUSHER_SECRET!,
+  cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+  useTLS: true
+});
 
 /**
  * GET: ইউজারের সকল বই (Vaults) সিংক্রোনাইজ করা
@@ -30,10 +39,10 @@ export async function GET(req: Request) {
         return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
 
-    const queryConditions: any[] = [{ userId: userId }]; 
+    const queryConditions: any[] = [{ userId: userId, isDeleted: { $ne: 1 } }]; 
     
     if (mongoose.Types.ObjectId.isValid(userId)) {
-      queryConditions.push({ userId: new mongoose.Types.ObjectId(userId) }); 
+      queryConditions.push({ userId: new mongoose.Types.ObjectId(userId), isDeleted: { $ne: 1 } }); 
     }
 
     let query: any = { $or: queryConditions };
@@ -50,11 +59,11 @@ export async function GET(req: Request) {
     
     // --- FALLBACK LOGIC ---
     if (books.length === 0) {
-      const stringBooks = await Book.find({ userId: userId }).lean().sort({ updatedAt: -1 });
+      const stringBooks = await Book.find({ userId: userId, isDeleted: { $ne: 1 } }).lean().sort({ updatedAt: -1 });
       
       let objectIdBooks: any[] = [];
       if (mongoose.Types.ObjectId.isValid(userId)) {
-        objectIdBooks = await Book.find({ userId: new mongoose.Types.ObjectId(userId) }).lean().sort({ updatedAt: -1 });
+        objectIdBooks = await Book.find({ userId: new mongoose.Types.ObjectId(userId), isDeleted: { $ne: 1 } }).lean().sort({ updatedAt: -1 });
       }
       
       const allFallbackBooks = [...stringBooks, ...objectIdBooks];
@@ -149,6 +158,23 @@ export async function POST(req: Request) {
         cid: cid || undefined // 🔥 CRITICAL: Include cid field if provided
     });
     
+    // সিগন্যাল ট্রিগার
+    try {
+        // Backend Name Verification: Check if name field exists
+        if (!newBook.name) {
+            console.warn('⚠️ BOOK_CREATED payload missing name field:', newBook);
+        }
+        
+        await pusher.trigger(`vault-channel-${userId}`, 'BOOK_CREATED', { 
+            ...newBook.toObject(),
+            vKey: newBook.vKey,
+            cid: newBook.cid,
+            _id: newBook._id,
+            userId: newBook.userId,
+            isDeleted: Number(newBook.isDeleted || 0)
+        });
+    } catch (e) {}
+    
     return NextResponse.json({ success: true, book: newBook, isActive: true }, { status: 201 });
   } catch (error: any) {
     // console.error('❌ [API-BOOKS-POST] Error:', error.message);
@@ -223,6 +249,18 @@ export async function PUT(req: Request) {
       },
       { new: true }
     );
+
+    // সিগন্যাল ট্রিগার
+    try {
+        await pusher.trigger(`vault_channel_${updatedBook.userId}`, 'BOOK_UPDATED', { 
+            ...updatedBook,
+            vKey: updatedBook.vKey,
+            cid: updatedBook.cid,
+            _id: updatedBook._id,
+            userId: updatedBook.userId,
+            isDeleted: Number(updatedBook.isDeleted || 0)
+        });
+    } catch (e) {}
 
     return NextResponse.json({ success: true, book: updatedBook, isActive: true }, { status: 200 });
   } catch (error: any) {

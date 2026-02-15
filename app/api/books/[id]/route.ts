@@ -2,6 +2,15 @@ import connectDB from "@/lib/db";
 import Book from "@/models/Book";
 import Entry from "@/models/Entry";
 import { NextResponse } from "next/server";
+import Pusher from 'pusher';
+
+const pusher = new Pusher({
+  appId: process.env.PUSHER_APP_ID!,
+  key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
+  secret: process.env.PUSHER_SECRET!,
+  cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+  useTLS: true
+});
 
 // PUT: লেজারের নাম, বিবরণ, টাইপ, ফোন বা ইমেজ আপডেট করা
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -34,6 +43,43 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     
     // ৩. আপডেটেড পেলোড তৈরি (নতুন ফিল্ড সহ)
     const updatePayload: any = {};
+    
+    // 🔕 BLIND DELETE BYPASS: Skip all validations for delete operations
+    if (updateData.isDeleted === 1) {
+        console.log('🔕 [BLIND DELETE] Bypassing validations for delete operation');
+        
+        const updatedBook = await Book.findByIdAndUpdate(
+            id, 
+            { $set: { 
+                isDeleted: 1,
+                vKey: updateData.vKey || Date.now() // 🚨 CRITICAL: Update vKey for delete
+            }}, 
+            { new: true }
+        );
+        
+        if (!updatedBook) {
+            return NextResponse.json({ message: "Vault record not found" }, { status: 404 });
+        }
+        
+        // 📡 BOOK_UPDATED: Trigger real-time sync for delete operation
+        try {
+            await pusher.trigger(`vault-channel-${String(userId)}`, 'BOOK_UPDATED', { 
+                ...updatedBook.toObject(),
+                userId: String(userId),
+                vKey: updatedBook.vKey,
+                cid: updatedBook.cid,
+                _id: updatedBook._id
+            });
+        } catch (e) {}
+        
+        return NextResponse.json({
+            success: true,
+            message: "Ledger marked as deleted",
+            book: updatedBook
+        }, { status: 200 });
+    }
+    
+    // Normal field validations for non-delete operations
     if (updateData.name) updatePayload.name = updateData.name.trim();
     if (updateData.description !== undefined) updatePayload.description = updateData.description.trim();
     
@@ -51,6 +97,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (!updatedBook) {
         return NextResponse.json({ message: "Vault record not found" }, { status: 404 });
     }
+    
+    // 📡 BOOK_UPDATED: Trigger real-time sync
+    try {
+        await pusher.trigger(`vault-channel-${String(userId)}`, 'BOOK_UPDATED', { 
+            ...updatedBook.toObject(),
+            userId: String(userId),
+            vKey: updatedBook.vKey,
+            cid: updatedBook.cid,
+            _id: updatedBook._id
+        });
+    } catch (e) {}
     
     return NextResponse.json({
         success: true,
@@ -73,6 +130,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       await connectDB();
       const bookExists = await Book.findById(id);
       if (!bookExists) return NextResponse.json({ message: "Ledger not found" }, { status: 404 });
+      
+      // 📡 BOOK_DELETED: Trigger real-time sync before deletion
+      try {
+        await pusher.trigger(`vault-channel-${String(bookExists.userId)}`, 'BOOK_DELETED', { 
+            ...bookExists.toObject(),
+            userId: String(bookExists.userId),
+            vKey: bookExists.vKey,
+            cid: bookExists.cid,
+            _id: bookExists._id
+        });
+      } catch (e) {}
       
       await Entry.deleteMany({ bookId: id });
       await Book.findByIdAndDelete(id);

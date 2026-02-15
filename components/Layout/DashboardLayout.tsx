@@ -22,6 +22,7 @@ interface DashboardLayoutProps {
     currentBook: any; 
     onBack: () => void;
     onFabClick: () => void;
+    fabTooltip?: string; // Optional tooltip for FAB
 }
 
 const NAV_ITEMS = [
@@ -104,7 +105,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
 };
 
 // --- 2. Mobile Bottom Nav (Optimized Rendering) ---
-const BottomNav = ({ active, setActive, onFabClick, onResetBook }: any) => {
+const BottomNav = ({ active, setActive, onFabClick, onResetBook, fabTooltip }: any) => {
     const [isVisible, setIsVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
     const { t } = useTranslation();
@@ -150,12 +151,14 @@ const BottomNav = ({ active, setActive, onFabClick, onResetBook }: any) => {
                         </div>
                         
                         <div className="absolute left-1/2 -translate-x-1/2 -top-6">
-                            <button 
-                                onClick={onFabClick}
-                                className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white border-[6px] border-[var(--bg-app)] shadow-lg relative z-20 active:scale-90 transition-transform"
-                            >
-                                <Plus size={32} strokeWidth={4} />
-                            </button>
+                            <Tooltip text={fabTooltip || t('fab_add_book')} position="left">
+                                <button 
+                                    onClick={onFabClick}
+                                    className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white border-[6px] border-[var(--bg-app)] shadow-lg relative z-20 active:scale-90 transition-transform"
+                                >
+                                    <Plus size={32} strokeWidth={4} />
+                                </button>
+                            </Tooltip>
                         </div>
 
                         <div className="flex gap-5">
@@ -171,7 +174,7 @@ const BottomNav = ({ active, setActive, onFabClick, onResetBook }: any) => {
 
 // --- 3. Dashboard Layout Main (Merged Logic & Simple Animation) ---
 export const DashboardLayout = (props: any) => {
-    const { children, activeSection, setActiveSection, onLogout, currentUser, currentBook, onBack, onFabClick } = props;
+    const { children, activeSection, setActiveSection, onLogout, currentUser, currentBook, onBack, onFabClick, fabTooltip } = props;
     const [collapsed, setCollapsed] = useState(false);
     const [isShielded, setIsShielded] = useState(false);
     const { theme, setTheme } = useTheme();
@@ -179,6 +182,14 @@ export const DashboardLayout = (props: any) => {
     
     const prefs = currentUser?.preferences || {};
     const { t } = useTranslation();
+
+    // Generate context-aware tooltip text
+    const getFabTooltip = () => {
+        if (fabTooltip) return fabTooltip;
+        if (currentBook) return t('fab_add_entry'); // "Add Entry"
+        if (activeSection === 'books') return t('fab_add_book'); // "Add Book"
+        return t('fab_add_book'); // Default to "Add Book"
+    };
 
     // 🔥 Optimization: Merged Theme, Midnight, and Compact Mode Effects
     useEffect(() => {
@@ -250,7 +261,7 @@ export const DashboardLayout = (props: any) => {
                 </div>
             </main>
             
-            <BottomNav active={activeSection} setActive={setActiveSection} onFabClick={onFabClick} onResetBook={onBack} />
+            <BottomNav active={activeSection} setActive={setActiveSection} onFabClick={onFabClick} onResetBook={onBack} fabTooltip={fabTooltip} />
 
             <AnimatePresence>
                 {isShielded && (

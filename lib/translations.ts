@@ -51,6 +51,10 @@ export const translations: any = {
     label_last_updated: "Last Updated",
     just_now: "Just now",
 
+    // --- FAB Tooltips (Context-Aware) ---
+    fab_add_entry: "Add Entry",
+    fab_add_book: "Add Book",
+
     // --- Transactions (Short & Clear) ---
     protocol_entry: "Add Entry",
     btn_new_entry: "New Transaction",

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/offlineDB';
 import { useLiveQuery } from 'dexie-react-hooks';
+import toast from 'react-hot-toast';
 
 // Global Engine Hooks & Components
 import { useModal } from '@/context/ModalContext';
@@ -75,24 +76,60 @@ const BooksSection = memo(({
         setSortOption(t('sort_activity') || 'Activity');
     }, [t]);
 
+    // 🚨 SMART EJECTION: Listen for remote book deletions
+    useEffect(() => {
+        const handleRemoteDelete = (e: any) => {
+            const deletedIdStr = String(e.detail.bookId);
+            console.log(`🚨 [SMART EJECTION] Received remote delete for book: ${deletedIdStr}`);
+            
+            // Check if user is currently viewing THIS deleted book (Type-Safe)
+            if (currentBook && (
+                String(currentBook._id) === deletedIdStr || 
+                String(currentBook.localId) === deletedIdStr
+            )) {
+                console.log(`🚨 [SMART EJECTION] User was viewing deleted book, ejecting to dashboard`);
+                
+                // Show toast notification and immediately eject
+                toast.error('⚠️ This ledger was deleted remotely.');
+                setCurrentBook(null);
+            }
+        };
+        
+        if (typeof window !== 'undefined') {
+            window.addEventListener('VAULT_BOOK_DELETED', handleRemoteDelete);
+        }
+        
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('VAULT_BOOK_DELETED', handleRemoteDelete);
+            }
+        };
+    }, [currentBook, setCurrentBook, openModal]);
+
     const handleImportClick = () => {
         fileInputRef.current?.click();
     };
 
-    // ৪. ⚡ MASTER PROCESSING ENGINE (Filtering, Stats & Sorting)
+    // ৪. MASTER PROCESSING ENGINE (Filtering, Stats & Sorting)
     const processedBooks = useMemo(() => {
         if (!books) return [];
 
         // ক. ডুপ্লিকেট রিমুভ ও আইডি ম্যাপিং
         const uniqueMap = new Map();
         books.forEach((b: any) => {
-            const id = String(b.localId || b._id);
+            // CRITICAL: Use fallback ID chain to prevent books from collapsing
+            const id = String(b.localId || b._id || b.cid);
             if (!uniqueMap.has(id)) uniqueMap.set(id, b);
         });
 
         let list = Array.from(uniqueMap.values());
 
-        // খ. 🔍 স্মার্ট সার্চ ফিল্টার
+        // DELETE FILTER: Strictly filter out deleted books
+        list = list.filter((book: any) => {
+            return Number(book.isDeleted || 0) === 0;
+        });
+
+        // খ. স্মার্ট সার্চ ফিল্টার
         const q = (searchQuery || "").toLowerCase().trim();
         if (q) {
             list = list.filter((book: any) => 
@@ -100,7 +137,7 @@ const BooksSection = memo(({
             );
         }
 
-        // গ. 📊 লাইভ স্ট্যাটাস ক্যালকুলেশন
+        // গ. লাইভ স্ট্যাটাস ক্যালকুলেশন
         let processedList = list.map((book: any) => {
             const bId = String(book._id || book.localId);
             const bEntries = allEntries.filter((e: any) => String(e.bookId) === bId);
@@ -120,7 +157,18 @@ const BooksSection = memo(({
             };
         });
 
-        // ঘ. ⏳ সর্টিং প্রোটোকল (V13.0 Standard - Rely on pre-sorted books)
+        // DEBUG: Log sample to debug filtering issues
+        if (processedList.length > 0) {
+            console.log('Processed Sample:', processedList[0]);
+        } else if (books && books.length > 0) {
+            console.log('DEBUG: No processed books but raw books exist:', {
+                totalRaw: books.length,
+                rawSample: books[0],
+                filteredOut: books.filter((b: any) => Number(b.isDeleted || 0) === 1).length
+            });
+        }
+
+        // ঘ. সর্টিং প্রোটোকল (V13.0 Standard - Rely on pre-sorted books)
         // Books are already sorted in useVault by isPinned desc, then updatedAt desc
         // No additional sorting needed here to prevent conflicts
 

@@ -175,6 +175,39 @@ useEffect(() => {
     } catch (err) { toast.error(t('error_entry_protocol_fault')); }
   };
 
+  // --- ৬. গ্লোবাল বুক সেভ লজিক ---
+  const handleSaveBookGlobal = async (formData: any) => {
+    try {
+        // ✅ FIXED: Use robust saveBook function from useVault instead of manual API calls
+        const success = await saveBook(formData, currentBook);
+        if (success) {
+            closeModal();
+            toast.success(t('success_book_secured'));
+        }
+    } catch (error) {
+        console.error('Save book error:', error);
+        toast.error(t('err_save_book'));
+    }
+  };
+
+  // --- ৫. কন্টেক্সট-সচেয়ার ফ্যাব (Context-Aware) ---
+  const handleFabClick = useCallback(() => {
+    if (activeSection !== 'books') {
+      setActiveSection('books');
+      setCurrentBook(null);
+      openModal('addBook', { currentUser, onSubmit: handleSaveBookGlobal });
+      return;
+    }
+
+    if (currentBook) {
+      // Case A: Inside a Book - Add Entry for current book
+      openModal('addEntry', { currentUser, currentBook, onSubmit: handleSaveEntryLogic });
+    } else {
+      // Case B: Dashboard List - Add Book modal
+      openModal('addBook', { currentUser, onSubmit: handleSaveBookGlobal });
+    }
+  }, [activeSection, currentBook, currentUser, openModal, handleSaveBookGlobal, handleSaveEntryLogic]);
+
   // ৫.১ এন্ট্রি ডিলিট লজিক (Undo Toast with 10-second buffer)
 // ৫.১ এন্ট্রি ডিলিট লজিক (Fixed Type & Translation)
   const handleDeleteEntryLogic = async (entry: any) => {
@@ -259,17 +292,7 @@ useEffect(() => {
   };
 
   // --- ৬. গ্লোবাল বুক সেভ লজিক ---
-  const handleSaveBookGlobal = async (formData: any) => {
-    try {
-        // ✅ FIXED: Use robust saveBook function from useVault instead of manual API calls
-        const success = await saveBook(formData, currentBook);
-        if (success) {
-            closeModal();
-        }
-    } catch (err) { 
-        console.error('Failed to save book:', err); 
-    }
-  };
+  
 
   const handleOpenGlobalModal = async (type: any) => {
     if (!currentBook?._id) return toast.error(t('err_select_vault'));
@@ -338,7 +361,7 @@ useEffect(() => {
             currentBook={currentBook} 
             onLogout={() => orchestrator.logout()}
             onBack={() => setCurrentBook(null)}
-            onFabClick={() => openModal('addEntry', { currentUser, currentBook, onSubmit: handleSaveEntryLogic })}
+            onFabClick={handleFabClick}
             onOpenAnalytics={() => handleOpenGlobalModal('analytics')}
             onOpenExport={() => handleOpenGlobalModal('export')}
             onOpenShare={() => handleOpenGlobalModal('share')}

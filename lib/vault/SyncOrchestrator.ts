@@ -2,6 +2,7 @@
 
 import { db, clearVaultData } from '@/lib/offlineDB';
 import { RealtimeEngine } from './core/RealtimeEngine';
+import { RealtimeCommandHandler } from './core/RealtimeCommandHandler';
 import { normalizeRecord, normalizeTimestamp } from './core/VaultUtils';
 import { migrationManager } from './core/MigrationManager';
 import { telemetry } from './Telemetry';
@@ -18,6 +19,7 @@ class SyncOrchestrator {
   private channel = new BroadcastChannel('vault_global_sync');
   private readonly lastSyncKey = 'cashbook_lastSync';
   private realtimeEngine: RealtimeEngine | null = null;
+  private realtimeCommandHandler: RealtimeCommandHandler | null = null;
   private userId: string | null = null;
   
   // Integrated Security & Shadow Management
@@ -52,6 +54,37 @@ class SyncOrchestrator {
       // 🏗️ DATABASE MIGRATION: Run schema migrations before any operations
       await migrationManager.runMigrations(this.userId!);
     }
+  }
+
+  /**
+   * 🤫 SILENT AUTO-RESOLVE: Compare business data fields to eliminate false conflicts
+   */
+  private compareBusinessFields(local: any, remote: any, type: 'ENTRY' | 'BOOK'): boolean {
+    if (type === 'ENTRY') {
+      // Compare entry business fields
+      return (
+        String(local.title || '').trim().toLowerCase() === String(remote.title || '').trim().toLowerCase() &&
+        Number(local.amount || 0) === Number(remote.amount || 0) &&
+        String(local.type || '').toLowerCase() === String(remote.type || '').toLowerCase() &&
+        String(local.status || '').toLowerCase() === String(remote.status || '').toLowerCase() &&
+        String(local.category || '').toLowerCase() === String(remote.category || '').toLowerCase() &&
+        String(local.paymentMethod || '').toLowerCase() === String(remote.paymentMethod || '').toLowerCase() &&
+        String(local.note || '').trim() === String(remote.note || '').trim() &&
+        String(local.bookId || '') === String(remote.bookId || '') &&
+        Boolean(local.isDeleted) === Boolean(remote.isDeleted)
+      );
+    } else if (type === 'BOOK') {
+      // Compare book business fields
+      return (
+        String(local.name || '').trim().toLowerCase() === String(remote.name || '').trim().toLowerCase() &&
+        String(local.description || '').trim() === String(remote.description || '').trim() &&
+        String(local.type || '').toLowerCase() === String(remote.type || '').toLowerCase() &&
+        String(local.phone || '').trim() === String(remote.phone || '').trim() &&
+        String(local.image || '') === String(remote.image || '') &&
+        Boolean(local.isDeleted) === Boolean(remote.isDeleted)
+      );
+    }
+    return false;
   }
 
   /**
@@ -93,10 +126,16 @@ class SyncOrchestrator {
       let entriesRepaired = 0;
       
       for (const entry of allEntries) {
-        if (entry.userId !== this.userId || entry.isDeleted !== 0) {
+        const needsRepair = 
+          entry.userId !== this.userId || 
+          entry.isDeleted !== 0 ||
+          entry.isDeleted === undefined ||
+          entry.isDeleted === null;
+        
+        if (needsRepair) {
           await db.entries.update(entry.localId!, { 
             userId: String(this.userId!), 
-            isDeleted: 0 
+            isDeleted: Number(entry.isDeleted || 0)  // Force to 0 if undefined/null
           });
           entriesRepaired++;
         }
@@ -107,10 +146,16 @@ class SyncOrchestrator {
       let booksRepaired = 0;
       
       for (const book of allBooks) {
-        if (book.userId !== this.userId || book.isDeleted !== 0) {
+        const needsRepair = 
+          book.userId !== this.userId || 
+          book.isDeleted !== 0 ||
+          book.isDeleted === undefined ||
+          book.isDeleted === null;
+        
+        if (needsRepair) {
           await db.books.update(book.localId!, { 
             userId: String(this.userId!), 
-            isDeleted: 0 
+            isDeleted: Number(book.isDeleted || 0)  // Force to 0 if undefined/null
           });
           booksRepaired++;
         }
@@ -367,85 +412,6 @@ class SyncOrchestrator {
   }
 
   /**
-   * � OPTIMISTIC INJECTION: Instant UI Update from Pusher Payload
-   */
-  async injectRealtimeData(payload: any, eventType: string) {
-    const uid = this.getEffectiveUserId();
-    if (!uid || !payload) return;
-
-    try {
-      const data = normalizeRecord({ ...payload, userId: uid, synced: 1 }, uid);
-      const ts = normalizeTimestamp(data.updatedAt || Date.now());
-
-      if (eventType.startsWith('ENTRY')) {
-        // 🔍 FIND-BEFORE-MERGE: Check if entry exists by CID
-        const existing = await db.entries.where('cid').equals(data.cid).first();
-        
-        // 📡 [REALTIME GUARD] Smart Hydration Logic
-        if (!existing) {
-          // Case 1: New Record - Insert as synced
-          await db.entries.put({ ...data, updatedAt: ts });
-          console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: NO | Status: New`);
-        } else if (existing.synced === 0) {
-          // Case 2: Protect Unsynced Work - Mark as conflicted
-          await db.entries.update(existing.localId!, {
-            conflicted: 1,
-            conflictReason: 'REALTIME_CONFLICT',
-            serverData: data,
-            updatedAt: ts
-          });
-          console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: YES | Status: Protected`);
-        } else {
-          // Case 3: Update Synced Record - Check vKey
-          if (data.vKey > existing.vKey) {
-            await db.entries.update(existing.localId!, { ...data, updatedAt: ts });
-            console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: NO | Status: Updated`);
-          } else {
-            console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: NO | Status: Skipped (vKey not newer)`);
-          }
-        }
-      } else if (eventType.startsWith('BOOK')) {
-        // 🔍 FIND-BEFORE-MERGE: Check if book exists by CID
-        const existing = await db.books.where('cid').equals(data.cid).first();
-        
-        // 📡 [REALTIME GUARD] Smart Hydration Logic
-        if (!existing) {
-          // Case 1: New Record - Insert as synced
-          await db.books.put({ ...data, updatedAt: ts });
-          console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: NO | Status: New`);
-        } else if (existing.synced === 0) {
-          // Case 2: Protect Unsynced Work - Mark as conflicted
-          await db.books.update(existing.localId!, {
-            conflicted: 1,
-            conflictReason: 'REALTIME_CONFLICT',
-            serverData: data,
-            updatedAt: ts
-          });
-          console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: YES | Status: Protected`);
-        } else {
-          // Case 3: Update Synced Record - Check vKey
-          if (data.vKey > existing.vKey) {
-            await db.books.update(existing.localId!, { ...data, updatedAt: ts });
-            console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: NO | Status: Updated`);
-          } else {
-            console.log(`📡 [REALTIME GUARD] Smart merge CID: ${data.cid} | Conflict: NO | Status: Skipped (vKey not newer)`);
-          }
-        }
-      }
-
-      console.log(`💉 [REALTIME] Injected ${eventType} for user ${uid}`);
-      this.notifyUI();
-    } catch (err) {
-      // 🤫 SILENT CATCH: Log merge conflict but don't crash
-      if (err instanceof Error && err.name === 'ConstraintError') {
-        console.warn("Realtime merge conflict for CID:", payload.cid);
-      } else {
-        console.error("Injection error:", err);
-      }
-    }
-  }
-
-  /**
    * 🚀 TRIGGER SYNC: Push local 'synced: 0' data to server
    */
   async triggerSync(providedUserId?: string) {
@@ -484,6 +450,12 @@ class SyncOrchestrator {
         
         // 🧹 CLEAN PAYLOAD: Only remove internal UI fields, keep checksum and conflicted for server validation
         const { serverData, conflictReason, localId, synced, ...cleanBook } = book;
+        
+        // 🚨 CLEANUP: Remove empty _id for new records to prevent BSONError
+        if (!cleanBook._id || cleanBook._id === "") {
+          delete (cleanBook as any)._id;
+        }
+        
         const payload = {
           ...cleanBook,
           userId: uid,
@@ -498,16 +470,23 @@ class SyncOrchestrator {
         if (res.ok) {
           console.log('✅ [SYNC] Book success:', book.cid);
           const sData = await res.json();
-          // 🔍 COMPLETE SYNC UPDATE: Mark local record as fully synced
-          await db.books.update(book.localId!, {
-            _id: sData.data?._id || sData.book?._id || book._id,
-            synced: 1,           // ✅ Mark as synced
-            conflicted: 0,       // ✅ Clear conflict flag
-            conflictReason: '',  // ✅ Clear reason
-            serverData: null,    // ✅ Clear server data
-            vKey: book.vKey,    // Ensure vKey matches
-            updatedAt: book.updatedAt // Ensure timestamp matches
-          });
+          
+          // 🗑️ HARD DELETE CHECK: Remove deleted books after successful sync
+          if (book.isDeleted === 1) {
+            await db.books.delete(book.localId!);
+            console.log(`🗑️ [SYNC DELETE] Book ${book.cid} hard deleted after sync`);
+          } else {
+            // 🔍 COMPLETE SYNC UPDATE: Mark local record as fully synced
+            await db.books.update(book.localId!, {
+              _id: sData.data?._id || sData.book?._id || book._id,
+              synced: 1,           // ✅ Mark as synced
+              conflicted: 0,       // ✅ Clear conflict flag
+              conflictReason: '',  // ✅ Clear reason
+              serverData: null,    // ✅ Clear server data
+              vKey: book.vKey,    // Ensure vKey matches
+              updatedAt: book.updatedAt // Ensure timestamp matches
+            });
+          }
           
           // 🔥 BLINKING PREVENTION: Mark CID as processing to prevent Pusher overwrites
           if (book.cid) {
@@ -550,6 +529,12 @@ class SyncOrchestrator {
         // 🧹 CLEAN PAYLOAD: Only remove internal UI fields, keep checksum and conflicted for server validation
         // CRITICAL: Include deleted entries in sync to prevent zombie data
         const { serverData, conflictReason, localId, synced, ...cleanEntry } = entry;
+        
+        // 🚨 CLEANUP: Remove empty _id for new records to prevent BSONError
+        if (!cleanEntry._id || cleanEntry._id === "") {
+          delete (cleanEntry as any)._id;
+        }
+        
         const payload = {
           ...cleanEntry,
           userId: uid,
@@ -653,10 +638,35 @@ class SyncOrchestrator {
         const serverBooks = bData.books || bData.data || [];
         for (const sb of serverBooks) {
           try {
-            // 🚨 CRITICAL FIX: Explicitly mark server data as synced: 1
-            const serverBookWithSyncFlag = { ...sb, synced: 1 };
+            // 🚨 CRITICAL FIX: Explicitly mark server data as synced: 1 and isDeleted: 0 for legacy books
+            const serverBookWithSyncFlag = { 
+              ...sb, 
+              synced: 1, 
+              conflicted: 0,
+              isDeleted: sb.isDeleted !== undefined ? sb.isDeleted : 0 // Force isDeleted: 0 for legacy books
+            };
             const normalizedBook = normalizeRecord(serverBookWithSyncFlag, uid);
             if (!normalizedBook) continue;
+
+            // 🔕 DELETE AUTHORITY: Handle server-deleted books
+            if (normalizedBook.isDeleted === 1) {
+              const cid = normalizedBook.cid;
+              const existing = await db.books.where('cid').equals(cid).first();
+              
+              if (existing) {
+                // 🗑️ CASCADE DELETE: Remove book and all associated entries
+                console.log(`🗑️ [DELETE AUTHORITY] Removing deleted book and all entries for CID: ${cid}`);
+                
+                // Delete all entries associated with this book
+                await db.entries.where('bookId').equals(existing._id).delete();
+                
+                // Hard delete the book from Dexie
+                await db.books.delete(existing.localId!);
+                
+                console.log(`🗑️ [DELETE AUTHORITY] Cascade complete: Book ${cid} and all entries removed`);
+                continue;
+              }
+            }
 
             const cid = normalizedBook.cid;
             const existing = await db.books.where('cid').equals(cid).first();
@@ -667,17 +677,48 @@ class SyncOrchestrator {
               await db.books.put(normalizedBook);
               console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: New`);
             } else if (existing.isDeleted === 1 && normalizedBook.isDeleted === 0) {
-              // 🚨 TOMBSTONE PROTECTION: Never allow server to overwrite local deletion
-              console.log(`🪦 [HYDRATE] Tombstone Protection: CID ${cid} - Local book deletion preserved, server update ignored`);
-              return; // Silent Ignore - Trust local delete
+              // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
+              if (normalizedBook.vKey > existing.vKey) {
+                console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
+              } else {
+                console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
+                continue; // Block stale restoration
+              }
             } else if (existing.synced === 0) {
-              // Case 2: Protect Unsynced Work - Mark as conflicted
-              await db.books.update(existing.localId!, {
-                conflicted: 1,
-                conflictReason: 'DOWNLOAD_CONFLICT',
-                serverData: normalizedBook
-              });
-              console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Conflicted`);
+              // Case 2: Protect Unsynced Work - Check for silent auto-resolve first
+              if (existing.isDeleted === 1 && normalizedBook.isDeleted === 0) {
+                // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
+                if (normalizedBook.vKey > existing.vKey) {
+                  console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
+                } else {
+                  console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
+                  continue; // Block stale restoration
+                }
+              } else {
+                // 🔕 SILENT AUTO-RESOLVE: Compare business data fields before flagging conflict
+                const businessFieldsMatch = this.compareBusinessFields(existing, normalizedBook, 'BOOK');
+                
+                if (businessFieldsMatch) {
+                  // 🤫 SILENT RESOLVE: Data identical, just update vKey and sync status
+                  await db.books.update(existing.localId!, { 
+                    ...normalizedBook,
+                    vKey: normalizedBook.vKey, 
+                    synced: 1,
+                    conflicted: 0,
+                    conflictReason: '',
+                    serverData: null
+                  });
+                  console.log(`🤫 [SILENT RESOLVE] Auto-resolved identical data for CID: ${cid} | vKey: ${existing.vKey} → ${normalizedBook.vKey}`);
+                } else {
+                  // Mark as conflicted
+                  await db.books.update(existing.localId!, {
+                    conflicted: 1,
+                    conflictReason: 'DOWNLOAD_CONFLICT',
+                    serverData: normalizedBook
+                  });
+                  console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Conflicted`);
+                }
+              }
             } else {
               // Case 3: Update Synced Record - Check vKey
               if (normalizedBook.vKey > existing.vKey) {
@@ -714,7 +755,7 @@ class SyncOrchestrator {
         for (const se of serverEntries) {
           try {
             // 🚨 CRITICAL FIX: Explicitly mark server data as synced: 1
-            const serverEntryWithSyncFlag = { ...se, synced: 1 };
+            const serverEntryWithSyncFlag = { ...se, synced: 1, conflicted: 0 };
             const normalizedEntry = normalizeRecord(serverEntryWithSyncFlag, uid);
             if (!normalizedEntry) continue;
 
@@ -727,17 +768,48 @@ class SyncOrchestrator {
               await db.entries.put(normalizedEntry);
               console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: New`);
             } else if (existing.isDeleted === 1 && normalizedEntry.isDeleted === 0) {
-              // 🚨 TOMBSTONE PROTECTION: Never allow server to overwrite local deletion
-              console.log(`🪦 [HYDRATE] Tombstone Protection: CID ${cid} - Local deletion preserved, server update ignored`);
-              return; // Silent Ignore - Trust local delete
+              // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
+              if (normalizedEntry.vKey > existing.vKey) {
+                console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
+              } else {
+                console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
+                continue; // Block stale restoration
+              }
             } else if (existing.synced === 0) {
-              // Case 2: Protect Unsynced Work - Mark as conflicted
-              await db.entries.update(existing.localId!, {
-                conflicted: 1,
-                conflictReason: 'DOWNLOAD_CONFLICT',
-                serverData: normalizedEntry
-              });
-              console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Conflicted`);
+              // Case 2: Protect Unsynced Work - Check for silent auto-resolve first
+              if (existing.isDeleted === 1 && normalizedEntry.isDeleted === 0) {
+                // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
+                if (normalizedEntry.vKey > existing.vKey) {
+                  console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
+                } else {
+                  console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
+                  continue; // Block stale restoration
+                }
+              } else {
+                // 🔕 SILENT AUTO-RESOLVE: Compare business data fields before flagging conflict
+                const businessFieldsMatch = this.compareBusinessFields(existing, normalizedEntry, 'ENTRY');
+                
+                if (businessFieldsMatch) {
+                  // 🤫 SILENT RESOLVE: Data identical, just update vKey and sync status
+                  await db.entries.update(existing.localId!, { 
+                    ...normalizedEntry,
+                    vKey: normalizedEntry.vKey, 
+                    synced: 1,
+                    conflicted: 0,
+                    conflictReason: '',
+                    serverData: null
+                  });
+                  console.log(`🤫 [SILENT RESOLVE] Auto-resolved identical data for CID: ${cid} | vKey: ${existing.vKey} → ${normalizedEntry.vKey}`);
+                } else {
+                  // Mark as conflicted
+                  await db.entries.update(existing.localId!, {
+                    conflicted: 1,
+                    conflictReason: 'DOWNLOAD_CONFLICT',
+                    serverData: normalizedEntry
+                  });
+                  console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Conflicted`);
+                }
+              }
             } else {
               // Case 3: Update Synced Record - Check vKey
               if (normalizedEntry.vKey > existing.vKey) {
@@ -797,10 +869,17 @@ class SyncOrchestrator {
   // পুশার এবং ইভেন্ট হ্যান্ডলিং
   initPusher(pusher: any, userId: string) {
     this.userId = userId;
+    
+    // Initialize RealtimeCommandHandler
+    this.realtimeCommandHandler = new RealtimeCommandHandler(
+      userId, 
+      () => this.notifyUI() 
+    );
+    
     this.realtimeEngine = new RealtimeEngine(
       userId, 
       this.hydrate.bind(this), 
-      this.injectRealtimeData.bind(this), 
+      this.realtimeCommandHandler.handleEvent.bind(this.realtimeCommandHandler), 
       this, 
       () => this.notifyUI() 
     );

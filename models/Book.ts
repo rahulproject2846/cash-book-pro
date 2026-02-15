@@ -21,6 +21,7 @@ export interface IBook extends Document {
   type: 'general' | 'customer' | 'supplier';
   phone?: string;
   image?: string; 
+  isDeleted?: number;
   createdAt: Date;
   updatedAt: Date; // কেবল একবার রাখা হয়েছে
 }
@@ -92,6 +93,11 @@ const BookSchema = new Schema<IBook>({
   image: { 
     type: String, 
     default: "" 
+  },
+  isDeleted: {
+    type: Number,
+    default: 0,
+    index: true
   }
 }, { 
   timestamps: true, 

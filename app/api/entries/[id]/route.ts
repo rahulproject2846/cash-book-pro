@@ -43,11 +43,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         
         // Trigger real-time signal
         try {
-            await pusher.trigger(`vault_channel_${deletedEntry.userId}`, 'sync_signal', { 
-                refresh: true, 
-                type: 'ENTRY_DELETE',
+            await pusher.trigger(`vault-channel-${deletedEntry.userId}`, 'ENTRY_DELETED', { 
+                ...deletedEntry,
+                vKey: deletedEntry.vKey,
+                cid: deletedEntry.cid,
+                _id: deletedEntry._id,
                 bookId: deletedEntry.bookId,
-                vKey: deletedEntry.vKey
+                userId: deletedEntry.userId,
+                isDeleted: Number(deletedEntry.isDeleted || 1)
             });
         } catch (e) {}
         
@@ -183,11 +186,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     // সিগন্যাল ট্রিগার
     try {
-        await pusher.trigger(`vault_channel_${updatedEntry.userId}`, 'sync_signal', { 
-            refresh: true, 
-            type: 'ENTRY_UPDATE',
+        await pusher.trigger(`vault-channel-${updatedEntry.userId}`, 'ENTRY_UPDATED', { 
+            ...updatedEntry,
+            vKey: updatedEntry.vKey,
+            cid: updatedEntry.cid,
+            _id: updatedEntry._id,
             bookId: updatedEntry.bookId,
-            vKey: updatedEntry.vKey
+            userId: updatedEntry.userId,
+            isDeleted: Number(updatedEntry.isDeleted || 0)
         });
     } catch (e) {}
 
@@ -237,14 +243,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       },
       { new: true }
     );
-    
+        
     // রিয়েল-টাইম সিগন্যাল ট্রিগার
     try {
-        await pusher.trigger(`vault_channel_${deletedEntry.userId}`, 'sync_signal', { 
-            refresh: true, 
-            type: 'ENTRY_DELETE',
+        await pusher.trigger(`vault-channel-${deletedEntry.userId}`, 'ENTRY_DELETED', { 
+            ...deletedEntry,
+            vKey: deletedEntry.vKey,
+            cid: deletedEntry.cid,
+            _id: deletedEntry._id,
             bookId: deletedEntry.bookId,
-            vKey: deletedEntry.vKey
+            userId: deletedEntry.userId,
+            isDeleted: Number(deletedEntry.isDeleted || 1)
         });
     } catch (e) {}
 

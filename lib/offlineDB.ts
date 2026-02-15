@@ -83,6 +83,16 @@ export interface LocalTelemetry {
   timestamp: number;
 }
 
+// Safety Net: Conflict Audit Log Interface
+export interface LocalAuditLog {
+  localId?: number;
+  cid: string;
+  type: 'book' | 'entry';
+  decision: 'local' | 'server';
+  timestamp: number;
+  userId: string;
+}
+
 // --- ২. হেল্পার ফাংশনস (Integrity & Utilities) ---
 
 /**
@@ -120,6 +130,7 @@ export class VaultProDB extends Dexie {
   users!: Table<LocalUser>; 
   telemetry!: Table<LocalTelemetry>; // Phase 3 Table
   audits!: Table<any>; // Audit Framework Table
+  auditLogs!: Table<LocalAuditLog>; // Safety Net - Conflict Audit Log
 
   constructor() {
     super('VaultPro_Core_V1'); 
@@ -203,6 +214,19 @@ export class VaultProDB extends Dexie {
     }).upgrade(async (tx) => {
       console.log('Vault Pro: Conflict index fixed - conflicted is now a regular index');
     });
+
+    // 🎯 Version 10: SAFETY NET - CONFLICT AUDIT LOG
+    // Added auditLogs table for tracking conflict resolutions
+    this.version(10).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp'
+    }).upgrade(async (tx) => {
+      console.log('Vault Pro: Safety Net - Conflict Audit Log initialized');
+    });
   }
 }
 
@@ -220,6 +244,12 @@ export const clearVaultData = async () => {
     db.entries.clear(),
     db.users.clear(),
     db.telemetry.clear(),
-    db.audits.clear()
+    db.audits.clear(),
+    db.auditLogs.clear()
   ]);
 };
+
+// Emergency debugging: Expose database instance to global window
+if (typeof window !== 'undefined') {
+  (window as any).db = db;
+}

@@ -200,6 +200,15 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
                 await orchestrator.triggerSync(currentUser._id);
             }
             
+            // 🛡️ SAFETY NET: Log conflict resolution to audit trail
+            await db.auditLogs.add({
+                cid: item.cid,
+                type: item.type,
+                decision: resolution, // 'local' or 'server'
+                timestamp: Date.now(),
+                userId: currentUser._id
+            });
+            
             // Trigger UI refresh
             window.dispatchEvent(new Event('vault-updated'));
         } catch (error) {

@@ -45,6 +45,14 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
 
     const normalized = { ...data };
 
+    // 🕵️ IDENTITY AUDIT: Track localId handling
+    console.log('🕵️ NORMALIZE IDENTITY CHECK:', { 
+        inputLocalId: normalized.localId, 
+        inputId: normalized._id, 
+        typeOfLocalId: typeof normalized.localId,
+        typeOfId: typeof normalized._id
+    });
+
     // ১. আইডি প্রোটেকশন (যদি _id এবং cid দুটোই না থাকে তবে ডাটা বাদ)
     if (!normalized._id && !normalized.cid) {
         console.warn("🚫 [NORMALIZER] Invalid record skipped:", data);
@@ -87,16 +95,28 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
         }
     }
 
-    // ৬. ডাটা ইন্টিগ্রিটি (Enforced Rules)
-    // RULE: SERVER DATA IS ALWAYS SYNCED
-    if (normalized.synced !== 0) {
-      normalized.synced = normalized._id ? 1 : 0;
+    // 🔧 FIELD NORMALIZATION: Force category, paymentMethod, and status to lowercase
+    if (normalized.category) {
+        normalized.category = String(normalized.category).toLowerCase().trim();
     }
-    
-    // 🚨 CRITICAL FIX: Force server data to be synced: 1
-    // If data comes from server (has _id but no synced field), mark as synced
-    if (normalized._id && normalized.synced === undefined) {
+    if (normalized.paymentMethod) {
+        normalized.paymentMethod = String(normalized.paymentMethod).toLowerCase().trim();
+    }
+    if (normalized.status) {
+        normalized.status = String(normalized.status).toLowerCase().trim();
+    }
+
+    // ৬. ডাটা ইন্টিগ্রিটি (Enforced Rules)
+    // RULE: PRESERVE EXPLICIT SYNCED FLAG
+    if (data.synced !== undefined) {
+      // If synced is explicitly provided, preserve it
+      normalized.synced = data.synced;
+    } else if (normalized._id) {
+      // Only default to synced: 1 if no explicit flag and has _id
       normalized.synced = 1;
+    } else {
+      // Default to unsynced for new local records
+      normalized.synced = 0;
     }
     
     // RULE: FORCE Boolean to Number conversion

@@ -37,7 +37,21 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
                 .where('userId').equals(stringUserId)
                 .reverse()
                 .sortBy('updatedAt')
-                .then((res: any[]) => res.filter((book: any) => book.isDeleted === 0)); // 🔥 CLIENT-SIDE FILTER
+                .then((res: any[]) => {
+                    // 🔍 DEBUG: Check total books vs filtered books
+                    db.books.toArray().then((allBooks: any[]) => {
+                        console.log('🔍 [TOTAL BOOKS CHECK]', {
+                            totalBooksInDb: allBooks.length,
+                            booksForCurrentUser: res.length,
+                            userId: stringUserId,
+                            sampleBook: res[0] || null
+                        });
+                    });
+                    
+                    // 🔍 DEBUG: Log raw DB data to see actual fields
+                    console.log('RAW DB DATA:', res.slice(0, 2));
+                    return res.filter((book: any) => book.isDeleted === 0); // 🔥 CLIENT-SIDE FILTER
+                });
         },
         [userId, forceRefresh]
     );
@@ -69,12 +83,15 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
                     });
                     
                     // Apply filters after getting all data
-                    return res
+                    const filteredEntries = res
                         .filter((entry: any) => entry.isDeleted === 0) // 🔥 CLIENT-SIDE FILTER
                         .sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0)); // Manual sort
+                    
+                    console.log('📊 UI STATE REFRESHED', filteredEntries.length);
+                    return filteredEntries;
                 });
         },
-        [userId, forceRefresh]
+        [userId, forceRefresh, localRefresh]
     );
 
     // 🎯 FILTERED ENTRIES: Universal ID Bridge - Type-Agnostic
@@ -110,7 +127,13 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
                     filteredVisible: filtered.length,
                     ghostCount: ghosts.length,
                     targetBookId,
-                    userId
+                    userId: userId, // 🚨 CRITICAL: Log userId being used
+                    sampleEntry: allRaw[0] ? {
+                        cid: allRaw[0].cid,
+                        userId: allRaw[0].userId,
+                        isDeleted: allRaw[0].isDeleted,
+                        bookId: allRaw[0].bookId
+                    } : null
                 });
             });
         }

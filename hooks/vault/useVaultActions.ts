@@ -24,16 +24,37 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
         }
 
         try {
+            // � DELETE AUTHORITY: Check if book is deleted before saving entry
+            if (bookId) {
+                const currentBook = await db.books.where('_id').equals(bookId).first();
+                if (currentBook && currentBook.isDeleted === 1) {
+                    console.warn(`🚫 [DELETE AUTHORITY] Blocked entry save for deleted book: ${bookId}`);
+                    // Show toast notification
+                    if (typeof window !== 'undefined') {
+                        // This would be handled by the UI component
+                        console.error('Book is deleted - UI should show toast');
+                    }
+                    return { success: false, error: new Error('This ledger no longer exists') };
+                }
+            }
+
+            // �🛡️ INDUSTRIAL GRADE FIND-BEFORE-MERGE PROTOCOL
+            const cidToFind = editTarget?.cid || entryData.cid;
+            const existingRecord = cidToFind ? await db.entries.where('cid').equals(cidToFind).first() : null;
+            const finalLocalId = existingRecord?.localId || editTarget?.localId;
+            
+            console.log('🛡️ SAVER PROTECTOR:', { 
+                foundId: existingRecord?.localId, 
+                action: finalLocalId ? 'UPDATE' : 'INSERT',
+                cidToFind,
+                editTargetLocalId: editTarget?.localId
+            });
+
             const finalAmount = Number(entryData.amount) || 0;
             const finalDate = entryData.date || new Date().toISOString().split('T')[0];
             const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category.toUpperCase()} RECORD` : 'GENERAL RECORD');
-            
-            const checksum = await generateEntryChecksum({
-                amount: finalAmount,
-                date: finalDate,
-                title: finalTitle
-            });
 
+            // 🔥 PAYLOAD CONSTRUCTION: Explicit localId attachment
             const entryPayload = {
                 title: finalTitle,
                 date: finalDate,
@@ -46,29 +67,41 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
                 status: entryData.status || 'completed',
                 userId: userId, // 🔥 ID INTEGRITY: Use as-is from SyncOrchestrator
                 bookId: bookId, // 🔥 ID INTEGRITY: Use as-is from SyncOrchestrator
-                cid: editTarget?.cid || generateCID(),
+                localId: finalLocalId, // ✅ CRITICAL: This links update to existing record
+                _id: editTarget?._id || entryData._id,
+                cid: editTarget?.cid || entryData.cid || generateCID(),
                 synced: 0, // 🔥 SYNC STATE: Always mark as unsynced
                 isDeleted: 0,
                 updatedAt: Date.now(),
-                vKey: (editTarget?.vKey || 0) + 1,
-                checksum,
+                vKey: Date.now(), // 🚨 DICTATOR vKey: Always wins sync battles
                 syncAttempts: 0
             } as any;
 
             if (!editTarget?.createdAt) entryPayload.createdAt = Date.now();
 
-            let id: number;
-            if (editTarget?.localId) {
-                // Update existing entry
-                entryPayload.localId = editTarget.localId;
-                id = await db.entries.put(entryPayload);
-            } else {
-                // Add new entry
-                delete entryPayload.localId;
-                id = await db.entries.put(entryPayload);
+            // 🔥 NORMALIZE FIRST: Pass through normalizeRecord to ensure data integrity
+            const normalized = normalizeRecord(entryPayload, userId);
+            
+            // 🔥 GENERATE CHECKSUM AFTER NORMALIZATION: Use normalized data for consistency
+            const checksum = await generateEntryChecksum({
+                amount: normalized.amount,
+                date: normalized.date,
+                title: normalized.title
+            });
+            
+            // 🔥 ADD CHECKSUM TO NORMALIZED DATA
+            normalized.checksum = checksum;
+            
+            // 🛡️ INDUSTRIAL SAVE: put() is smarter - updates if localId exists, otherwise inserts
+            const id = await db.entries.put(normalized);
+
+            // � PARENT BOOK TOUCH: Update parent book's timestamp for activity sorting
+            const parentBookId = entryData.bookId || entryPayload.bookId;
+            if (parentBookId) {
+                await db.books.update(String(parentBookId), { updatedAt: Date.now() });
             }
 
-            // 🚀 IMMEDIATE SYNC: Trigger sync as soon as data hits Dexie
+            // �🚀 IMMEDIATE SYNC: Trigger sync as soon as data hits Dexie
             syncOrchestrator.triggerSync();
 
             setForceRefresh(prev => prev + 1);
@@ -96,7 +129,13 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
                 updatedAt: Date.now()
             });
             
-            // 🚀 TRIGGER SYNC: Ensure orchestrator.triggerSync() is called immediately after delete
+            // � PARENT BOOK TOUCH: Update parent book's timestamp for activity sorting
+            const parentBookId = entry.bookId;
+            if (parentBookId) {
+                await db.books.update(String(parentBookId), { updatedAt: Date.now() });
+            }
+            
+            // �🚀 TRIGGER SYNC: Ensure orchestrator.triggerSync() is called immediately after delete
             if (userId) {
                 const { orchestrator } = await import('@/lib/vault/SyncOrchestrator');
                 await orchestrator.triggerSync(userId);
@@ -225,8 +264,13 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
             await db.books.update(Number(book.localId), { 
                 isDeleted: 1, 
                 synced: 0, 
+                vKey: Date.now(), // 🚨 CRITICAL: Add vKey for version tracking
                 updatedAt: Date.now()
             });
+            
+            // 🚨 CRITICAL: Trigger sync immediately to push delete to server
+            syncOrchestrator.triggerSync();
+            
             setForceRefresh(prev => prev + 1);
             return { success: true };
         } catch (error) {
@@ -240,11 +284,28 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
         if (!userId || !entry?.localId) return { success: false };
 
         try {
-            await db.entries.update(Number(entry.localId), { 
+            const updateResult = await db.entries.update(Number(entry.localId), { 
                 isDeleted: 0, 
                 synced: 0, 
+                conflicted: 0, // 🚨 DICTATOR RESET: Clear conflict state
+                serverData: null, // 🚨 DICTATOR RESET: Clear server conflict data
+                vKey: Date.now(), // 🚨 CRITICAL: Force timestamp to guarantee server acceptance
                 updatedAt: Date.now()
             });
+            
+            console.log('🔄 RESTORE DB UPDATE RESULT:', { 
+                success: updateResult === 1, 
+                result: updateResult, 
+                entryLocalId: entry.localId,
+                updateCount: updateResult === 1 ? 'SUCCESS' : 'FAILURE'
+            });
+            
+            // 🚀 IMMEDIATE SYNC: Trigger sync as soon as data hits Dexie
+            syncOrchestrator.triggerSync();
+            
+            // 🔄 UI REFRESH: Force immediate UI update
+            window.dispatchEvent(new Event('vault-updated'));
+            
             setForceRefresh(prev => prev + 1);
             return { success: true };
         } catch (error) {

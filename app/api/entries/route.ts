@@ -36,11 +36,11 @@ export async function GET(req: Request) {
     }
 
     // 🔥 UNIVERSAL QUERY: Handle both String and ObjectId formats
-    let query: any = { userId };
+    let query: any = { userId, isDeleted: false }; // 🚨 CRITICAL: Exclude deleted records
     if (mongoose.Types.ObjectId.isValid(userId)) {
       query.$or = [
-        { userId }, // String format
-        { userId: new mongoose.Types.ObjectId(userId) } // ObjectId format
+        { userId, isDeleted: false }, // String format
+        { userId: new mongoose.Types.ObjectId(userId), isDeleted: false } // ObjectId format
       ];
     }
 
@@ -145,11 +145,14 @@ export async function POST(req: Request) {
     const newEntry = await Entry.create(newEntryData);
 
     try {
-        await pusher.trigger(`vault_channel_${userId}`, 'sync_signal', { 
-            refresh: true, 
-            type: 'ENTRY_CREATE',
-            bookId: bookId,
-            cid: cid
+        await pusher.trigger(`vault-channel-${userId}`, 'ENTRY_CREATED', { 
+            ...newEntryData,
+            vKey: newEntry.vKey,
+            cid: newEntry.cid,
+            _id: newEntry._id,
+            bookId: newEntry.bookId,
+            userId: newEntry.userId,
+            isDeleted: Number(newEntry.isDeleted || 0)
         });
     } catch (e) {}
 

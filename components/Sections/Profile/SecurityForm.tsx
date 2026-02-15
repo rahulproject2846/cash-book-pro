@@ -89,7 +89,7 @@ export const SecurityForm = ({ formData, setForm, updateProfile, currentUser, is
                     <SecurityInput 
                         label={t('identity_name_label') || "IDENTITY REGISTRY NAME"}
                         placeholder={t('placeholder_identity')}
-                        value={formData.name}
+                        value={formData.name || ''}
                         onChange={(e: any) => setForm({...formData, name: e.target.value})}
                         icon={User}
                         ttKey="tt_identity_input"

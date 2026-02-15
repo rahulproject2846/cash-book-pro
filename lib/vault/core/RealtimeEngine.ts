@@ -119,20 +119,22 @@ export class RealtimeEngine {
       const eventId = data.id || data._id;
       
       if (eventCid && this.processingCids.has(eventCid)) {
-        console.log(`🔄 Skipping duplicate CID: ${eventCid}`);
+        console.log(`🔄 Skipping duplicate CID: ${eventCid} | Window: 15s`);
         return;
       }
       
       if (eventId && this.processingIds.has(String(eventId))) {
-        console.log(`🔄 Skipping duplicate ID: ${eventId}`);
+        console.log(`🔄 Skipping duplicate ID: ${eventId} | Window: 15s`);
         return;
       }
+      
+      console.log(`📡 [PUSHER EVENT RECEIVED] ${eventType}`, data.cid, `Processing CIDs: ${this.processingCids.size}`, `Processing IDs: ${this.processingIds.size}`);
       
       // 📊 TELEMETRY: Log signal reception
       telemetry.log({
         type: 'INFO',
         level: 'INFO',
-        message: `Signal Received: ${eventType} - CID: ${eventCid || 'N/A'}`
+        message: `Signal Received: ${eventType} - CID: ${eventCid || 'N/A'} | Processing: ${this.processingCids.size + 1} items`
       });
       
       console.log(`📡 Realtime Signal: ${eventType} - CID: ${eventCid || 'N/A'}`);
@@ -143,7 +145,7 @@ export class RealtimeEngine {
       
       // 🚀 OPTIMISTIC INJECTION: Instant data injection
       console.log(`💉 [OPTIMISTIC INJECTION] Injecting ${eventType} data`);
-      await this.injectCallback(data, eventType);
+      await this.injectCallback(eventType, data);
       
       // 🔄 HYDRATION TRIGGER: Ensure full data consistency
       console.log(`🔄 [HYDRATION TRIGGER] Full sync after ${eventType}`);
@@ -156,7 +158,8 @@ export class RealtimeEngine {
       setTimeout(() => {
         if (eventCid) this.processingCids.delete(eventCid);
         if (eventId) this.processingIds.delete(String(eventId));
-      }, 5000); // 5 second cleanup window
+        console.log(`🧹 [IDEMPOTENCY CLEANUP] Removed CID: ${eventCid}, ID: ${eventId} | Remaining: ${this.processingCids.size} CIDs, ${this.processingIds.size} IDs`);
+      }, 15000); // 15 second cleanup window for better sync loop protection
       
     } catch (error) {
       console.error(`❌ Realtime Event Error (${eventType}):`, error);
