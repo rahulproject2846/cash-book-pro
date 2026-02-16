@@ -80,7 +80,15 @@ const BooksSection = memo(({
     useEffect(() => {
         const handleRemoteDelete = (e: any) => {
             const deletedIdStr = String(e.detail.bookId);
-            console.log(`🚨 [SMART EJECTION] Received remote delete for book: ${deletedIdStr}`);
+            console.log(`� Ejection Signal Received for:`, deletedIdStr);
+            console.log(`🔔 Current viewing:`, {
+                currentBook: currentBook ? {
+                    _id: currentBook._id,
+                    localId: currentBook.localId,
+                    name: currentBook.name
+                } : null,
+                currentBookExists: !!currentBook
+            });
             
             // Check if user is currently viewing THIS deleted book (Type-Safe)
             if (currentBook && (
@@ -89,9 +97,26 @@ const BooksSection = memo(({
             )) {
                 console.log(`🚨 [SMART EJECTION] User was viewing deleted book, ejecting to dashboard`);
                 
-                // Show toast notification and immediately eject
-                toast.error('⚠️ This ledger was deleted remotely.');
-                setCurrentBook(null);
+                // Show modal before ejecting to dashboard
+                console.log(`🚨 [SMART EJECTION] Opening modal with data:`, {
+                    targetName: 'this ledger',
+                    title: 'Ledger Deleted',
+                    desc: 'This ledger has been deleted remotely.'
+                });
+                openModal('deleteConfirm', { 
+                    targetName: 'this ledger',
+                    title: 'Ledger Deleted', 
+                    desc: 'This ledger has been deleted remotely.', 
+                    onConfirm: () => setCurrentBook(null) 
+                });
+            } else {
+                console.log(`🚨 [SMART EJECTION] ID mismatch - no action needed. Comparison:`, {
+                    deletedIdStr,
+                    currentBookId: currentBook?._id,
+                    currentBookLocalId: currentBook?.localId,
+                    currentBookIdStr: currentBook ? String(currentBook._id) : 'null',
+                    currentBookLocalIdStr: currentBook ? String(currentBook.localId) : 'null'
+                });
             }
         };
         

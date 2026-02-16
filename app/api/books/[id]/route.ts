@@ -12,6 +12,49 @@ const pusher = new Pusher({
   useTLS: true
 });
 
+/**
+ * GET: Fetch single book with all fields (including images)
+ * Returns complete book object for focused hydration
+ */
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json({ message: "Book ID is required" }, { status: 400 });
+    }
+
+    await connectDB();
+
+    // 🔥 FOCUSED HYDRATION: Fetch single book with ALL fields (including image)
+    const book = await Book.findById(id).lean();
+
+    if (!book) {
+      return NextResponse.json({ message: "Book not found" }, { status: 404 });
+    }
+
+    console.log(`🎯 [SINGLE BOOK] Fetched book for focused hydration:`, {
+      id: book._id,
+      cid: book.cid,
+      name: book.name,
+      hasImage: !!book.image
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: book,
+      timestamp: Date.now()
+    }, { status: 200 });
+
+  } catch (error: any) {
+    console.error("❌ [SINGLE BOOK] Fetch failed:", error);
+    return NextResponse.json({ 
+      message: "Failed to fetch book",
+      error: error.message 
+    }, { status: 500 });
+  }
+}
+
 // PUT: লেজারের নাম, বিবরণ, টাইপ, ফোন বা ইমেজ আপডেট করা
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -39,7 +82,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     // 🔍 DEBUG: Check ID mismatch
-    console.log('🔍 [API-BOOKS-PUT] ID Match Check - URL ID:', JSON.stringify(id), 'DB _id:', JSON.stringify(existingBook._id), 'Match:', id === existingBook._id);
+    console.log('🔍 [API-BOOKS-PUT] ID Match Check - URL ID:', JSON.stringify(id), 'DB _id:', JSON.stringify(existingBook._id), 'Match:', String(id) === String(existingBook._id));
     
     // ৩. আপডেটেড পেলোড তৈরি (নতুন ফিল্ড সহ)
     const updatePayload: any = {};

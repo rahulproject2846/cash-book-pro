@@ -11,6 +11,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { useGuidance } from '@/hooks/useGuidance';
 import { cn } from '@/lib/utils/helpers';
+import SyncProgressBar from '@/components/UI/SyncProgressBar'; // Global Progress Bar
 
 // --- Types ---
 interface DashboardLayoutProps {
@@ -226,17 +227,23 @@ export const DashboardLayout = (props: any) => {
     if (!mounted) return null;
 
     return (
-        <div className="flex min-h-screen bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-300 overflow-x-hidden">
+        <div className={cn("min-h-screen bg-[var(--bg-app)]", prefs.turboMode && "turbo-mode")}>
             <Sidebar 
-                active={activeSection} setActive={setActiveSection} onLogout={onLogout} 
-                collapsed={collapsed} setCollapsed={setCollapsed} onResetBook={onBack}
+                active={activeSection} 
+                setActive={setActiveSection} 
+                onLogout={onLogout} 
+                collapsed={collapsed} 
+                setCollapsed={setCollapsed}
                 isCompact={prefs.compactMode}
+                onResetBook={onBack}
             />
-            
             <main className={cn(
-                "flex-1 transition-all duration-300 ease-out w-full relative z-[10]",
+                "flex-1 transition-all duration-300 ease-out w-full relative z-[10] overflow-x-hidden",
                 collapsed ? "md:ml-[90px]" : "md:ml-[280px]"
             )}>
+                {/* 🔥 PROGRESS BAR - Inside main content wrapper */}
+                <SyncProgressBar />
+                
                 <DynamicHeader {...props} collapsed={collapsed} theme={theme} setTheme={setTheme} />
 
                 <div className={cn(

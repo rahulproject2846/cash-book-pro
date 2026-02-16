@@ -64,6 +64,24 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     normalized.userId = sanitizeId(normalized.userId);
     normalized.bookId = sanitizeId(normalized.bookId);
 
+    // 🔍 RECORD TYPE DETECTION: Books have name field, Entries have title field
+    const isBook = !!normalized.name; // Books use name, Entries use title
+
+    // 🔴 STRICT REJECTION: Only reject Entries with missing bookId
+    if (!isBook && (!normalized.bookId || normalized.bookId === 'undefined' || normalized.bookId === '')) {
+        console.error(`🚫 [STRICT REJECT] Dropping invalid entry CID: ${normalized.cid} - Missing bookId`);
+        return null; // 🚨 REJECT INSTEAD OF FALLBACK
+    }
+
+    // Generate required fields if missing
+    if (!normalized.vKey) {
+        normalized.vKey = 1; // Start with incremental vKey = 1
+    }
+    
+    if (!normalized.checksum) {
+        normalized.checksum = `checksum_${normalized.cid}_${Date.now()}`;
+    }
+
     // ৩. লেগাসি রেসকিউ (CID & UserID)
     if (!normalized.cid || String(normalized.cid).trim() === '') {
         normalized.cid = `cid_legacy_${normalized._id}`;

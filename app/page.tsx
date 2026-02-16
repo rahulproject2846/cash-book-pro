@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 // --- Core Logic & Storage ---
 import { db } from '@/lib/offlineDB';
 import { orchestrator } from '@/lib/vault/SyncOrchestrator';
+import { identityManager } from '@/lib/vault/core/IdentityManager'; // 🔥 Unified Identity Management
 import AuthScreen from '@/components/Auth/AuthScreen';
 import { cn } from '@/lib/utils/helpers';
 
@@ -61,26 +62,33 @@ export default function CashBookApp() {
   // --- ৩. লাইফসাইকেল কন্ট্রোল (The Initialization Protocol) ---
   useEffect(() => {
     const initApp = async () => {
-        const saved = localStorage.getItem('cashbookUser');
-        if (saved) {
-            const user = JSON.parse(saved);
-            setCurrentUser(user);
-            setIsLoggedIn(true);
-            
-            // ১. ডেল্টা হাইড্রেশন শুরু করো
-            if (!isHydrated) {
-                // 🔧 USER ID PRIMING: Set ID before operations
-                orchestrator.setUserId(user._id);
-                setIsHydrated(true); // Show UI immediately
-                // Run hydrate in background (non-blocking)
-                orchestrator.hydrate(user._id).catch(err => 
-                    console.warn('Background hydration failed:', err)
-                );
-            }
+        const userId = identityManager.getUserId();
+        if (userId) {
+            // Get user data from localStorage for now (IdentityManager handles persistence)
+            const saved = localStorage.getItem('cashbookUser');
+            if (saved) {
+                const user = JSON.parse(saved);
+                setCurrentUser(user);
+                setIsLoggedIn(true);
+                
+                // 🔐 IDENTITY LOCK: Ensure IdentityManager is set (unified flow)
+                identityManager.setIdentity(user);
+                
+                // ১. ডেল্টা হাইড্রেশন শুরু করো
+                if (!isHydrated) {
+                    // 🔧 USER ID PRIMING: Set ID before operations
+                    orchestrator.setUserId(user._id);
+                    setIsHydrated(true); // Show UI immediately
+                    // Run hydrate in background (non-blocking)
+                    orchestrator.hydrate(user._id).catch(err => 
+                        console.warn('Background hydration failed:', err)
+                    );
+                }
 
-            // ২. রিয়েল-টাইম পুশার সিগন্যাল লিসেনার চালু করো
-            if (pusher) {
-                orchestrator.initPusher(pusher, user._id);
+                // ২. রিয়েল-টাইম পুশার সিগন্যাল লিসেনার চালু করো
+                if (pusher) {
+                    orchestrator.initPusher(pusher, user._id);
+                }
             }
         }
         setIsLoading(false); 

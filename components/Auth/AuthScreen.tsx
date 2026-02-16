@@ -10,6 +10,7 @@ import { LoginView } from './views/LoginView';
 import { RegisterView } from './views/RegisterView';
 import { OtpView } from './views/OtpView';
 import { ForgotPassView } from './views/ForgotPassView';
+import { identityManager } from '@/lib/vault/core/IdentityManager';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: any) => void;
@@ -23,6 +24,17 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [direction, setDirection] = useState(0);
   const [isVerifying, setIsVerifying] = useState(false);
   const [registerData, setRegisterData] = useState({ username: '', email: '', password: '' });
+
+  // 🔐 IDENTITY WAKE-UP: Handle login success with immediate identity update
+  const handleLoginSuccess = (user: any) => {
+    // 🚨 WAKE UP CALL: Immediately update IdentityManager with full user object
+    identityManager.setIdentity(user);
+    
+    // Then call parent callback (async to avoid blocking navigation)
+    setTimeout(() => {
+      onLoginSuccess(user);
+    }, 0);
+  };
 
   const navigateTo = (nextView: AuthView) => {
     setDirection(nextView === 'login' ? -1 : 1);

@@ -29,6 +29,10 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
     const { openModal } = useModal();
     const [pendingResolutions, setPendingResolutions] = useState<Record<string, PendingResolution>>({});
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    
+    // 📄 PAGINATION STATE
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 7;
 
     // Query all conflicted books and entries
     const conflictedBooks = useLiveQuery(
@@ -68,6 +72,20 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
             return timeB - timeA;
         });
     }, [conflictedBooks, conflictedEntries]);
+    
+    // 📄 PAGINATION LOGIC
+    const totalPages = Math.ceil(allConflicts.length / ITEMS_PER_PAGE);
+    const paginatedConflicts = allConflicts.slice(
+        (currentPage - 1) * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE
+    );
+    
+    // 🔄 RESET PAGE WHEN CONFLICT COUNT CHANGES
+    useEffect(() => {
+        if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(1);
+        }
+    }, [totalPages, currentPage]);
 
     // Timer countdown effect
     useEffect(() => {
@@ -133,13 +151,13 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
         try {
             if (resolution === 'local') {
                 // Keep My Version: Update Dexie record with conflicted: 0, synced: 0, serverData: null
-                // FORCE vKey: Set vKey = Date.now() (timestamp) instead of just +1. This guarantees it's always 'newer' than server version.
+                // FORCE vKey: Increment by 1 instead of timestamp for proper versioning
                 if (item.type === 'book') {
                     const updateData = {
                         conflicted: 0,
                         synced: 0,
                         serverData: null,
-                        vKey: Date.now(), // 🚨 DICTATOR MODE: Force timestamp to guarantee newer version
+                        vKey: (item.vKey || 0) + 1, // � INCREMENTAL: +1 instead of Date.now()
                         updatedAt: Date.now()
                     };
                     
@@ -158,7 +176,7 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
                         conflicted: 0,
                         synced: 0,
                         serverData: null,
-                        vKey: Date.now(), // 🚨 DICTATOR MODE: Force timestamp to guarantee newer version
+                        vKey: (item.vKey || 0) + 1, // � INCREMENTAL: +1 instead of Date.now()
                         updatedAt: Date.now()
                     };
                     
@@ -200,7 +218,19 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
                 await orchestrator.triggerSync(currentUser._id);
             }
             
-            // 🛡️ SAFETY NET: Log conflict resolution to audit trail
+            // 🚨 SERVER FEEDBACK LOOP: Notify other clients of resolution
+            // Use orchestrator to broadcast resolution instead of direct Pusher
+            try {
+                // Broadcast resolution event through existing realtime system
+                if (orchestrator && typeof orchestrator.notifyUI === 'function') {
+                    orchestrator.notifyUI();
+                    console.log('🚨 [RESOLUTION BROADCAST] Conflict resolution broadcasted to other clients');
+                }
+            } catch (broadcastError) {
+                console.warn('🚨 [RESOLUTION BROADCAST] Failed to notify other clients:', broadcastError);
+            }
+            
+            // ��️ SAFETY NET: Log conflict resolution to audit trail
             await db.auditLogs.add({
                 cid: item.cid,
                 type: item.type,
@@ -280,7 +310,7 @@ return (
 
             {/* Conflict List */}
             <div className="space-y-3 max-h-100 overflow-y-auto pr-2 custom-scrollbar">
-                {allConflicts.map((item, index) => {
+                {paginatedConflicts.map((item, index) => {
                     const pendingKey = `${item.type}:${item.cid}`;
                     const isPending = pendingKey in pendingResolutions;
                     const pendingResolution = pendingResolutions[pendingKey];
@@ -362,6 +392,31 @@ return (
                     );
                 })}
             </div>
+            
+            {/* 📄 PAGINATION CONTROLS */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 mt-6">
+                    <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 bg-white/10 border border-white/20 text-white rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Previous
+                    </button>
+                    
+                    <span className="text-white/60 text-[10px] font-bold">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    
+                    <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-4 py-2 bg-white/10 border border-white/20 text-white rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

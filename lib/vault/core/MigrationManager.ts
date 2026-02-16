@@ -1,5 +1,6 @@
 // src/lib/vault/core/MigrationManager.ts
 import { db } from '@/lib/offlineDB';
+import { identityManager } from './IdentityManager';
 
 /**
  * 🏗️ DATABASE MIGRATION SYSTEM (V3.0 - Solid)
@@ -111,13 +112,8 @@ export class MigrationManager {
       let bookHealCount = 0;
       let entryHealCount = 0;
       
-      // Get current user ID from localStorage or use default
-      const currentUserId = typeof window !== 'undefined' 
-        ? (() => {
-            const saved = localStorage.getItem('cashbookUser');
-            return saved ? JSON.parse(saved)._id : 'user-default';
-          })()
-        : 'user-default';
+      // Get current user ID from IdentityManager with graceful null handling
+      const currentUserId = identityManager.getUserId();
       
       console.log(`🏗️ [MIGRATION V4] Using currentUserId: ${currentUserId}`);
       
@@ -213,13 +209,8 @@ export class MigrationManager {
     console.log('🚨 [MIGRATION V5] Emergency healing all records...');
     
     try {
-      // Get current user ID from localStorage or use default
-      const currentUserId = typeof window !== 'undefined' 
-        ? (() => {
-            const saved = localStorage.getItem('cashbookUser');
-            return saved ? JSON.parse(saved)._id : 'user-default';
-          })()
-        : 'user-default';
+      // Get current user ID from IdentityManager with graceful null handling
+      const currentUserId = identityManager.getUserId();
       
       console.log(`🚨 [MIGRATION V5] Using currentUserId: ${currentUserId}`);
       
@@ -250,7 +241,7 @@ export class MigrationManager {
         
         // Force heal userId
         if (book.userId === 'admin' || !book.userId) {
-          book.userId = currentUserId;
+          book.userId = currentUserId || 'user-default';
           needsUpdate = true;
         }
         
@@ -289,8 +280,28 @@ export class MigrationManager {
         
         // Force heal userId
         if (entry.userId === 'admin' || !entry.userId) {
-          entry.userId = currentUserId;
+          entry.userId = currentUserId || 'user-default';
           needsUpdate = true;
+        }
+        
+        // 🔥 ORPHANED ENTRY RECOVERY: Assign bookId to legacy entries
+        if (!entry.bookId || entry.bookId === 'undefined' || entry.bookId === '') {
+          // Get first available book for this user
+          const firstBook = db.books.where('userId').equals(currentUserId || 'user-default').first();
+          if (firstBook) {
+            entry.bookId = firstBook._id || firstBook.cid;
+            needsUpdate = true;
+            console.log('🔧 [ORPHAN RECOVERY] Assigned book to entry:', {
+              entryCid: entry.cid,
+              assignedBookId: entry.bookId,
+              bookName: firstBook.name
+            });
+          } else {
+            console.warn('⚠️ [ORPHAN RECOVERY] No books found for user, cannot assign bookId:', {
+              entryCid: entry.cid,
+              userId: currentUserId
+            });
+          }
         }
         
         if (needsUpdate) {
@@ -328,11 +339,12 @@ export class MigrationManager {
     try {
       const currentVersion = this.getCurrentVersion();
       
-      // যদি ভার্সন আপ-টু-ডেট থাকে, তবে কিছুই করার দরকার নেই
+      // 🔥 MIGRATION PERSISTENCE: Skip if already at current version
       if (currentVersion >= CURRENT_DB_VERSION) {
-        return; 
+        console.log(`✅ [MIGRATION] Already at version ${CURRENT_DB_VERSION}, skipping migrations`);
+        return;
       }
-
+      
       console.group(`🏗️ [MIGRATION] Updating from v${currentVersion} to v${CURRENT_DB_VERSION}`);
 
       // ১. মাইগ্রেশন V1: মালিকানা ফিক্স (Ownership Fix)

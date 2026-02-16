@@ -40,17 +40,40 @@ export class RealtimeCommandHandler {
   private cleanPayload(payload: any): any {
     if (!payload) return payload;
 
-    // 🗑️ DIRTY _ID CLEANUP: Remove empty/null _id to let Dexie handle localId
+    // � DEBUG: Log payload structure for debugging
+    console.log(`🧹 [SANITIZATION DEBUG] Incoming payload structure:`, {
+      _id: payload._id,
+      name: payload.name,
+      cid: payload.cid,
+      vKey: payload.vKey,
+      isDeleted: payload.isDeleted,
+      keys: Object.keys(payload)
+    });
+
+    // �🗑️ DIRTY _ID CLEANUP: Remove empty/null _id to let Dexie handle localId
     if (payload._id === "" || payload._id === null || payload._id === undefined) {
       const { _id, ...cleanPayload } = payload;
       console.log(`🧹 [SANITIZATION] Removed dirty _id: ${_id} from payload`);
-      console.log(`🧹 [SANITIZATION] Preserved name: "${cleanPayload.name}"`);
+      console.log(`🧹 [SANITIZATION] Preserved name: "${cleanPayload.name || 'MISSING'}"`);
+      
+      // 🔍 CRITICAL FIX: Ensure name field exists
+      if (!cleanPayload.name) {
+        console.warn(`⚠️ [SANITIZATION] Missing name field in payload:`, cleanPayload);
+        cleanPayload.name = `Unnamed Entry (${cleanPayload.cid || 'unknown'})`;
+      }
+      
       return cleanPayload;
     }
 
     // 🔢 TYPE SAFETY: Ensure isDeleted is a number
     if (payload.isDeleted !== undefined && payload.isDeleted !== null) {
       payload.isDeleted = Number(payload.isDeleted || 0);
+    }
+
+    // 🔍 CRITICAL FIX: Ensure name field exists
+    if (!payload.name) {
+      console.warn(`⚠️ [SANITIZATION] Missing name field in payload:`, payload);
+      payload.name = `Unnamed Entry (${payload.cid || 'unknown'})`;
     }
 
     // 🔄 SYNC STATE: Ensure proper sync flags
@@ -128,13 +151,16 @@ export class RealtimeCommandHandler {
         console.log(` [BOOK CREATED] Smart merge CID: ${data.cid} | Status: New | Name: "${data.name}"`);
         this.notifyUI();
       } else {
-        // Case 2: Existing Record - Update if newer
-        if (data.vKey > existingBook.vKey) {
+        // Case 2: Existing Record - Update if newer or on fresh login
+        const isFreshLogin = !existingBook.updatedAt || (Date.now() - existingBook.updatedAt.getTime()) < 5000;
+        const shouldUpdate = data.vKey > existingBook.vKey || isFreshLogin;
+        
+        if (shouldUpdate) {
           await db.books.update(existingBook.localId!, { ...data, updatedAt: ts });
-          console.log(` [BOOK CREATED] Smart merge CID: ${data.cid} | Status: Updated | Name: "${data.name}"`);
+          console.log(` [BOOK CREATED] Smart merge CID: ${data.cid} | Status: Updated | Reason: ${isFreshLogin ? 'Fresh Login' : 'Newer vKey'} | Name: "${data.name}"`);
           this.notifyUI();
         } else {
-          console.log(` [BOOK CREATED] Smart merge CID: ${data.cid} | Status: Skipped (vKey not newer) | Name: "${data.name}"`);
+          console.log(` [BOOK CREATED] Smart merge CID: ${data.cid} | Status: Skipped (vKey not newer) | Name: "${data.name}" | Local vKey: ${existingBook.vKey} | Remote vKey: ${data.vKey}`);
         }
       }
     });
@@ -246,6 +272,28 @@ export class RealtimeCommandHandler {
       await db.books.where('cid').equals(payload.cid).first() : null;
 
     if (existingBook) {
+      // 🚨 SMART EJECTION: Capture book info BEFORE deletion for debugging
+      console.log(`🚨 [SMART EJECTION] About to delete book:`, {
+        _id: existingBook._id,
+        localId: existingBook.localId,
+        name: existingBook.name,
+        cid: existingBook.cid
+      });
+      
+      // � SMART EJECTION: Dispatch event BEFORE deletion to prevent race condition
+      if (typeof window !== 'undefined') {
+        const bookIdForEvent = payload._id || payload.bookId || existingBook._id;
+        console.log(`🚨 [SMART EJECTION] Dispatching VAULT_BOOK_DELETED with bookId:`, bookIdForEvent);
+        
+        window.dispatchEvent(new CustomEvent('VAULT_BOOK_DELETED', { 
+          detail: { bookId: bookIdForEvent } 
+        }));
+        console.log(`🚨 [SMART EJECTION] Dispatched VAULT_BOOK_DELETED for book: ${bookIdForEvent}`);
+      }
+      
+      // ⏱️ SMALL DELAY: Give React rendering cycle time to process the event
+      await new Promise(r => setTimeout(r, 50));
+      
       // 🗑️ CASCADE DELETE: Remove book and all associated entries
       console.log(`🗑️ [BOOK DELETED] Removing deleted book and all entries for CID: ${payload.cid}`);
       
@@ -256,14 +304,6 @@ export class RealtimeCommandHandler {
       await db.books.delete(existingBook.localId!);
       
       console.log(`🗑️ [BOOK DELETED] Cascade complete: Book ${payload.cid} and all entries removed`);
-      
-      // 🚨 SMART EJECTION: Dispatch event for UX handling
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('VAULT_BOOK_DELETED', { 
-          detail: { bookId: payload._id || payload.bookId || existingBook._id } 
-        }));
-        console.log(`🚨 [SMART EJECTION] Dispatched VAULT_BOOK_DELETED for book: ${payload._id || payload.bookId || existingBook._id}`);
-      }
       
       this.notifyUI();
     } else {
@@ -293,13 +333,16 @@ export class RealtimeCommandHandler {
         console.log(`📡 [ENTRY CREATED] Smart merge CID: ${data.cid} | Status: New`);
         this.notifyUI();
       } else {
-        // Case 2: Existing Record - Update if newer
-        if (data.vKey > existing.vKey) {
+        // Case 2: Existing Record - Update if newer or on fresh login
+        const isFreshLogin = !existing.updatedAt || (Date.now() - existing.updatedAt.getTime()) < 5000;
+        const shouldUpdate = data.vKey > existing.vKey || isFreshLogin;
+        
+        if (shouldUpdate) {
           await db.entries.update(existing.localId!, { ...data, updatedAt: ts });
-          console.log(`📡 [ENTRY CREATED] Smart merge CID: ${data.cid} | Status: Updated`);
+          console.log(`📡 [ENTRY CREATED] Smart merge CID: ${data.cid} | Status: Updated | Reason: ${isFreshLogin ? 'Fresh Login' : 'Newer vKey'}`);
           this.notifyUI();
         } else {
-          console.log(`📡 [ENTRY CREATED] Smart merge CID: ${data.cid} | Status: Skipped (vKey not newer)`);
+          console.log(`📡 [ENTRY CREATED] Smart merge CID: ${data.cid} | Status: Skipped (vKey not newer) | Local vKey: ${existing.vKey} | Remote vKey: ${data.vKey}`);
         }
       }
     });

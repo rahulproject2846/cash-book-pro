@@ -6,6 +6,7 @@ import { RealtimeCommandHandler } from './core/RealtimeCommandHandler';
 import { normalizeRecord, normalizeTimestamp } from './core/VaultUtils';
 import { migrationManager } from './core/MigrationManager';
 import { telemetry } from './Telemetry';
+import { identityManager } from './core/IdentityManager';
 
 /**
  * VAULT PRO: MASTER SYNC ORCHESTRATOR (V35.0)
@@ -16,11 +17,31 @@ import { telemetry } from './Telemetry';
 
 class SyncOrchestrator {
   private isSyncing = false;
+  private isHydrating = false; // 🔥 EMERGENCY: Hydration guard
   private channel = new BroadcastChannel('vault_global_sync');
   private readonly lastSyncKey = 'cashbook_lastSync';
-  private realtimeEngine: RealtimeEngine | null = null;
-  private realtimeCommandHandler: RealtimeCommandHandler | null = null;
-  private userId: string | null = null;
+  
+  // 🚀 MASS INJECTION MODE: Skip hydration during login data flood
+  private isMassInjectionMode = false;
+  private massInjectionTimeout: NodeJS.Timeout | null = null;
+  private recentEventCount = 0;
+  private eventCountResetTimeout: NodeJS.Timeout | null = null;
+
+  // 🎯 CONCURRENCY CONTROL: Prevent duplicate fetches during signal storms
+  private activeFetches = new Map<string, Promise<any>>();
+  private integrityCheckInterval: any = null; // 🔥 INTEGRITY: Scheduling
+  private isCheckingIntegrity = false; // 🔥 INTEGRITY: Prevent overlapping checks
+  private progressTimeout: any = null; // Progress event debounce timeout
+  
+  // 🔥 CORE PROPERTIES: Required for sync operations
+  private userId: string = '';
+  private realtimeEngine: any = null;
+  private realtimeCommandHandler: any = null;
+  
+  // Constants - 🔥 EMERGENCY: Reduced batch sizes
+  private readonly BOOKS_BATCH_SIZE = 10; // Reduced from 50
+  private readonly ENTRIES_BATCH_SIZE = 20; // Reduced from 100
+  private readonly INTEGRITY_CHECK_INTERVAL = 2 * 60 * 1000; // 2 minutes
   
   // Integrated Security & Shadow Management
   private pendingDeletions = new Map<string, NodeJS.Timeout>();
@@ -30,6 +51,17 @@ class SyncOrchestrator {
   constructor() {
     this.init();
   }
+
+  // --- ১. প্রগ্রেস ইভেন্ট ডিসপ্যাচার (Debounced) ---
+  private progressEventDebounced = (detail: any) => {
+    if (typeof window !== 'undefined') {
+      // Debounce progress events to avoid UI flickering
+      clearTimeout(this.progressTimeout);
+      this.progressTimeout = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('sync-progress', { detail }));
+      }, 100); // 100ms debounce
+    }
+  };
 
   /**
    * 🚀 INIT: Async initialization with migrations
@@ -41,18 +73,38 @@ class SyncOrchestrator {
         if (e.data.type === 'FORCE_REFRESH') this.notifyUI();
       };
       
-      // Auto-load userId from storage on init
-      const saved = localStorage.getItem('cashbookUser');
-      if (saved) this.userId = JSON.parse(saved)._id;
+      // 🔥 REACTIVE IDENTITY LISTENER: Handle user switches (Login/Logout)
+    identityManager.subscribe(async (uid) => {
+      console.log('🔐 [SYNC ORCHESTRATOR] Identity changed, initializing sequence');
       
-      // 🔧 ONE-TIME DATA REPAIR: Fix corrupted userId/isDeleted fields
-      this.repairCorruptedData();
+      if (!uid) {
+        this.userId = '';
+        console.log('🔐 [SYNC ORCHESTRATOR] User logged out, stopping sync');
+        return;
+      }
       
-      // 🔥 GLOBAL DATABASE REPAIR: Force server data to synced: 1
+      this.userId = uid;
+
+      // ১. আগে ইন্টিগ্রিটি চেক চালিয়ে সার্ভার ক্লিন করা (The Janitor)
+      console.log('🏁 [SYNC] Step A: Running Integrity Check & Server Cleanup');
+      await this.performIntegrityCheck(uid);
+
+      // ২. লোকাল রিপেয়ার (Data Repair)
+      console.log('🏁 [SYNC] Step B: Running Local Database Repair');
       this.globalDatabaseRepair();
+      this.repairCorruptedData();
+
+      // ৩. সবশেষে হাইড্রেট করা (Data Fetch)
+      if (!this.isHydrating) {
+        console.log('🏁 [SYNC] Step C: Starting Final Hydration');
+        await this.hydrate(uid, true);
+      }
+
+      // ৪. সিডিউল শুরু করা
+      this.scheduleIntegrityChecks();
       
-      // 🏗️ DATABASE MIGRATION: Run schema migrations before any operations
-      await migrationManager.runMigrations(this.userId!);
+      console.log('🏁 [SYNC] Startup Sequence Complete');
+    });
     }
   }
 
@@ -104,10 +156,12 @@ class SyncOrchestrator {
   }
 
   /**
-   * � SET USER ID: Prime orchestrator with correct ID before operations
+   * 🔐 SET USER ID: Prime orchestrator with correct ID and update global identity
    */
   setUserId(userId: string) {
     this.userId = String(userId);
+    // Update global IdentityManager to ensure consistency across all systems
+    identityManager.setUserId(userId);
     // Trigger repair after userId is properly set
     if (typeof window !== 'undefined') {
       this.repairCorruptedData();
@@ -199,6 +253,12 @@ class SyncOrchestrator {
           needsUpdate = true;
         }
         
+        // RULE: Force isDeleted to 0 if undefined/null
+        if (entry.isDeleted === undefined || entry.isDeleted === null) {
+          updates.isDeleted = Number(entry.isDeleted || 0);
+          needsUpdate = true;
+        }
+        
         if (needsUpdate) {
           await db.entries.update(entry.localId!, updates);
           entriesForced++;
@@ -225,6 +285,12 @@ class SyncOrchestrator {
           needsUpdate = true;
         }
         
+        // RULE: Force isDeleted to 0 if undefined/null
+        if (book.isDeleted === undefined || book.isDeleted === null) {
+          updates.isDeleted = Number(book.isDeleted || 0);
+          needsUpdate = true;
+        }
+        
         if (needsUpdate) {
           await db.books.update(book.localId!, updates);
           booksForced++;
@@ -242,7 +308,7 @@ class SyncOrchestrator {
     }
   }
 
-  private notifyUI() {
+  public notifyUI() {
     window.dispatchEvent(new Event('vault-updated'));
   }
 
@@ -615,253 +681,322 @@ class SyncOrchestrator {
     }
   }
 
+  // গতবার কখন সিঙ্ক হয়েছিল সেই সময়টা বের করা
+  private getLastSyncTimestamp(): number {
+    if (typeof window === 'undefined') return 0;
+    const ts = localStorage.getItem('vault_last_sync');
+    return ts ? parseInt(ts, 10) : 0;
+  }
+
+  // সিঙ্ক শেষ হওয়ার পর বর্তমান সময়টা সেভ করে রাখা
+  private updateLastSyncTimestamp(): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('vault_last_sync', Date.now().toString());
+  }
   /**
-   * 🌊 HYDRATE: Pull fresh data from server
+   * 🎯 FOCUSED HYDRATION: Fetch single item for signal-based sync
+   * Fetches complete record with all fields (including images/memos)
    */
-  async hydrate(userId: string, forceFullSync = false) {
-    if (!navigator.onLine || !userId) return;
-    const uid = String(userId);
-    this.userId = uid; // Update internal state
-
-    if (forceFullSync) localStorage.removeItem(this.lastSyncKey);
-    const lastSync = localStorage.getItem(this.lastSyncKey) || '0';
-
+  async hydrateSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<void> {
     try {
-      const [bRes, eRes] = await Promise.all([
-        fetch(`/api/books?userId=${uid}&since=${lastSync}`),
-        fetch(`/api/entries/all?userId=${uid}&since=${lastSync}`)
-      ]);
-
-      // --- ১. বই (Books) প্রসেসিং ---
-      if (bRes.ok) {
-        const bData = await bRes.json();
-        const serverBooks = bData.books || bData.data || [];
-        for (const sb of serverBooks) {
-          try {
-            // 🚨 CRITICAL FIX: Explicitly mark server data as synced: 1 and isDeleted: 0 for legacy books
-            const serverBookWithSyncFlag = { 
-              ...sb, 
-              synced: 1, 
-              conflicted: 0,
-              isDeleted: sb.isDeleted !== undefined ? sb.isDeleted : 0 // Force isDeleted: 0 for legacy books
-            };
-            const normalizedBook = normalizeRecord(serverBookWithSyncFlag, uid);
-            if (!normalizedBook) continue;
-
-            // 🔕 DELETE AUTHORITY: Handle server-deleted books
-            if (normalizedBook.isDeleted === 1) {
-              const cid = normalizedBook.cid;
-              const existing = await db.books.where('cid').equals(cid).first();
-              
-              if (existing) {
-                // 🗑️ CASCADE DELETE: Remove book and all associated entries
-                console.log(`🗑️ [DELETE AUTHORITY] Removing deleted book and all entries for CID: ${cid}`);
-                
-                // Delete all entries associated with this book
-                await db.entries.where('bookId').equals(existing._id).delete();
-                
-                // Hard delete the book from Dexie
-                await db.books.delete(existing.localId!);
-                
-                console.log(`🗑️ [DELETE AUTHORITY] Cascade complete: Book ${cid} and all entries removed`);
-                continue;
-              }
-            }
-
-            const cid = normalizedBook.cid;
-            const existing = await db.books.where('cid').equals(cid).first();
-            
-            // 🌊 [SMART HYDRATION] Giant Company Standard Logic
-            if (!existing) {
-              // Case 1: New Record - Save as synced
-              await db.books.put(normalizedBook);
-              console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: New`);
-            } else if (existing.isDeleted === 1 && normalizedBook.isDeleted === 0) {
-              // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
-              if (normalizedBook.vKey > existing.vKey) {
-                console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
-              } else {
-                console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
-                continue; // Block stale restoration
-              }
-            } else if (existing.synced === 0) {
-              // Case 2: Protect Unsynced Work - Check for silent auto-resolve first
-              if (existing.isDeleted === 1 && normalizedBook.isDeleted === 0) {
-                // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
-                if (normalizedBook.vKey > existing.vKey) {
-                  console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
-                } else {
-                  console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
-                  continue; // Block stale restoration
-                }
-              } else {
-                // 🔕 SILENT AUTO-RESOLVE: Compare business data fields before flagging conflict
-                const businessFieldsMatch = this.compareBusinessFields(existing, normalizedBook, 'BOOK');
-                
-                if (businessFieldsMatch) {
-                  // 🤫 SILENT RESOLVE: Data identical, just update vKey and sync status
-                  await db.books.update(existing.localId!, { 
-                    ...normalizedBook,
-                    vKey: normalizedBook.vKey, 
-                    synced: 1,
-                    conflicted: 0,
-                    conflictReason: '',
-                    serverData: null
-                  });
-                  console.log(`🤫 [SILENT RESOLVE] Auto-resolved identical data for CID: ${cid} | vKey: ${existing.vKey} → ${normalizedBook.vKey}`);
-                } else {
-                  // Mark as conflicted
-                  await db.books.update(existing.localId!, {
-                    conflicted: 1,
-                    conflictReason: 'DOWNLOAD_CONFLICT',
-                    serverData: normalizedBook
-                  });
-                  console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Conflicted`);
-                }
-              }
-            } else {
-              // Case 3: Update Synced Record - Check vKey
-              if (normalizedBook.vKey > existing.vKey) {
-                await db.books.update(existing.localId!, normalizedBook);
-                console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Updated`);
-              } else {
-                console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Skipped (vKey not newer)`);
-              }
-            }
-          } catch (err) {
-            if (err instanceof Error && err.name === 'ConstraintError') {
-              console.warn("Merge conflict for book CID:", sb.cid);
-            } else {
-              console.error("Book merge error:", err);
-            }
-          }
-        }
-      }
-
-      // --- ২. এন্ট্রি (Entries) প্রসেসিং ---
-      if (eRes.ok) {
-        const eData = await eRes.json();
-        const serverEntries = eData.entries || eData.data || [];
-        
-        if (serverEntries.length > 0) {
-          const sampleEntry = serverEntries[0];
-          console.log('🔍 [SYNC SAMPLE]', {
-            cid: sampleEntry.cid,
-            serverUserId: sampleEntry.userId,
-            localUid: uid
-          });
-        }
-        
-        for (const se of serverEntries) {
-          try {
-            // 🚨 CRITICAL FIX: Explicitly mark server data as synced: 1
-            const serverEntryWithSyncFlag = { ...se, synced: 1, conflicted: 0 };
-            const normalizedEntry = normalizeRecord(serverEntryWithSyncFlag, uid);
-            if (!normalizedEntry) continue;
-
-            const cid = normalizedEntry.cid;
-            const existing = await db.entries.where('cid').equals(cid).first();
-            
-            // 🌊 [SMART HYDRATION] Giant Company Standard Logic
-            if (!existing) {
-              // Case 1: New Record - Save as synced
-              await db.entries.put(normalizedEntry);
-              console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: New`);
-            } else if (existing.isDeleted === 1 && normalizedEntry.isDeleted === 0) {
-              // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
-              if (normalizedEntry.vKey > existing.vKey) {
-                console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
-              } else {
-                console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
-                continue; // Block stale restoration
-              }
-            } else if (existing.synced === 0) {
-              // Case 2: Protect Unsynced Work - Check for silent auto-resolve first
-              if (existing.isDeleted === 1 && normalizedEntry.isDeleted === 0) {
-                // 🌟 LEGITIMATE RESURRECTION: Allow restoration if server vKey is higher
-                if (normalizedEntry.vKey > existing.vKey) {
-                  console.log('🌟 [HYDRATE] Legitimate resurrection for CID:', cid);
-                } else {
-                  console.log('💀 [HYDRATE] Blocking stale resurrection for CID:', cid);
-                  continue; // Block stale restoration
-                }
-              } else {
-                // 🔕 SILENT AUTO-RESOLVE: Compare business data fields before flagging conflict
-                const businessFieldsMatch = this.compareBusinessFields(existing, normalizedEntry, 'ENTRY');
-                
-                if (businessFieldsMatch) {
-                  // 🤫 SILENT RESOLVE: Data identical, just update vKey and sync status
-                  await db.entries.update(existing.localId!, { 
-                    ...normalizedEntry,
-                    vKey: normalizedEntry.vKey, 
-                    synced: 1,
-                    conflicted: 0,
-                    conflictReason: '',
-                    serverData: null
-                  });
-                  console.log(`🤫 [SILENT RESOLVE] Auto-resolved identical data for CID: ${cid} | vKey: ${existing.vKey} → ${normalizedEntry.vKey}`);
-                } else {
-                  // Mark as conflicted
-                  await db.entries.update(existing.localId!, {
-                    conflicted: 1,
-                    conflictReason: 'DOWNLOAD_CONFLICT',
-                    serverData: normalizedEntry
-                  });
-                  console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Conflicted`);
-                }
-              }
-            } else {
-              // Case 3: Update Synced Record - Check vKey
-              if (normalizedEntry.vKey > existing.vKey) {
-                await db.entries.update(existing.localId!, normalizedEntry);
-                console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Updated`);
-              } else {
-                console.log(`🌊 [HYDRATE] Smart merging CID: ${cid} | Status: Skipped (vKey not newer)`);
-              }
-            }
-          } catch (err) {
-            if (err instanceof Error && err.name === 'ConstraintError') {
-              console.warn("Merge conflict for entry CID:", se.cid);
-            } else {
-              console.error("Entry merge error:", err);
-            }
-          }
-        }
-        
-        if (serverEntries.length > 0) {
-          const maxTs = Math.max(...serverEntries.map((e: any) => normalizeTimestamp(e.updatedAt)));
-          localStorage.setItem(this.lastSyncKey, maxTs.toString());
-        }
-        
-        console.log('🌊 [HYDRATE] Data Received:', serverEntries.length);
-      }
-      this.notifyUI();
-    } catch (err) {
-      if (err instanceof Error && (err.name === 'TypeError' || err.message.includes('ERR_CONNECTION_REFUSED'))) {
-        console.warn("Server unreachable, staying offline.");
+      console.log(`🎯 [FOCUSED HYDRATION] Starting ${type} hydration for ID: ${id}`);
+      
+      // 🚀 CONCURRENCY CONTROL: Check if already fetching
+      const fetchKey = `${type}_${id}`;
+      if (this.activeFetches.has(fetchKey)) {
+        console.log(`🚀 [FETCH DEDUP] Already fetching ${fetchKey}, waiting...`);
+        await this.activeFetches.get(fetchKey);
         return;
       }
-      console.error("Hydration Failed:", err);
+      
+      // 🚀 CONCURRENT FETCH: Create and store promise
+      const fetchPromise = this.fetchSingleItem(type, id);
+      this.activeFetches.set(fetchKey, fetchPromise);
+      
+      try {
+        await fetchPromise;
+        console.log(`🎯 [FOCUSED HYDRATION] Completed ${type} hydration for ID: ${id}`);
+      } finally {
+        this.activeFetches.delete(fetchKey);
+      }
+      
+    } catch (error) {
+      console.error(`🚨 [FOCUSED HYDRATION] Failed for ${type} ${id}:`, error);
+      // 🔄 FALLBACK: Trigger full sync on failure
+      await this.hydrate(this.userId!, true);
     }
   }
 
   /**
-   * 🚨 NUCLEAR RESET: Purge local data
+   * 🎯 SINGLE ITEM FETCHER: Internal method for fetching individual records
    */
-  async nuclearReset() {
-    await db.books.clear();
-    await db.entries.clear();
-    localStorage.removeItem(this.lastSyncKey);
-    this.notifyUI();
+  private async fetchSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<void> {
+    let record;
+    if (type === 'BOOK') {
+      const response = await fetch(`/api/books/${id}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch book: ${response.statusText}`);
+      }
+      const result = await response.json();
+      record = result.data;
+    } else if (type === 'ENTRY') {
+      const response = await fetch(`/api/entries/${id}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch entry: ${response.statusText}`);
+      }
+      const result = await response.json();
+      record = result.data;
+    } else {
+      throw new Error(`Unsupported type: ${type}`);
+    }
+
+    if (!record) {
+      console.warn(`⚠️ [FOCUSED HYDRATION] ${type} not found for ID: ${id}`);
+      return;
+    }
+
+    console.log(`🎯 [FOCUSED HYDRATION] Fetched ${type} with full data:`, {
+      id: record._id,
+      cid: record.cid,
+      hasHeavyData: type === 'BOOK' ? !!record.image : !!record.note
+    });
+
+    // 🚀 PASS THROUGH GATEKEEPER: Use existing Smart Merge logic
+    if (this.realtimeCommandHandler) {
+      const eventType = type === 'BOOK' ? 'BOOK_UPDATED' : 'ENTRY_UPDATED';
+      await this.realtimeCommandHandler.handleEvent(eventType, record);
+      this.notifyUI();
+    }
   }
 
   /**
-   * 🚨 LOGOUT: Complete cleanup
+   * 🌊 HYDRATE: The Gatekeeper (Area 2 & 3 Integration)
+   * সার্ভার থেকে ডাটা আনা এবং স্মার্টলি লোকাল ডোর (Dexie) দিয়ে ইনজেক্ট করা।
+   */
+  async hydrate(userId: string, forceFullSync = false) {
+    // 🔥 EMERGENCY: Hydration guard - prevent infinite loops
+    if (this.isHydrating) {
+      console.warn('🚫 [HYDRATION GUARD] Already hydrating, skipping...');
+      return;
+    }
+    
+    if (!navigator.onLine || !userId) return;
+    
+    this.isHydrating = true; // 🔥 EMERGENCY: Set guard flag
+    
+    try {
+      const uid = String(userId);
+      this.userId = uid;
+      const lastSync = forceFullSync ? 0 : this.getLastSyncTimestamp();
+      
+      // 🔥 EMERGENCY: Use reduced batch sizes from class constants
+      // No need to redefine here - use this.BOOKS_BATCH_SIZE and this.ENTRIES_BATCH_SIZE
+    
+      let booksPage = 0;
+      let entriesPage = 0;
+      let hasMoreBooks = true;
+      let hasMoreEntries = true;
+      
+      let totalBooksExpected = 0;
+      let totalEntriesExpected = 0;
+      let processedBooks = 0;
+      let processedEntries = 0;
+
+      console.log(`🚀 [GATEKEEPER] Starting Secure Hydration for UID: ${uid}`);
+
+      // --- ১. বই (Books) প্রসেসিং ---
+      do {
+        const booksResponse = await fetch(`/api/books?userId=${uid}&since=${lastSync}&limit=${this.BOOKS_BATCH_SIZE}&page=${booksPage}`);
+        const booksBatch = await booksResponse.json();
+        
+        if (!booksResponse.ok) break;
+        const batchBooks = booksBatch.data || [];
+        
+        if (booksPage === 0) {
+          totalBooksExpected = booksBatch.totalCount || batchBooks.length || 1;
+        }
+        
+        if (batchBooks.length < this.BOOKS_BATCH_SIZE) hasMoreBooks = false;
+        if (totalBooksExpected > 0 && processedBooks >= totalBooksExpected) hasMoreBooks = false;
+
+        for (const sb of batchBooks) {
+          try {
+            // Area 2: Normalization & Identity Guard
+            const serverBookWithSyncFlag = { ...sb, synced: 1, conflicted: 0 };
+            const normalizedBook = normalizeRecord(serverBookWithSyncFlag, uid);
+            if (!normalizedBook) continue;
+
+            const cid = normalizedBook.cid;
+            const existing = await db.books.where('cid').equals(cid).first();
+
+            // Area 2: Smart Merge (Judge Logic)
+            if (!existing) {
+              await db.books.put(normalizedBook);
+              console.log(`🌊 [NEW] Book added: ${cid}`);
+            } else if (existing.isDeleted === 1 && normalizedBook.isDeleted === 0) {
+              // Resurrection Logic (সার্ভার যদি বলে ডাটা আছে, তবে লোকাল ডিলিট বাতিল)
+              if (normalizedBook.vKey > existing.vKey) {
+                await db.books.update(existing.localId!, normalizedBook);
+              }
+            } else if (existing.synced === 0) {
+              // কনফ্লিক্ট চেক (সার্ভার বনাম লোকাল)
+              const businessFieldsMatch = this.compareBusinessFields(existing, normalizedBook, 'BOOK');
+              if (businessFieldsMatch) {
+                await db.books.update(existing.localId!, { ...normalizedBook, synced: 1 });
+              } else {
+                await db.books.update(existing.localId!, { conflicted: 1, serverData: normalizedBook });
+              }
+            } else if (normalizedBook.vKey > existing.vKey) {
+              // সাধারণ আপডেট
+              await db.books.update(existing.localId!, normalizedBook);
+            }
+          } catch (innerErr) { 
+            console.error("Book Gatekeeper Error:", innerErr); 
+          }
+        }
+        
+        processedBooks += batchBooks.length;
+        this.progressEventDebounced({
+          current: processedBooks,
+          total: totalBooksExpected,
+          phase: 'books',
+          isComplete: false
+        });
+        
+        booksPage++;
+      } while (hasMoreBooks);
+
+      // 🔥 EMERGENCY: Remove notifyUI() from books loop - only call at end
+
+      // --- ২. এন্ট্রি (Entries) প্রসেসিং ---
+      do {
+        const entriesResponse = await fetch(`/api/entries/all?userId=${uid}&since=${lastSync}&limit=${this.ENTRIES_BATCH_SIZE}&page=${entriesPage}`);
+        const entriesBatch = await entriesResponse.json();
+        
+        if (!entriesResponse.ok) {
+          console.error(`🚨 [HYDRATE] Entries batch ${entriesPage} failed:`, entriesBatch);
+          break;
+        }
+        
+        const batchEntries = entriesBatch.data || [];
+        
+        if (entriesPage === 0) {
+          totalEntriesExpected = entriesBatch.totalCount || batchEntries.length || 1;
+        }
+        
+        if (batchEntries.length < this.ENTRIES_BATCH_SIZE) hasMoreEntries = false;
+        if (totalEntriesExpected > 0 && processedEntries >= totalEntriesExpected) hasMoreEntries = false;
+
+        for (const se of batchEntries) {
+          try {
+            // 👻 GHOST HUNT: Log raw server response for problematic records
+            if (se.cid === '699330c3bdb7116a222acc02' || se._id === '699330c3bdb7116a222acc02') {
+              console.error('👻 [GHOST HUNT] Found problematic record in server response:', {
+                cid: se.cid,
+                _id: se._id,
+                bookId: se.bookId,
+                title: se.title,
+                amount: se.amount,
+                rawServerData: JSON.stringify(se, null, 2)
+              });
+            }
+            
+            // 🕵️‍♂️ [GHOST DETECTED] Trace specific ghost record
+            if (se.cid === 'cid_1771271729454_iwi7z53') {
+              console.error('🕵️‍♂️ [GHOST DETECTED] Raw Server Record:', JSON.stringify(se, null, 2));
+            }
+            
+            // Area 2: Identity & Schema Guard
+            const serverEntryWithSyncFlag = { ...se, synced: 1, conflicted: 0 };
+            const normalizedEntry = normalizeRecord(serverEntryWithSyncFlag, uid);
+            if (!normalizedEntry) {
+              // 👻 GHOST HUNT: Log rejected records
+              if (se.cid === '699330c3bdb7116a222acc02' || se._id === '699330c3bdb7116a222acc02') {
+                console.error('👻 [GHOST HUNT] Problematic record REJECTED by normalizeRecord:', {
+                  cid: se.cid,
+                  _id: se._id,
+                  bookId: se.bookId,
+                  rejectionReason: 'Missing bookId or invalid data'
+                });
+              }
+              continue;
+            }
+
+            const cid = normalizedEntry.cid;
+            const existing = await db.entries.where('cid').equals(cid).first();
+
+            if (!existing) {
+              await db.entries.put(normalizedEntry);
+            } else if (existing.isDeleted === 1 && normalizedEntry.isDeleted === 0) {
+              if (normalizedEntry.vKey > existing.vKey) {
+                await db.entries.update(existing.localId!, normalizedEntry);
+              }
+            } else if (existing.synced === 0) {
+              const businessFieldsMatch = this.compareBusinessFields(existing, normalizedEntry, 'ENTRY');
+              if (businessFieldsMatch) {
+                await db.entries.update(existing.localId!, { ...normalizedEntry, synced: 1 });
+              } else {
+                await db.entries.update(existing.localId!, { conflicted: 1, serverData: normalizedEntry });
+              }
+            } else if (normalizedEntry.vKey > existing.vKey) {
+              await db.entries.update(existing.localId!, normalizedEntry);
+            }
+          } catch (innerErr) { 
+            console.error("Entry Gatekeeper Error:", innerErr); 
+          }
+        }
+        
+        processedEntries += batchEntries.length;
+        
+        // Progress update via Event
+        this.progressEventDebounced({
+          current: processedEntries,
+          total: totalEntriesExpected,
+          phase: 'entries',
+          isComplete: false
+        });
+        
+        entriesPage++;
+      } while (hasMoreEntries);
+
+      // সব শেষ হলে টাইমস্ট্যাম্প আপডেট
+      this.updateLastSyncTimestamp();
+      
+      // 🔥 UI Notification: Only once at the very end
+      this.notifyUI();
+      
+      // Final Sync Signal (Area 3)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sync-progress', {
+          detail: {
+            current: processedBooks + processedEntries,
+            total: totalBooksExpected + totalEntriesExpected,
+            phase: 'complete',
+            isComplete: true
+          }
+        }));
+      }
+      
+      console.log('✅ [GATEKEEPER] Hydration successful. System Integrity Verified.');
+
+    } catch (err) {
+      console.error("🚨 [GATEKEEPER] Critical Failure:", err);
+    } finally {
+      // 🔥 EMERGENCY: Reset hydration guard
+      this.isHydrating = false;
+      console.log('🔓 [HYDRATION GUARD] Guard reset - hydration complete');
+    }
+  }
+
+  /**
+   * 🚨 LOGOUT: Nuclear reset for clean slate
    */
   async logout() {
-    await this.nuclearReset();
-    localStorage.removeItem('cashbookUser');
+    console.log('🔥 [NUCLEAR RESET] Clearing all local data for fresh start...');
+    await clearVaultData();
+    identityManager.setUserId(null);
     if (typeof window !== 'undefined') {
+      localStorage.clear();
       window.location.href = '/';
     }
   }
@@ -876,14 +1011,228 @@ class SyncOrchestrator {
       () => this.notifyUI() 
     );
     
+    // Initialize RealtimeEngine with focused hydration support
     this.realtimeEngine = new RealtimeEngine(
-      userId, 
-      this.hydrate.bind(this), 
-      this.realtimeCommandHandler.handleEvent.bind(this.realtimeCommandHandler), 
-      this, 
-      () => this.notifyUI() 
+      userId,                                                    // 1st: userId
+      this.hydrate.bind(this),                                   // 2nd: hydrateCallback
+      this.realtimeCommandHandler.handleEvent.bind(this.realtimeCommandHandler), // 3rd: injectCallback
+      this,                                                      // 4th: securityGate
+      () => this.notifyUI(),                                      // 5th: broadcastCallback
+      this.hydrateSingleItem.bind(this)                            // 6th: hydrateSingleItemCallback
     );
-    this.realtimeEngine.initPusher(pusher);
+  }
+
+  async performIntegrityCheck(userId?: string) {
+    const uid = userId || this.userId;
+    if (!uid || !navigator.onLine || this.isCheckingIntegrity || this.isHydrating) return;
+
+    // 🔥 GUARD: Prevent overlapping integrity checks
+    this.isCheckingIntegrity = true;
+
+    try {
+      console.log(`🔍 [INTEGRITY] Starting background check for user: ${uid}`);
+
+      // 🔥 SERVER: Get server-side counts and hashes
+      const response = await fetch(`/api/vault/integrity?userId=${uid}`);
+      if (!response.ok) {
+        console.warn('⚠️ [INTEGRITY] Server check failed, skipping');
+        return;
+      }
+
+      const serverData = await response.json();
+      
+      // 🔥 LOCAL: Calculate local counts and hashes
+      const localBooks = await db.books.where('userId').equals(uid).and((book: any) => book.isDeleted !== 1).toArray();
+      const localEntries = await db.entries.where('userId').equals(uid).and((entry: any) => entry.isDeleted !== 1).toArray();
+
+      const calculateLocalHash = (items: any[]) => {
+        const vKeySum = items.reduce((sum, item) => sum + (item.vKey || 0), 0);
+        const cidHash = items.reduce((hash, item) => {
+          const cid = item.cid || item.localId || 'unknown';
+          return hash + cid.split('').reduce((charSum: number, char: string) => charSum + char.charCodeAt(0), 0);
+        }, 0);
+        return `${items.length}-${vKeySum}-${cidHash}`;
+      };
+
+      const localBooksHash = calculateLocalHash(localBooks);
+      const localEntriesHash = calculateLocalHash(localEntries);
+
+      console.log(`🔍 [INTEGRITY] Local vs Server comparison:`, {
+        books: { local: { count: localBooks.length, hash: localBooksHash }, server: serverData.books },
+        entries: { local: { count: localEntries.length, hash: localEntriesHash }, server: serverData.entries }
+      });
+
+      // 🔥 CONFLICT DETECTION: Check for mismatches
+      let needsBackgroundSync = false;
+      let hasConflicts = false;
+
+      // Count mismatch - missing data
+      if (serverData.books.totalCount !== localBooks.length || 
+          serverData.entries.totalCount !== localEntries.length) {
+        
+        const localBookCount = localBooks.length;
+        const serverBookCount = serverData.books.totalCount;
+        const localEntryCount = localEntries.length;
+        const serverEntryCount = serverData.entries.totalCount;
+        
+        console.log('🔍 [INTEGRITY] Count analysis:', {
+          books: { local: localBookCount, server: serverBookCount, diff: localBookCount - serverBookCount },
+          entries: { local: localEntryCount, server: serverEntryCount, diff: localEntryCount - serverEntryCount }
+        });
+        
+        if (localBookCount > serverBookCount || localEntryCount > serverEntryCount) {
+          // 🗑️ SILENT HEALING: Local has extra records - run orphaned cleanup
+          console.log('🗑️ [INTEGRITY] Local count > Server count - Running Silent Healing for orphaned records');
+          await this.markConflictedRecords(localBooks, localEntries, serverData);
+          
+          // Re-fetch counts after Silent Healing
+          const updatedLocalBooks = await db.books.where('userId').equals(uid).and((book: any) => book.isDeleted !== 1).toArray();
+          const updatedLocalEntries = await db.entries.where('userId').equals(uid).and((entry: any) => entry.isDeleted !== 1).toArray();
+          
+          // Check if counts now match
+          if (serverData.books.totalCount === updatedLocalBooks.length && 
+              serverData.entries.totalCount === updatedLocalEntries.length) {
+            console.log('✅ [INTEGRITY] Silent Healing resolved count mismatch - no further action needed');
+            return; // Exit early - issue resolved
+          }
+        }
+        
+        if (localBookCount < serverBookCount || localEntryCount < serverEntryCount) {
+          // 🔄 HYDRATION: Server has more data - fetch missing records
+          console.log('🔄 [INTEGRITY] Local count < Server count - Triggering hydration to fetch missing data');
+          needsBackgroundSync = true;
+        }
+      }
+
+      // Hash mismatch - data content different
+      if (serverData.books.hash !== localBooksHash || 
+          serverData.entries.hash !== localEntriesHash) {
+        console.warn('⚠️ [INTEGRITY] Hash mismatch detected - marking conflicts');
+        hasConflicts = true;
+      }
+
+      // 🔥 RECOVERY ACTIONS
+      if (needsBackgroundSync) {
+        console.log('🔄 [INTEGRITY] Triggering background hydration to recover missing data');
+        await this.hydrate(uid, true); // Force full sync
+      } else if (hasConflicts) {
+        console.log('⚠️ [INTEGRITY] Marking conflicted records for manual resolution');
+        // Mark records as conflicted for ConflictResolverModal (only if not already handled by Silent Healing)
+        await this.markConflictedRecords(localBooks, localEntries, serverData);
+      } else {
+        console.log('✅ [INTEGRITY] Data integrity verified - no issues found');
+      }
+
+    } catch (error) {
+      console.error('🚨 [INTEGRITY] Background check failed:', error);
+    } finally {
+      // 🔥 GUARD: Reset integrity check flag
+      this.isCheckingIntegrity = false;
+    }
+  }
+
+  /**
+   * ⏰ SCHEDULE INTEGRITY CHECKS: Every 2 minutes + window focus
+   */
+  private scheduleIntegrityChecks() {
+    // 🔥 INTERVAL: Check every 2 minutes
+    this.integrityCheckInterval = setInterval(() => {
+      if (this.userId && !this.isHydrating && !this.isCheckingIntegrity) {
+        this.performIntegrityCheck(this.userId);
+      }
+    }, this.INTEGRITY_CHECK_INTERVAL);
+
+    // 🔥 FOCUS: Debounced integrity check
+    let focusTimeout: any = null;
+    const debouncedIntegrityCheck = () => {
+      if (focusTimeout) clearTimeout(focusTimeout);
+      focusTimeout = setTimeout(() => {
+        if (this.userId && !this.isHydrating && !this.isCheckingIntegrity) {
+          console.log('🔍 [INTEGRITY] Window focus detected - running integrity check');
+          this.performIntegrityCheck(this.userId);
+        }
+      }, 500); // 500ms debounce
+    };
+
+    window.addEventListener('focus', debouncedIntegrityCheck);
+    window.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        debouncedIntegrityCheck(); // Same debounced function
+      }
+    });
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (this.integrityCheckInterval) {
+        clearInterval(this.integrityCheckInterval);
+      }
+    });
+  }
+
+  /**
+   * ⚠️ MARK CONFLICTED RECORDS: For ConflictResolverModal handling
+   */
+  private async markConflictedRecords(localBooks: any[], localEntries: any[], serverData: any) {
+    try {
+      // 🗑️ SILENT HEALING: Identify and delete orphaned records first
+      const orphanedBooks = localBooks.filter(book => {
+        const serverBook = serverData.books.sampleIds.find((s: any) => 
+          String(s.cid) === String(book.cid) || String(s._id) === String(book._id)
+        );
+        return !serverBook; // ❌ MISSING FROM SERVER
+      });
+
+      const orphanedEntries = localEntries.filter(entry => {
+        const serverEntry = serverData.entries.sampleIds.find((s: any) => 
+          String(s.cid) === String(entry.cid) || String(s._id) === String(entry._id)
+        );
+        return !serverEntry; // ❌ MISSING FROM SERVER
+      });
+
+      // 🗑️ SILENT CLEANUP: Delete orphaned records without UI notification
+      for (const book of orphanedBooks) {
+        await db.books.delete(book.localId!);
+        console.log(`🗑️ [SILENT HEALING] Purged orphaned record: ${book.cid} (${book.localId})`);
+      }
+
+      for (const entry of orphanedEntries) {
+        await db.entries.delete(entry.localId!);
+        console.log(`🗑️ [SILENT HEALING] Purged orphaned record: ${entry.cid} (${entry.localId})`);
+      }
+
+      // 🚨 CONFLICT MARKING: Only for actual version conflicts
+      const conflictedBooks = localBooks.filter(book => {
+        const serverBook = serverData.books.sampleIds.find((s: any) => 
+          String(s.cid) === String(book.cid) || String(s._id) === String(book._id)
+        );
+        return serverBook && serverBook.vKey !== book.vKey;
+      });
+
+      for (const book of conflictedBooks) {
+        await db.books.update(book.localId!, { conflicted: 1 });
+        console.warn(`⚠️ [INTEGRITY] Book conflict marked: ${book.cid}`);
+      }
+
+      const conflictedEntries = localEntries.filter(entry => {
+        const serverEntry = serverData.entries.sampleIds.find((s: any) => 
+          String(s.cid) === String(entry.cid) || String(s._id) === String(entry._id)
+        );
+        return serverEntry && serverEntry.vKey !== entry.vKey;
+      });
+
+      for (const entry of conflictedEntries) {
+        await db.entries.update(entry.localId!, { conflicted: 1 });
+        console.warn(`⚠️ [INTEGRITY] Entry conflict marked: ${entry.cid}`);
+      }
+
+      // 🚨 UI TRIGGER: Only for actual conflicts, not orphaned deletions
+      if (conflictedBooks.length > 0 || conflictedEntries.length > 0) {
+        this.notifyUI(); // Trigger UI to show ConflictResolverModal
+      }
+
+    } catch (error) {
+      console.error('🚨 [INTEGRITY] Failed to process records:', error);
+    }
   }
 }
 

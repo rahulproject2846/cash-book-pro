@@ -8,6 +8,7 @@ import { SocialAuth } from './SocialAuth';
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
+import { identityManager } from '@/lib/vault/core/IdentityManager';
 
 // --- 🛠️ INTERNAL ELITE INPUT (Refined for Red Glow) ---
 const EliteInput = ({ icon: Icon, type, placeholder, value, name, id, autoComplete, onChange, hasError }: any) => (
@@ -41,6 +42,17 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
     const [isLoading, setIsLoading] = useState(false);
     const [errorField, setErrorField] = useState<string | null>(null); // 'email', 'password', or 'both'
 
+    // 🔐 IDENTITY WAKE-UP: Handle login success with immediate identity update
+    const handleLoginSuccess = (user: any) => {
+        // 🚨 WAKE UP CALL: Immediately update IdentityManager
+        identityManager.setUserId(user._id);
+        
+        // Then call parent callback (async to avoid blocking navigation)
+        setTimeout(() => {
+            onSuccess(user);
+        }, 0);
+    };
+
     // ১. লগইন হ্যান্ডলার (Logic 100% Intact)
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -58,7 +70,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
             
             if (res.ok) {
                 toast.success(t('auth_authorized'), { id: loadingToast });
-                onSuccess(data.user);
+                handleLoginSuccess(data.user);
             } else { 
                 const errorMsg = data.message || t('auth_denied');
                 
@@ -68,7 +80,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                 } else if (errorMsg.toLowerCase().includes('password') || errorMsg.toLowerCase().includes('key')) {
                     setErrorField('password');
                 } else {
-                    setErrorField('both'); // যদি জেনারেল এরর হয় তবে দুইটাই লাল হবে
+                    setErrorField('both'); // যদি জেনারেল এরর হয তবে দুইটাই লাল হবে
                 }
                 
                 toast.error(errorMsg, { id: loadingToast }); 

@@ -22,6 +22,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const since = searchParams.get('since');
+    const limit = parseInt(searchParams.get('limit') || '50') || 50; // Default 50, configurable
+    const page = parseInt(searchParams.get('page') || '0') || 0; // Default 0
 
     if (!userId) return NextResponse.json({ message: "User ID missing" }, { status: 400 });
 
@@ -55,15 +57,26 @@ export async function GET(req: Request) {
       }));
     }
 
-    const books = await Book.find(query).lean().sort({ updatedAt: -1 });
+    // Get total count for pagination metadata
+    const totalCount = await Book.countDocuments({ 
+      $or: queryConditions,
+      isDeleted: { $ne: 1 }
+    });
+
+    const books = await Book.find(query)
+      .lean()
+      .select('-image') // 🔥 EMERGENCY: Exclude large image field to reduce payload
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .skip(page * limit);
     
     // --- FALLBACK LOGIC ---
     if (books.length === 0) {
-      const stringBooks = await Book.find({ userId: userId, isDeleted: { $ne: 1 } }).lean().sort({ updatedAt: -1 });
+      const stringBooks = await Book.find({ userId: userId, isDeleted: { $ne: 1 } }).lean().select('-image').sort({ updatedAt: -1 });
       
       let objectIdBooks: any[] = [];
       if (mongoose.Types.ObjectId.isValid(userId)) {
-        objectIdBooks = await Book.find({ userId: new mongoose.Types.ObjectId(userId), isDeleted: { $ne: 1 } }).lean().sort({ updatedAt: -1 });
+        objectIdBooks = await Book.find({ userId: new mongoose.Types.ObjectId(userId), isDeleted: { $ne: 1 } }).lean().select('-image').sort({ updatedAt: -1 });
       }
       
       const allFallbackBooks = [...stringBooks, ...objectIdBooks];
@@ -73,6 +86,7 @@ export async function GET(req: Request) {
           success: true, 
           data: allFallbackBooks,
           count: allFallbackBooks.length,
+          totalCount: allFallbackBooks.length,
           isActive: true 
         }, { status: 200 });
       }
@@ -82,6 +96,9 @@ export async function GET(req: Request) {
         success: true, 
         data: books,
         count: books.length,
+        totalCount: totalCount,
+        page: page,
+        limit: limit,
         isActive: true 
     }, { status: 200 });
 
@@ -158,6 +175,22 @@ export async function POST(req: Request) {
         cid: cid || undefined // 🔥 CRITICAL: Include cid field if provided
     });
     
+    // 🔗 RELINK ENTRIES: Update all entries pointing to the old CID to use the new _id
+    if (newBook.cid) {
+      try {
+        const Entry = (await import('@/models/Entry')).default;
+        const relinkResult = await Entry.updateMany(
+          { bookId: newBook.cid, userId: userId }, 
+          { $set: { bookId: String(newBook._id) } }
+        );
+        if (relinkResult.modifiedCount > 0) {
+          console.log(`🔗 [RELINK SUCCESS] Updated ${relinkResult.modifiedCount} entries to new Book ID: ${newBook._id} (from CID: ${newBook.cid})`);
+        }
+      } catch (relinkError) {
+        console.error('🔗 [RELINK ERROR] Failed to relink entries:', relinkError);
+      }
+    }
+    
     // সিগন্যাল ট্রিগার
     try {
         // Backend Name Verification: Check if name field exists
@@ -166,12 +199,10 @@ export async function POST(req: Request) {
         }
         
         await pusher.trigger(`vault-channel-${userId}`, 'BOOK_CREATED', { 
-            ...newBook.toObject(),
-            vKey: newBook.vKey,
             cid: newBook.cid,
             _id: newBook._id,
-            userId: newBook.userId,
-            isDeleted: Number(newBook.isDeleted || 0)
+            userId: userId,
+            vKey: newBook.vKey
         });
     } catch (e) {}
     
@@ -253,12 +284,10 @@ export async function PUT(req: Request) {
     // সিগন্যাল ট্রিগার
     try {
         await pusher.trigger(`vault_channel_${updatedBook.userId}`, 'BOOK_UPDATED', { 
-            ...updatedBook,
-            vKey: updatedBook.vKey,
             cid: updatedBook.cid,
             _id: updatedBook._id,
             userId: updatedBook.userId,
-            isDeleted: Number(updatedBook.isDeleted || 0)
+            vKey: updatedBook.vKey
         });
     } catch (e) {}
 

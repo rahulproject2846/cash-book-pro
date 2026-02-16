@@ -146,13 +146,11 @@ export async function POST(req: Request) {
 
     try {
         await pusher.trigger(`vault-channel-${userId}`, 'ENTRY_CREATED', { 
-            ...newEntryData,
-            vKey: newEntry.vKey,
             cid: newEntry.cid,
             _id: newEntry._id,
+            userId: userId,
             bookId: newEntry.bookId,
-            userId: newEntry.userId,
-            isDeleted: Number(newEntry.isDeleted || 0)
+            vKey: newEntry.vKey
         });
     } catch (e) {}
 

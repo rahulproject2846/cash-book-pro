@@ -7,6 +7,7 @@ import { ModalProvider } from '@/context/ModalContext';
 import { ModalRegistry } from '@/components/Modals/ModalRegistry'; 
 import { PusherProvider } from '@/context/PusherContext'; // 🔥 নতুন ইমপোর্ট
 import { Toaster } from 'react-hot-toast'; // 🚀 Move Toaster here for client-side logic
+import { identityManager } from '@/lib/vault/core/IdentityManager'; // 🔥 Unified Identity Management
 
 /**
  * INTERNAL COMPONENT: THEME SYNCHRONIZER
@@ -59,27 +60,35 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setMounted(true);
     
     // লোকাল স্টোরেজ থেকে ইউজার এবং প্রেফারেন্স লোড করা
-    const savedUser = localStorage.getItem('cashbookUser');
-    if (savedUser) {
-        try {
-            const parsedUser = JSON.parse(savedUser);
-            setCurrentUser(parsedUser);
-            
-            // IMMEDIATE DOM UPDATE (ফ্লিকারিং আটকানোর জন্য)
-            const root = document.documentElement;
-            if (parsedUser.preferences?.isMidnight) root.classList.add('midnight-mode');
-            if (parsedUser.preferences?.compactMode) root.classList.add('compact-deck');
-            if (parsedUser.preferences?.turboMode) document.body.classList.add('turbo-mode'); // 🚀 Turbo Mode immediate update
-            
-        } catch (e) {
-            console.error("User Parse Error");
+    const userId = identityManager.getUserId();
+    if (userId) {
+        // Get user data from localStorage for now (IdentityManager handles persistence)
+        const savedUser = localStorage.getItem('cashbookUser');
+        if (savedUser) {
+            try {
+                const parsedUser = JSON.parse(savedUser);
+                setCurrentUser(parsedUser);
+                
+                // IMMEDIATE DOM UPDATE (ফ্লিকারিং আটকানোর জন্য)
+                const root = document.documentElement;
+                if (parsedUser.preferences?.isMidnight) root.classList.add('midnight-mode');
+                if (parsedUser.preferences?.compactMode) root.classList.add('compact-deck');
+                if (parsedUser.preferences?.turboMode) document.body.classList.add('turbo-mode'); // 🚀 Turbo Mode immediate update
+                
+            } catch (e) {
+                console.error("User Parse Error");
+            }
         }
     }
 
     // সেটিংস পেজ থেকে আপডেট হলে সাথে সাথে সিঙ্ক করা
     const syncUser = () => {
-        const updatedUser = localStorage.getItem('cashbookUser');
-        if (updatedUser) setCurrentUser(JSON.parse(updatedUser));
+        const userId = identityManager.getUserId();
+        if (userId) {
+            // Get user data from localStorage for now (IdentityManager handles persistence)
+            const updatedUser = localStorage.getItem('cashbookUser');
+            if (updatedUser) setCurrentUser(JSON.parse(updatedUser));
+        }
     };
 
     window.addEventListener('language-changed', syncUser);

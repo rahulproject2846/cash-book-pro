@@ -14,6 +14,49 @@ const pusher = new Pusher({
   useTLS: true
 });
 
+/**
+ * GET: Fetch single entry with all fields (including memos/PDFs)
+ * Returns complete entry object for focused hydration
+ */
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json({ message: "Entry ID is required" }, { status: 400 });
+    }
+
+    await connectDB();
+
+    // 🔥 FOCUSED HYDRATION: Fetch single entry with ALL fields (including memos/PDFs)
+    const entry = await Entry.findById(id).lean();
+
+    if (!entry) {
+      return NextResponse.json({ message: "Entry not found" }, { status: 404 });
+    }
+
+    console.log(`🎯 [SINGLE ENTRY] Fetched entry for focused hydration:`, {
+      id: entry._id,
+      cid: entry.cid,
+      title: entry.title,
+      hasMemo: !!entry.note
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: entry,
+      timestamp: Date.now()
+    }, { status: 200 });
+
+  } catch (error: any) {
+    console.error("❌ [SINGLE ENTRY] Fetch failed:", error);
+    return NextResponse.json({ 
+      message: "Failed to fetch entry",
+      error: error.message 
+    }, { status: 500 });
+  }
+}
+
 // PUT: লেনদেন (Transaction) আপডেট করা ও স্ট্যাবিলিটি চেক
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

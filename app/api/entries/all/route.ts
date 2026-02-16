@@ -9,6 +9,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const since = searchParams.get('since');
+    const limit = parseInt(searchParams.get('limit') || '100') || 100; // Default 100, configurable
+    const page = parseInt(searchParams.get('page') || '0') || 0; // Default 0
     
     // 🔍 X-RAY LOGGING: Server-side visibility (SILENCED)
     // console.log(`🔍 [API-ENTRIES] Received Request for UID: ${userId}`);
@@ -86,8 +88,16 @@ export async function GET(req: Request) {
     // console.log('🔍 [API-ENTRIES] Final entries query:', JSON.stringify(entriesQuery, null, 2));
     // console.log('🔍 [API-ENTRIES] Query strategy:', userBooks.length === 0 ? 'Direct userId' : 'BookId-based', { bookIdsCount: bookIds.length });
 
+    // Get total count for pagination metadata
+    const totalCount = await Entry.countDocuments({
+      $or: queryConditions,
+      isDeleted: false
+    });
+
     const allEntries = await Entry.find(entriesQuery)
-      .sort({ date: -1, createdAt: -1 });
+      .sort({ date: -1, createdAt: -1 })
+      .limit(limit)
+      .skip(page * limit);
 
     // 🔥 BOOK RESCUE: Collect unique bookIds from entries and rescue their books
     let rescuedBooks: any[] = [];
@@ -117,16 +127,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // 🔍 X-RAY LOGGING: Results visibility (SILENCED)
-    // console.log(`📊 [API-ENTRIES] Entries found: ${allEntries.length}`);
-    // if (allEntries.length > 0) {
-    //   console.log('📌 Entry BookId:', allEntries[0].bookId);
-    //   console.log('🔍 [API-ENTRIES] Sample entry data:', allEntries.slice(0, 3).map(e => ({ 
-    //     _id: e._id, 
-    //     bookId: e.bookId, 
-    //     bookIdType: typeof e.bookId,
-    //     userId: e.userId,
-    //     userIdType: typeof e.userId 
     //   })));
     // }
 

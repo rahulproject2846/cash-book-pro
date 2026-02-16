@@ -36,6 +36,7 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
     amount: record.amount || 0,
     type: record.type || 'expense',
     phone: record.phone || '',
+    status: record.status || 'unknown',
     updatedAt: record.updatedAt || new Date().toISOString(),
     vKey: record.vKey || 0
   };
@@ -47,6 +48,7 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
     amount: serverData.amount || 0,
     type: serverData.type || 'expense',
     phone: serverData.phone || '',
+    status: serverData.status || 'unknown',
     updatedAt: serverData.updatedAt || new Date().toISOString(),
     vKey: serverData.vKey || 0
   };
@@ -180,6 +182,12 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                               {formatAmount(localData.amount)}
                             </p>
                           </div>
+                          <div>
+                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Status</label>
+                            <p className="text-white font-medium capitalize">
+                              {localData.status || 'unknown'}
+                            </p>
+                          </div>
                         </>
                       )}
 
@@ -243,6 +251,12 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                             <p className="text-white font-medium">
                               {serverDisplay.amount < 0 ? '-' : '+'}
                               {formatAmount(serverDisplay.amount)}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Status</label>
+                            <p className="text-white font-medium capitalize">
+                              {serverDisplay.status || 'unknown'}
                             </p>
                           </div>
                         </>

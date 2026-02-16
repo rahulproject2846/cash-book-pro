@@ -3,14 +3,21 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { db } from '@/lib/offlineDB';
+import { identityManager } from '../../lib/vault/core/IdentityManager';
 
 /**
  * 🔥 VAULT STATE HOOK (Pure State Mirror)
  * Fast, side-effect-free hook that only reads from Dexie and returns state
  */
 export const useVaultState = (currentUser: any, forceRefresh: number, currentBook?: any) => {
-    // 🔒 ID VALIDATION: Strict checks for undefined IDs
-    const userId = currentUser?._id;
+    // 🔒 ID VALIDATION: Use unified IdentityManager for single source of truth
+    const userId = identityManager.getUserId();
+    
+    console.log(`🔍 [USER ID DEBUG] useVaultState userId:`, {
+        fromIdentityManager: identityManager.getUserId(),
+        finalUserId: userId
+    });
+    
     const bookId = currentBook?._id || currentBook?.localId || '';
     
     //  LOCAL REFRESH STATE: For vault-updated events
@@ -30,9 +37,15 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
     // 📚 BOOKS: Resilient query with JavaScript filtering
     const books = useLiveQuery(
         () => {
-            if (!userId || typeof userId !== 'string') return [];
+            if (!userId || typeof userId !== 'string') {
+                console.log('🔍 [BOOKS QUERY] No valid userId, returning empty array');
+                return [];
+            }
+            
             // 🔥 ENSURE STRING FORMAT: Normalize userId to string for query compatibility
             const stringUserId = String(userId);
+            console.log(`🔍 [BOOKS QUERY] Querying books for userId: ${stringUserId} (type: ${typeof stringUserId})`);
+            
             return db.books
                 .where('userId').equals(stringUserId)
                 .reverse()
@@ -44,12 +57,24 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
                             totalBooksInDb: allBooks.length,
                             booksForCurrentUser: res.length,
                             userId: stringUserId,
-                            sampleBook: res[0] || null
+                            sampleBook: res[0] || null,
+                            allBookIds: allBooks.map(b => ({ _id: b._id, localId: b.localId, userId: b.userId, isDeleted: b.isDeleted })),
+                            filteredBookIds: res.map(b => ({ _id: b._id, localId: b.localId, userId: b.userId, isDeleted: b.isDeleted }))
                         });
                     });
                     
                     // 🔍 DEBUG: Log raw DB data to see actual fields
-                    console.log('RAW DB DATA:', res.slice(0, 2));
+                    console.log('RAW DB DATA (first 2):', res.slice(0, 2));
+                    
+                    // 🔍 DEBUG: Check isDeleted values before filtering
+                    const deletedBooks = res.filter((book: any) => book.isDeleted !== 0);
+                    console.log('🔍 [DELETED BOOKS CHECK]', {
+                        booksBeforeFilter: res.length,
+                        booksMarkedDeleted: deletedBooks.length,
+                        booksAfterFilter: res.filter((book: any) => book.isDeleted === 0).length,
+                        isDeletedValues: res.map(b => b.isDeleted)
+                    });
+                    
                     return res.filter((book: any) => book.isDeleted === 0); // 🔥 CLIENT-SIDE FILTER
                 });
         },
@@ -96,13 +121,32 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
 
     // 🎯 FILTERED ENTRIES: Universal ID Bridge - Type-Agnostic
     const entries = useMemo(() => {
-        // 🔍 UNIVERSAL ID BRIDGE: Type-agnostic string conversion
-        const targetBookId = String(currentBook?._id || currentBook?.localId || (books && books[0]?._id) || (books && books[0]?.localId) || '');
+        // � HANDLE UNDEFINED: Prevent undefined state from breaking counts
+        if (!allEntries) return [];
+        
+        // 🔍 SMART TARGET BOOK ID: Fallback logic for loading states
+        let targetBookId: string | null = null;
+        if (currentBook?._id || currentBook?.localId) {
+            targetBookId = String(currentBook._id || currentBook.localId);
+        } else if (books?.[0]?._id || books?.[0]?.localId) {
+            targetBookId = String(books[0]._id || books[0].localId);
+        }
         
         const entriesArray = (allEntries || []).filter((entry: any) => !!entry);
         const filtered = entriesArray.filter((entry: any) => {
+            // 🔥 RELAXED FILTER: Show all entries while books are loading
+            if (!targetBookId || targetBookId === 'undefined' || targetBookId === '') return true;
+            
             // 🔍 TYPE-AGNOSTIC: Ensure both sides are strings
             const entryBookId = String(entry.bookId || '');
+            
+            // 🔥 ORPHANED ENTRY RECOVERY: Show entries with fallback bookId
+            if (!entry.bookId || entry.bookId === 'undefined' || entry.bookId === '' || entry.bookId.includes('orphaned-data')) {
+                // Show orphaned entries when viewing the first/default book
+                const isFirstBook = targetBookId === String(books?.[0]?._id || books?.[0]?.localId || '');
+                return isFirstBook;
+            }
+            
             return entryBookId === targetBookId;
         });
         
@@ -160,7 +204,7 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
         [forceRefresh, localRefresh]
     );
 
-    // �🔥 VAULT-UPDATED LISTENER: Force refresh when sync completes
+    // 🔥 VAULT-UPDATED LISTENER: Force refresh when sync completes
     useEffect(() => {
         const handleVaultUpdate = () => {
             setLocalRefresh((prev: number) => prev + 1);
@@ -173,21 +217,33 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
         };
     }, []);
 
+    // 🔐 IDENTITY MANAGER SUBSCRIPTION: React to identity changes
+    useEffect(() => {
+        const unsubscribe = identityManager.subscribe((newUserId) => {
+            console.log(`🔍 [IDENTITY SUBSCRIPTION] useVaultState received userId change:`, {
+                newUserId,
+                timestamp: new Date().toISOString()
+            });
+            // Trigger local refresh when identity changes
+            setLocalRefresh((prev: number) => prev + 1);
+        });
+        
+        return () => {
+            unsubscribe();
+        };
+    }, []);
+
     // 📊 LOADING STATE: Force stop loading when database opens
     const isLoading = books === undefined;
     
-    // 🗃️ PERSISTED CACHE MODE: Stale-While-Revalidate pattern
-    const safeBooks = books && books.length > 0 ? books : cacheRef.current.books;
-    const safeAllEntries = allEntries && allEntries.length > 0 ? allEntries : cacheRef.current.allEntries;
-    
-    // 🛡️ STALE-WHILE-REVALIDATE: Only update entries if we have valid new data
-    const hasValidNewEntries = entries.length > 0 || (allEntries && allEntries.length > 0);
-    const safeEntries = hasValidNewEntries ? entries : cacheRef.current.entries;
+    // 🛡️ DIRECT DATA: Use fresh useLiveQuery results instead of cache fallback
+    const safeBooks = books;
+    const safeAllEntries = allEntries;
     
     return {
         books: safeBooks || [],
         allEntries: safeAllEntries || [],
-        entries: safeEntries || [],
+        entries: entries || [],
         unsyncedCount: unsyncedCount || 0,
         conflictedBooksCount: conflictedBooksCount || 0,
         conflictedEntriesCount: conflictedEntriesCount || 0,
