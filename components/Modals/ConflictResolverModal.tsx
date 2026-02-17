@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Cloud, Save } from 'lucide-react';
+import { X, AlertTriangle, Cloud, Save, Book, FileText } from 'lucide-react';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { useConflictStore } from '@/lib/vault/ConflictStore';
 import { mapConflictType } from '@/lib/vault/ConflictMapper';
@@ -69,7 +69,8 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
         cid: record.cid,
         localId: record.localId,
         record: record,
-        conflictType: mapConflictType(record.conflictReason)
+        conflictType: mapConflictType(record.conflictReason),
+        icon: type === 'book' ? Book : FileText
       };
       
       // Add to store's pending resolutions

@@ -72,7 +72,8 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
                     cid: item.cid,
                     localId: item.localId,
                     record: item.record,
-                    conflictType: mapConflictType(item.record.conflictReason)
+                    conflictType: mapConflictType(item.record.conflictReason),
+                    icon: item.icon
                 };
                 
                 // Add to store's pending resolutions
@@ -165,7 +166,11 @@ return (
                                 <div className="flex items-center gap-4 flex-1">
                                     {/* Icon */}
                                     <div className="w-12 h-12 bg-red-500/20 rounded-2xl flex items-center justify-center border border-red-500/30 shrink-0">
-                                        <item.icon className="w-6 h-6 text-red-400" />
+                                        {item.type === 'book' ? (
+                                            <Book className="w-6 h-6 text-red-400" />
+                                        ) : (
+                                            <FileText className="w-6 h-6 text-red-400" />
+                                        )}
                                     </div>
 
                                     {/* Content */}
@@ -175,7 +180,7 @@ return (
                                                 {item.type === 'book' ? 'BOOK' : 'ENTRY'}
                                             </span>
                                             <span className="text-[10px] text-white/40 font-bold">
-                                                {formatDate(item.updatedAt)}
+                                                {formatDate(item.record.updatedAt)}
                                             </span>
                                             {isPending && (
                                                 <span className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">
@@ -184,10 +189,10 @@ return (
                                             )}
                                         </div>
                                         <h4 className="text-base font-bold text-white truncate">
-                                            {item.displayName}
+                                            {item.record.name || item.record.title || 'Untitled'}
                                         </h4>
                                         <p className="text-xs text-white/60 truncate">
-                                            {item.displayInfo}
+                                            {item.record.description || 'No description'}
                                         </p>
                                     </div>
                                 </div>

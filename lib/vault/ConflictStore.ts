@@ -5,6 +5,7 @@ import { identityManager } from './core/IdentityManager';
 import { mapConflictType } from './ConflictMapper';
 import toast from 'react-hot-toast';
 import { ConflictBackgroundService } from './ConflictBackgroundService';
+import { Book, FileText } from 'lucide-react';
 
 // 🚨 CONFLICT ITEM INTERFACE
 export interface ConflictItem {
@@ -13,6 +14,7 @@ export interface ConflictItem {
     localId?: number;
     record: any;               
     conflictType: 'version' | 'parent_deleted';
+    icon: React.ElementType; // 🚀 ADDED: To hold specific icon component
 }
 
 // 🚨 PENDING RESOLUTION INTERFACE
@@ -48,7 +50,7 @@ interface ConflictStore extends ConflictState {
 // 🚨 GLOBAL CONFLICT STORE
 export const useConflictStore = create<ConflictStore>()(
     subscribeWithSelector((set, get) => ({
-        conflicts: [],
+        conflicts: [] as ConflictItem[],
         pendingResolutions: {},
         isProcessing: false,
 
@@ -124,14 +126,16 @@ export const useConflictStore = create<ConflictStore>()(
                         cid: book.cid,
                         localId: book.localId,
                         record: book,
-                        conflictType: mapConflictType(book.conflictReason || 'VERSION_CONFLICT')
+                        conflictType: mapConflictType(book.conflictReason || 'VERSION_CONFLICT'),
+                        icon: Book
                     })),
                     ...conflictedEntries.map((entry: any) => ({
                         type: 'entry' as const,
                         cid: entry.cid,
                         localId: entry.localId,
                         record: entry,
-                        conflictType: mapConflictType(entry.conflictReason || 'VERSION_CONFLICT')
+                        conflictType: mapConflictType(entry.conflictReason || 'VERSION_CONFLICT'),
+                        icon: FileText
                     }))
                 ];
                 

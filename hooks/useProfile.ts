@@ -219,8 +219,8 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     userId: currentUser._id,
-                    image: '', // 🗑️ Clear image
-                    isCustomImage: false // 🗑️ Re-enable Google sync
+                    image: '', // Clear image
+                    isCustomImage: false // Re-enable Google sync
                 }),
             });
             
@@ -231,7 +231,8 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
                 setForm(prev => ({ ...prev, image: '' }));
                 toast.success('Image removed. Google sync re-enabled');
             } else {
-                toast.error(data.message || 'Failed to remove image');
+                const errorData = await res.json().catch(() => ({}));
+                toast.error(errorData.message || 'Failed to remove image');
             }
         } catch (error) {
             toast.error('Connection error');
