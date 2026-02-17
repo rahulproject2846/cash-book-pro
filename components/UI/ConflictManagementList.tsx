@@ -27,6 +27,7 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
         conflicts, 
         pendingResolutions, 
         resolveAll, 
+        addPendingResolution,
         removePendingResolution 
     } = useConflictStore();
     
