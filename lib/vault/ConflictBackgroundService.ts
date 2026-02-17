@@ -114,7 +114,7 @@ export class ConflictBackgroundService {
     /**
      * 🚨 RESTORE FROM LOCALSTORAGE
      */
-    private restoreFromStorage() {
+    restoreFromStorage() {
         try {
             if (typeof window === 'undefined') return; // 🚨 SSR Guard
             const stored = localStorage.getItem('conflictExecutionQueue');
