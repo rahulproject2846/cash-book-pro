@@ -8,6 +8,8 @@ import { ModalRegistry } from '@/components/Modals/ModalRegistry';
 import { PusherProvider } from '@/context/PusherContext'; // 🔥 নতুন ইমপোর্ট
 import { Toaster } from 'react-hot-toast'; // 🚀 Move Toaster here for client-side logic
 import { identityManager } from '@/lib/vault/core/IdentityManager'; // 🔥 Unified Identity Management
+import { useMediaStore } from '@/lib/vault/MediaStore'; // 🚀 Media Store Integration
+import { orchestrator } from '@/lib/vault/SyncOrchestrator'; // 🔥 Sync Orchestrator Integration
 
 /**
  * INTERNAL COMPONENT: THEME SYNCHRONIZER
@@ -55,9 +57,29 @@ const ThemeSynchronizer = ({ currentUser }: { currentUser: any }) => {
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const mediaStore = useMediaStore();
 
   useEffect(() => {
     setMounted(true);
+    
+    // 🚀 GLOBAL EXPOSURE: Make orchestrator and mediaStore available globally
+    if (typeof window !== 'undefined') {
+      window.orchestrator = orchestrator;
+      // 🚀 Use hook function directly for proper store access
+      window.mediaStore = useMediaStore; 
+    }
+    
+    // 🔄 SYNC REQUEST LISTENER: Connect MediaStore to SyncOrchestrator
+    const handleSyncRequest = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const userId = customEvent.detail?.userId;
+      if (userId && window.orchestrator) {
+        console.log('🔄 [GLOBAL EVENT] Sync requested for user:', userId);
+        window.orchestrator.triggerSync(userId);
+      }
+    };
+
+    window.addEventListener('sync-request', handleSyncRequest);
     
     // লোকাল স্টোরেজ থেকে ইউজার এবং প্রেফারেন্স লোড করা
     const userId = identityManager.getUserId();
@@ -97,6 +119,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return () => {
         window.removeEventListener('language-changed', syncUser);
         window.removeEventListener('storage', syncUser);
+        window.removeEventListener('sync-request', handleSyncRequest);
     };
   }, []);
 

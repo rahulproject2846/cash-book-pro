@@ -78,16 +78,25 @@ const BooksSection = memo(({
 
     // 🚨 SMART EJECTION: Listen for remote book deletions
     useEffect(() => {
-        const handleRemoteDelete = (e: any) => {
+        const handleRemoteDelete = async (e: any) => {
             const deletedIdStr = String(e.detail.bookId);
-            console.log(`� Ejection Signal Received for:`, deletedIdStr);
-            console.log(`🔔 Current viewing:`, {
-                currentBook: currentBook ? {
-                    _id: currentBook._id,
-                    localId: currentBook.localId,
-                    name: currentBook.name
-                } : null,
-                currentBookExists: !!currentBook
+            console.log(`🚨 [EJECTION] Delete signal received for: ${deletedIdStr}`);
+            
+            // 🛡️ PRE-READ CAPTURE: Get book data BEFORE checking currentBook
+            const getBookData = async (bookId: string) => {
+                // Try multiple ID strategies to find book data
+                return await db.books.where('_id').equals(bookId).first() ||
+                       await db.books.where('localId').equals(bookId).first() ||
+                       await db.books.where('cid').equals(bookId).first();
+            };
+            
+            // 🛡️ DEFENSIVE CHECK: Get deleted book data for modal
+            const deletedBookData = await getBookData(deletedIdStr);
+            
+            console.log(`🚨 [EJECTION] Deleted book data:`, {
+                bookId: deletedIdStr,
+                bookData: deletedBookData,
+                currentBook: currentBook
             });
             
             // Check if user is currently viewing THIS deleted book (Type-Safe)
@@ -97,20 +106,18 @@ const BooksSection = memo(({
             )) {
                 console.log(`🚨 [SMART EJECTION] User was viewing deleted book, ejecting to dashboard`);
                 
+                // 🛡️ SAFE MODAL: Use captured data instead of currentBook
+                const bookName = deletedBookData?.name || currentBook?.name || 'Unknown Ledger';
+                
                 // Show modal before ejecting to dashboard
-                console.log(`🚨 [SMART EJECTION] Opening modal with data:`, {
-                    targetName: 'this ledger',
-                    title: 'Ledger Deleted',
-                    desc: 'This ledger has been deleted remotely.'
-                });
                 openModal('deleteConfirm', { 
-                    targetName: 'this ledger',
+                    targetName: bookName,
                     title: 'Ledger Deleted', 
                     desc: 'This ledger has been deleted remotely.', 
                     onConfirm: () => setCurrentBook(null) 
                 });
             } else {
-                console.log(`🚨 [SMART EJECTION] ID mismatch - no action needed. Comparison:`, {
+                console.log(`🚨 [EJECTION] ID mismatch - no action needed. Comparison:`, {
                     deletedIdStr,
                     currentBookId: currentBook?._id,
                     currentBookLocalId: currentBook?.localId,

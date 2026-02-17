@@ -23,6 +23,51 @@ const safeCalculate = (expression: string) => {
     } catch { return 0; }
 };
 
+// --- 🕐 TIME FORMATTING HELPERS ---
+// Convert database time format ("08:05 pm") to HTML input format ("20:05")
+const dbToInputTime = (timeStr: string): string => {
+    if (!timeStr) return '';
+    
+    // If already in 24h format, return as-is
+    if (/^\d{1,2}:\d{2}$/.test(timeStr)) return timeStr;
+    
+    // Convert 12h format to 24h format
+    const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+    if (!match) return timeStr;
+    
+    let [, hours, minutes, period] = match;
+    let hoursNum = parseInt(hours);
+    
+    if (period.toUpperCase() === 'PM' && hoursNum !== 12) {
+        hoursNum += 12;
+    } else if (period.toUpperCase() === 'AM' && hoursNum === 12) {
+        hoursNum = 0;
+    }
+    
+    return `${hoursNum.toString().padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+};
+
+// Convert HTML input format ("20:05") to database format ("08:05 pm")
+const inputToDbTime = (timeStr: string): string => {
+    if (!timeStr) return '';
+    
+    // If already in 12h format, return as-is
+    if (/:\d{2}\s*(am|pm)/i.test(timeStr)) return timeStr.toLowerCase();
+    
+    // Convert 24h format to 12h format
+    const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+    if (!match) return timeStr;
+    
+    let [, hours, minutes] = match;
+    let hoursNum = parseInt(hours);
+    
+    const period = hoursNum >= 12 ? 'pm' : 'am';
+    if (hoursNum > 12) hoursNum -= 12;
+    if (hoursNum === 0) hoursNum = 12;
+    
+    return `${hoursNum.toString().padStart(2, '0')}:${minutes} ${period}`;
+};
+
 export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
     const { t, language } = useTranslation();
     const { checkPotentialDuplicate } = useVault(currentUser, currentBook);
@@ -85,7 +130,7 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
         if (isOpen) {
             const now = new Date();
             const localDate = now.toISOString().split('T')[0];
-            const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+            const localTime = now.toTimeString().slice(0, 5);  // 24h format: "20:30"
             
             if (initialData) {
                 const isIncome = initialData.type === 'income';
@@ -103,15 +148,16 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                         const entryDateTime = new Date(initialData.date);
                         if (!isNaN(entryDateTime.getTime())) {
                             entryDate = entryDateTime.toISOString().split('T')[0];
-                            entryTime = entryDateTime.toLocaleTimeString('en-US', { 
-                                hour: '2-digit', 
-                                minute: '2-digit', 
-                                hour12: true 
-                            });
+                            entryTime = entryDateTime.toTimeString().slice(0, 5);  // 24h format: "20:05"
                         }
                     } catch (err) {
                         console.warn('Date conversion failed, using current time:', err);
                     }
+                }
+                
+                // 🚨 TIME FIELD RESTORATION: Use existing time field if available
+                if (initialData.time && typeof initialData.time === 'string') {
+                    entryTime = dbToInputTime(initialData.time);  // Convert to 24h format for HTML input
                 }
                 
                 // Preserve all existing data including vKey, localId, _id, checksum
@@ -159,7 +205,14 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
         
         setIsLoading(true);
         try {
-            await onSubmit({ ...form, amount: finalAmount, type: activeInput === 'in' ? 'income' : 'expense' }, initialData);
+            const finalData = {
+                ...form, 
+                amount: finalAmount, 
+                type: activeInput === 'in' ? 'income' : 'expense',
+                time: inputToDbTime(form.time),  // Convert 24h to 12h format for storage
+                bookId: initialData?.bookId || currentBook?._id || currentBook?.localId  // 🚨 ADD bookId
+            };
+            await onSubmit(finalData, initialData);
             setShowKeypad(false);
         } finally {
             setIsLoading(false);

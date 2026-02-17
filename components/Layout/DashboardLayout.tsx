@@ -12,6 +12,7 @@ import { Tooltip } from '@/components/UI/Tooltip';
 import { useGuidance } from '@/hooks/useGuidance';
 import { cn } from '@/lib/utils/helpers';
 import SyncProgressBar from '@/components/UI/SyncProgressBar'; // Global Progress Bar
+import { ConflictBackgroundService } from '@/lib/vault/ConflictBackgroundService';
 
 // --- Types ---
 interface DashboardLayoutProps {
@@ -224,6 +225,17 @@ export const DashboardLayout = (props: any) => {
     }, [prefs.isMidnight, prefs.compactMode, prefs.autoLock, theme, setTheme]);
 
     useEffect(() => setMounted(true), []);
+    
+    // Initialize ConflictBackgroundService to keep timers alive across sessions
+    useEffect(() => {
+        ConflictBackgroundService.getInstance().restoreFromStorage();
+        
+        // 🚀 MEDIA QUEUE TRIGGER: Start processing any pending uploads on app mount
+        if (typeof window !== 'undefined' && (window as any).mediaStore) {
+            (window as any).mediaStore.getState().processQueue();
+        }
+    }, []);
+    
     if (!mounted) return null;
 
     return (

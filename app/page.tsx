@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, startTransition } from 'react';
+import React, { useState, useEffect, useCallback, startTransition, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, WifiOff, Trash2, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils/helpers';
 
 // 🔥 EXPOSE TO WINDOW: Make orchestrator available globally for useVaultActions
 if (typeof window !== 'undefined') {
-  window.syncOrchestrator = orchestrator;
+  window.orchestrator = orchestrator;
 } 
 
 // --- UI Shell & Layout ---
@@ -55,6 +55,9 @@ export default function CashBookApp() {
   const [activeSection, setActiveSection] = useState<NavSection>('books');
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isHydrated, setIsHydrated] = useState(false);
+  
+  // 🚨 DEFERRED DELETE TIMEOUT TRACKING (useRef to avoid closure trap)
+  const deleteTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   // ২. রিঅ্যাক্টিভ ইঞ্জিন (useVault V12.0) - Only when mounted
   const { saveBook, saveEntry, deleteEntry, restoreEntry, deleteBook, restoreBook } = useVault(mounted ? currentUser : null, mounted ? currentBook : null);
@@ -217,85 +220,166 @@ useEffect(() => {
   }, [activeSection, currentBook, currentUser, openModal, handleSaveBookGlobal, handleSaveEntryLogic]);
 
   // ৫.১ এন্ট্রি ডিলিট লজিক (Undo Toast with 10-second buffer)
-// ৫.১ এন্ট্রি ডিলিট লজিক (Fixed Type & Translation)
+  // ৫.১ এন্ট্রি ডিলিট লজিক (True Deferred Delete - Zero-Loss Protocol)
   const handleDeleteEntryLogic = async (entry: any) => {
     closeModal(); 
+    
+    // 🚨 STEP A: Update local Dexie immediately for instant UI feedback
     try {
+      await db.entries.update(Number(entry.localId), { 
+        isDeleted: 1, 
+        synced: 0, 
+        vKey: Date.now(),
+        updatedAt: Date.now()
+      });
+      
+      // 🔄 Immediate UI refresh
+      window.dispatchEvent(new Event('vault-updated'));
+      
+      // 🚨 STEP B: Start 8-second deferred delete timer
+      const deleteKey = `entry-${entry.localId}`;
+      const timeoutId = setTimeout(async () => {
+        // 🚨 STEP C: Timer completed - now call the API
+        console.log('🗑️ [DEFERRED DELETE] Executing server delete for entry:', entry.cid);
         const success = await deleteEntry(entry);
         if (success) {
-            window.dispatchEvent(new Event('vault-updated'));
-
-            toast.custom((tObj: { id: string; visible: boolean }) => (
-                <div className={cn(
-                    "flex items-center gap-5 bg-black/90 border border-white/10 p-5 rounded-[28px] shadow-2xl backdrop-blur-3xl transition-all duration-500",
-                    tObj.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-                )}>
-                    <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 shadow-inner">
-                        <RotateCcw size={22} className="animate-spin-slow" />
-                    </div>
-                    <div className="flex flex-col min-w-[130px]">
-                        <p className="text-[11px] font-black uppercase text-white tracking-[2px]">{t('success_entry_terminated')}</p>
-                        <p className="text-[8px] font-bold text-white/40 uppercase mt-1">
-                            Server sync in <span className="text-orange-500"><ToastCountdown initialSeconds={10} /></span>
-                        </p>
-                    </div>
-                    <button 
-                        onClick={async () => {
-                            const restored = await restoreEntry(entry);
-                            if (restored) {
-                                toast.dismiss(tObj.id);
-                                window.dispatchEvent(new Event('vault-updated'));
-                                toast.success(t("PROTOCOL RESTORED"), { icon: '🛡️' });
-                            }
-                        }}
-                        className="ml-2 px-6 h-12 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] active:scale-90 transition-all"
-                    >
-                        {t('btn_undo')} 
-                    </button>
-                </div>
-            ), { duration: 10000, position: 'bottom-center' });
+          console.log('✅ [DEFERRED DELETE] Server delete completed for entry:', entry.cid);
         }
-    } catch (err) { toast.error(t("Process Fault")); }
+        
+        // 🧹 Clean up timeout reference
+        deleteTimeoutsRef.current.delete(deleteKey);
+      }, 8000); // 8 seconds
+      
+      // 📝 Track timeout for potential undo
+      deleteTimeoutsRef.current.set(deleteKey, timeoutId);
+      
+      // 🎯 Show toast with real countdown timer
+      toast.custom((tObj: { id: string; visible: boolean }) => (
+        <div className={cn(
+          "flex items-center gap-5 bg-black/90 border border-white/10 p-5 rounded-[28px] shadow-2xl backdrop-blur-3xl transition-all duration-500",
+          tObj.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+        )}>
+          <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 shadow-inner">
+            <RotateCcw size={22} className="animate-spin-slow" />
+          </div>
+          <div className="flex flex-col min-w-[130px]">
+            <p className="text-[11px] font-black uppercase text-white tracking-[2px]">{t('success_entry_terminated')}</p>
+            <p className="text-[8px] font-bold text-white/40 uppercase mt-1">
+              Server sync in <span className="text-orange-500"><ToastCountdown initialSeconds={8} /></span>
+            </p>
+          </div>
+          <button 
+            onClick={async () => {
+              // 🚨 STEP D: UNDO - Clear timeout and restore locally
+              const timeoutToClear = deleteTimeoutsRef.current.get(deleteKey);
+              if (timeoutToClear) {
+                clearTimeout(timeoutToClear);
+                console.log('🔄 [UNDO] Cancelled deferred delete for entry:', entry.cid);
+              }
+              
+              // Restore locally without API call
+              const restored = await restoreEntry(entry);
+              if (restored) {
+                toast.dismiss(tObj.id);
+                window.dispatchEvent(new Event('vault-updated'));
+                toast.success(t("PROTOCOL RESTORED"), { icon: '🛡️' });
+              }
+              
+              // 🧹 Clean up timeout reference
+              deleteTimeoutsRef.current.delete(deleteKey);
+            }}
+            className="ml-2 px-6 h-12 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] active:scale-90 transition-all"
+          >
+            {t('btn_undo')} 
+          </button>
+        </div>
+      ), { duration: 8000, position: 'bottom-center' });
+      
+    } catch (err) { 
+      toast.error(t("Process Fault"));
+      console.error('❌ [DEFERRED DELETE] Failed to update local state:', err);
+    }
   };
 
-  // ৫.২ ভল্ট টার্মিনেশন লজিক (Book Soft-Delete)
+  // ৫.২ ভল্ট টার্মিনেশন লজিক (True Deferred Delete - Zero-Loss Protocol)
   const handleDeleteBookLogic = async (book: any) => {
     closeModal();
-    const success = await deleteBook(book);
-    if (success) {
-        setCurrentBook(null); 
-        toast.custom((tObj: { id: string; visible: boolean }) =>  (
-            <div className={cn(
-                "flex items-center gap-5 bg-black/90 border border-orange-500/20 p-5 rounded-[28px] shadow-2xl backdrop-blur-2xl transition-all duration-500",
-                tObj.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-            )}>
-                <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-inner">
-                    <Trash2 size={22} />
-                </div>
-                <div className="flex flex-col min-w-[130px]">
-                    <p className="text-[11px] font-black uppercase text-white tracking-[2px]">Vault Node Purged</p>
-                    <p className="text-[8px] font-bold text-white/40 uppercase mt-1">
-                        Expires in <span className="text-orange-500"><ToastCountdown initialSeconds={6} /></span>
-                    </p>
-                </div>
-                <button 
-                    onClick={async () => {
-                        await restoreBook(book); 
-                        toast.dismiss(tObj.id);
-                        window.dispatchEvent(new Event('vault-updated'));
-                        toast.success("VAULT RESTORED", { icon: '🛡️' });
-                    }}
-                    className="ml-2 px-6 h-12 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] active:scale-90 transition-all shadow-lg"
-                >
-                    {t('btn_undo')}
-                </button>
-            </div>
-        ), { duration: 6000, position: 'bottom-center' });
-
-        setTimeout(async () => {
-            const current = await db.books.get(Number(book.localId));
-            if (current && current.isDeleted === 1) orchestrator.triggerSync(currentUser._id);
-        }, 6500);
+    
+    // 🚨 STEP A: Update local Dexie immediately for instant UI feedback
+    try {
+      await db.books.update(Number(book.localId), { 
+        isDeleted: 1, 
+        synced: 0, 
+        vKey: Date.now(),
+        updatedAt: Date.now()
+      });
+      
+      // 🔄 Immediate UI refresh
+      setCurrentBook(null);
+      window.dispatchEvent(new Event('vault-updated'));
+      
+      // 🚨 STEP B: Start 6-second deferred delete timer
+      const deleteKey = `book-${book.localId}`;
+      const timeoutId = setTimeout(async () => {
+        // 🚨 STEP C: Timer completed - now call the API
+        console.log('🗑️ [DEFERRED DELETE] Executing server delete for book:', book.cid);
+        const success = await deleteBook(book);
+        if (success) {
+          console.log('✅ [DEFERRED DELETE] Server delete completed for book:', book.cid);
+        }
+        
+        // 🧹 Clean up timeout reference
+        deleteTimeoutsRef.current.delete(deleteKey);
+      }, 6000); // 6 seconds
+      
+      // 📝 Track timeout for potential undo
+      deleteTimeoutsRef.current.set(deleteKey, timeoutId);
+      
+      // 🎯 Show toast with real countdown timer
+      toast.custom((tObj: { id: string; visible: boolean }) => (
+        <div className={cn(
+          "flex items-center gap-5 bg-black/90 border border-orange-500/20 p-5 rounded-[28px] shadow-2xl backdrop-blur-2xl transition-all duration-500",
+          tObj.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+        )}>
+          <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-inner">
+            <Trash2 size={22} />
+          </div>
+          <div className="flex flex-col min-w-[130px]">
+            <p className="text-[11px] font-black uppercase text-white tracking-[2px]">Vault Node Purged</p>
+            <p className="text-[8px] font-bold text-white/40 uppercase mt-1">
+              Expires in <span className="text-orange-500"><ToastCountdown initialSeconds={6} /></span>
+            </p>
+          </div>
+          <button 
+            onClick={async () => {
+              // 🚨 STEP D: UNDO - Clear timeout and restore locally
+              const timeoutToClear = deleteTimeoutsRef.current.get(deleteKey);
+              if (timeoutToClear) {
+                clearTimeout(timeoutToClear);
+                console.log('🔄 [UNDO] Cancelled deferred delete for book:', book.cid);
+              }
+              
+              // Restore locally without API call
+              const restored = await restoreBook(book);
+              if (restored) {
+                toast.dismiss(tObj.id);
+                window.dispatchEvent(new Event('vault-updated'));
+                toast.success("VAULT RESTORED", { icon: '🛡️' });
+              }
+              
+              // 🧹 Clean up timeout reference
+              deleteTimeoutsRef.current.delete(deleteKey);
+            }}
+            className="ml-2 px-6 h-12 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[2px] active:scale-90 transition-all shadow-lg"
+          >
+            {t('btn_undo')}
+          </button>
+        </div>
+      ), { duration: 6000, position: 'bottom-center' });
+      
+    } catch (err) { 
+      toast.error(t("Process Fault"));
+      console.error('❌ [DEFERRED DELETE] Failed to update local state:', err);
     }
   };
 

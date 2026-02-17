@@ -140,11 +140,12 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
             // 🔍 TYPE-AGNOSTIC: Ensure both sides are strings
             const entryBookId = String(entry.bookId || '');
             
-            // 🔥 ORPHANED ENTRY RECOVERY: Show entries with fallback bookId
+            // � STRICT FILTERING: Only show entries where bookId exactly matches target book
+            // No fallback logic - orphaned entries should not appear anywhere
             if (!entry.bookId || entry.bookId === 'undefined' || entry.bookId === '' || entry.bookId.includes('orphaned-data')) {
-                // Show orphaned entries when viewing the first/default book
-                const isFirstBook = targetBookId === String(books?.[0]?._id || books?.[0]?.localId || '');
-                return isFirstBook;
+                // 🚫 STRICT REJECTION: Invalid entries should not appear in UI
+                console.warn(`🚫 [STRICT FILTERING] Hiding invalid entry CID: ${entry.cid} - Invalid bookId: ${entry.bookId}`);
+                return false; // Do not show orphaned entries
             }
             
             return entryBookId === targetBookId;
@@ -228,8 +229,26 @@ export const useVaultState = (currentUser: any, forceRefresh: number, currentBoo
             setLocalRefresh((prev: number) => prev + 1);
         });
         
+        // 🚀 HIGH PRIORITY: Listen for global vault refresh events
+        const handleVaultRefresh = () => {
+            console.log('🚀 [VAULT FORCE REFRESH] Global event received, forcing UI refresh');
+            setLocalRefresh((prev: number) => prev + 1);
+        };
+        
+        window.addEventListener('VAULT_FORCE_REFRESH', handleVaultRefresh);
+        
+        // 🗑️ ENTRY DELETE LISTENER: Listen for specific entry deletion events
+        const handleEntryDeleted = () => {
+            console.log('🗑️ [VAULT ENTRY DELETED] Entry deletion event received, forcing UI refresh');
+            setLocalRefresh((prev: number) => prev + 1);
+        };
+        
+        window.addEventListener('VAULT_ENTRY_DELETED', handleEntryDeleted);
+        
         return () => {
             unsubscribe();
+            window.removeEventListener('VAULT_FORCE_REFRESH', handleVaultRefresh);
+            window.removeEventListener('VAULT_ENTRY_DELETED', handleEntryDeleted);
         };
     }, []);
 

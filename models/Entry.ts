@@ -31,6 +31,7 @@ export interface IEntry extends Document {
   _emergencyFlushAt?: number; 
   isPinned?: number; 
   localId?: number; 
+  conflicted?: number;  
   createdAt: Date;
   updatedAt: Date;
 }
@@ -95,7 +96,6 @@ const EntrySchema = new Schema<IEntry>({
   status: { 
     type: String, 
     default: 'completed',
-    lowercase: true,
     index: true
   },
   isDeleted: {
@@ -137,6 +137,11 @@ const EntrySchema = new Schema<IEntry>({
   },
   _emergencyFlushAt: {
     type: Number
+  },
+  conflicted: {
+    type: Number,
+    default: 0,
+    index: true
   }
 }, { 
   timestamps: true,

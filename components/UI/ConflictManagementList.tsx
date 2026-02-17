@@ -1,23 +1,19 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Book, FileText, X, RotateCcw } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/offlineDB';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { useModal } from '@/context/ModalContext';
-import { orchestrator } from '@/lib/vault/SyncOrchestrator';
-import { generateChecksum } from '@/lib/utils/helpers';
+import { useConflictStore } from '@/lib/vault/ConflictStore';
+import { mapConflictType } from '@/lib/vault/ConflictMapper';
 
 interface ConflictManagementListProps {
     currentUser: any;
 }
 
-interface PendingResolution {
-    timer: number;
-    resolution: 'local' | 'server';
-}
 
 /**
  * 🚨 CONFLICT MANAGEMENT LIST (V2.0 - Premium Undo & Sync)
@@ -27,51 +23,26 @@ interface PendingResolution {
  */
 export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ currentUser }) => {
     const { openModal } = useModal();
-    const [pendingResolutions, setPendingResolutions] = useState<Record<string, PendingResolution>>({});
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const { 
+        conflicts, 
+        pendingResolutions, 
+        resolveAll, 
+        removePendingResolution 
+    } = useConflictStore();
     
     // 📄 PAGINATION STATE
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 7;
 
-    // Query all conflicted books and entries
-    const conflictedBooks = useLiveQuery(
-        () => db.books.where('conflicted').equals(1).toArray(),
-        []
-    );
-
-    const conflictedEntries = useLiveQuery(
-        () => db.entries.where('conflicted').equals(1).toArray(),
-        []
-    );
-
-    // Combine and sort all conflicts
+    // Use conflicts from store instead of local live queries
     const allConflicts = useMemo(() => {
-        const books = (conflictedBooks || []).filter((book: any) => book.isDeleted !== 1).map((book: any) => ({
-            ...book,
-            type: 'book',
-            displayName: book.name || 'Untitled Book',
-            displayInfo: `${book.entryCount || 0} entries`,
-            icon: Book,
-            color: 'text-blue-500'
-        }));
-
-        const entries = (conflictedEntries || []).filter((entry: any) => entry.isDeleted !== 1).map((entry: any) => ({
-            ...entry,
-            type: 'entry',
-            displayName: entry.title || 'Untitled Entry',
-            displayInfo: `${toBn(Math.abs(entry.amount) || 0, 'en')} ${entry.type === 'income' ? 'income' : 'expense'}`,
-            icon: FileText,
-            color: entry.type === 'income' ? 'text-green-500' : 'text-red-500'
-        }));
-
-        return [...books, ...entries].sort((a, b) => {
+        return conflicts.sort((a, b) => {
             // Sort by updatedAt descending (most recent first)
-            const timeA = new Date(a.updatedAt || 0).getTime();
-            const timeB = new Date(b.updatedAt || 0).getTime();
+            const timeA = new Date(a.record.updatedAt || 0).getTime();
+            const timeB = new Date(b.record.updatedAt || 0).getTime();
             return timeB - timeA;
         });
-    }, [conflictedBooks, conflictedEntries]);
+    }, [conflicts]);
     
     // 📄 PAGINATION LOGIC
     const totalPages = Math.ceil(allConflicts.length / ITEMS_PER_PAGE);
@@ -87,190 +58,32 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
         }
     }, [totalPages, currentPage]);
 
-    // Timer countdown effect
-    useEffect(() => {
-        intervalRef.current = setInterval(() => {
-            setPendingResolutions(prev => {
-                const updated = { ...prev };
-                const toRemove: string[] = [];
-                
-                Object.keys(updated).forEach(key => {
-                    updated[key].timer -= 1;
-                    if (updated[key].timer <= 0) {
-                        toRemove.push(key);
-                    }
-                });
-                
-                // Execute resolutions for timers that reached 0
-                toRemove.forEach(async (key) => {
-                    const resolution = updated[key];
-                    const [type, cid] = key.split(':');
-                    const item = allConflicts.find(conflict => 
-                        conflict.type === type && conflict.cid === cid
-                    );
-                    
-                    if (item) {
-                        await executeResolution(item, resolution.resolution);
-                    }
-                });
-                
-                // Remove completed items
-                toRemove.forEach(key => delete updated[key]);
-                
-                return updated;
-            });
-        }, 1000);
 
-        return () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-            }
-        };
-    }, [allConflicts]);
-
-    // Cleanup on unmount - commit any pending resolutions that reached 0
-    useEffect(() => {
-        return () => {
-            // Commit any resolutions that are ready (timer <= 0)
-            Object.entries(pendingResolutions).forEach(async ([key, resolution]) => {
-                if (resolution.timer <= 0) {
-                    const [type, cid] = key.split(':');
-                    const item = allConflicts.find(conflict => 
-                        conflict.type === type && conflict.cid === cid
-                    );
-                    
-                    if (item) {
-                        await executeResolution(item, resolution.resolution);
-                    }
-                }
-            });
-        };
-    }, [pendingResolutions, allConflicts]);
-
-    const executeResolution = async (item: any, resolution: 'local' | 'server') => {
-        try {
-            if (resolution === 'local') {
-                // Keep My Version: Update Dexie record with conflicted: 0, synced: 0, serverData: null
-                // FORCE vKey: Increment by 1 instead of timestamp for proper versioning
-                if (item.type === 'book') {
-                    const updateData = {
-                        conflicted: 0,
-                        synced: 0,
-                        serverData: null,
-                        vKey: (item.vKey || 0) + 1, // � INCREMENTAL: +1 instead of Date.now()
-                        updatedAt: Date.now()
-                    };
-                    
-                    await db.books.update(item.localId!, updateData);
-                    
-                    // 🔄 REGENERATE CHECKSUM: Create fresh checksum for resolved data
-                    const freshChecksum = await generateChecksum({
-                        amount: 0,
-                        date: new Date().toISOString().split('T')[0],
-                        title: (item.name || '').toLowerCase()
-                    });
-                    
-                    await db.books.update(item.localId!, { checksum: freshChecksum });
-                } else {
-                    const updateData = {
-                        conflicted: 0,
-                        synced: 0,
-                        serverData: null,
-                        vKey: (item.vKey || 0) + 1, // � INCREMENTAL: +1 instead of Date.now()
-                        updatedAt: Date.now()
-                    };
-                    
-                    await db.entries.update(item.localId!, updateData);
-                    
-                    // 🔄 REGENERATE CHECKSUM: Create fresh checksum for resolved data
-                    const freshChecksum = await generateChecksum({
-                        amount: Math.abs(item.amount || 0),
-                        date: new Date().toISOString().split('T')[0],
-                        title: (item.title || '').toLowerCase()
-                    });
-                    
-                    await db.entries.update(item.localId!, { checksum: freshChecksum });
-                }
-            } else {
-                // Accept Cloud Version: Update Dexie record with all fields from serverData
-                const serverData = item.serverData || {};
-                if (item.type === 'book') {
-                    await db.books.update(item.localId!, {
-                        ...serverData,
-                        conflicted: 0,
-                        synced: 1,
-                        serverData: null,
-                        updatedAt: Date.now()
-                    });
-                } else {
-                    await db.entries.update(item.localId!, {
-                        ...serverData,
-                        conflicted: 0,
-                        synced: 1,
-                        serverData: null,
-                        updatedAt: Date.now()
-                    });
-                }
-            }
-            
-            // 🚀 TRIGGER SYNC TO SERVER
-            if (currentUser?._id) {
-                await orchestrator.triggerSync(currentUser._id);
-            }
-            
-            // 🚨 SERVER FEEDBACK LOOP: Notify other clients of resolution
-            // Use orchestrator to broadcast resolution instead of direct Pusher
-            try {
-                // Broadcast resolution event through existing realtime system
-                if (orchestrator && typeof orchestrator.notifyUI === 'function') {
-                    orchestrator.notifyUI();
-                    console.log('🚨 [RESOLUTION BROADCAST] Conflict resolution broadcasted to other clients');
-                }
-            } catch (broadcastError) {
-                console.warn('🚨 [RESOLUTION BROADCAST] Failed to notify other clients:', broadcastError);
-            }
-            
-            // ��️ SAFETY NET: Log conflict resolution to audit trail
-            await db.auditLogs.add({
-                cid: item.cid,
-                type: item.type,
-                decision: resolution, // 'local' or 'server'
-                timestamp: Date.now(),
-                userId: currentUser._id
-            });
-            
-            // Trigger UI refresh
-            window.dispatchEvent(new Event('vault-updated'));
-        } catch (error) {
-            console.error('Conflict resolution failed:', error);
-        }
-    };
 
     const handleConflictResolution = (item: any) => {
         openModal('conflictResolver', {
-            record: item,
+            record: item.record,
             type: item.type,
             onResolve: async (resolution: 'local' | 'server') => {
-                // Add to pending resolutions with 8-second timer
-                const key = `${item.type}:${item.cid}`;
-                setPendingResolutions(prev => ({
-                    ...prev,
-                    [key]: {
-                        timer: 8,
-                        resolution
-                    }
-                }));
+                // Create conflict item using mapper
+                const conflictItem = {
+                    type: item.type,
+                    cid: item.cid,
+                    localId: item.localId,
+                    record: item.record,
+                    conflictType: mapConflictType(item.record.conflictReason)
+                };
+                
+                // Add to store's pending resolutions
+                addPendingResolution(conflictItem, resolution);
+                onClose(); // Close modal immediately
             }
         });
     };
 
     const handleUndo = (item: any) => {
         const key = `${item.type}:${item.cid}`;
-        setPendingResolutions(prev => {
-            const updated = { ...prev };
-            delete updated[key];
-            return updated;
-        });
+        removePendingResolution(key);
     };
 
     const formatDate = (dateString: string) => {
@@ -300,6 +113,22 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
 
 return (
         <div className="space-y-4">
+            {/* Bulk Resolve Buttons */}
+            <div className="flex gap-4 justify-center mb-6">
+                <button
+                    onClick={() => resolveAll('local')}
+                    className="px-6 py-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-xl font-black text-[12px] uppercase tracking-wider hover:bg-blue-500/30 hover:border-blue-500/50 transition-all active:scale-95"
+                >
+                    Resolve All (Keep Local)
+                </button>
+                <button
+                    onClick={() => resolveAll('server')}
+                    className="px-6 py-3 bg-green-500/20 border border-green-500/30 text-green-400 rounded-xl font-black text-[12px] uppercase tracking-wider hover:bg-green-500/30 hover:border-green-500/50 transition-all active:scale-95"
+                >
+                    Resolve All (Accept Server)
+                </button>
+            </div>
+
             {/* Header */}
             <div className="text-center mb-6">
                 <h3 className="text-2xl font-bold text-white mb-2">
@@ -314,6 +143,11 @@ return (
                     const pendingKey = `${item.type}:${item.cid}`;
                     const isPending = pendingKey in pendingResolutions;
                     const pendingResolution = pendingResolutions[pendingKey];
+                    
+                    // Calculate remaining time using expiresAt from store
+                    const remainingTime = isPending 
+                        ? Math.max(0, Math.ceil((pendingResolution.expiresAt - Date.now()) / 1000))
+                        : 0;
                     
                     return (
                         <motion.div
@@ -365,7 +199,7 @@ return (
                                             <motion.div 
                                                 className="h-full bg-yellow-500 rounded-full"
                                                 initial={{ width: "100%" }}
-                                                animate={{ width: `${(pendingResolution.timer / 8) * 100}%` }}
+                                                animate={{ width: `${(remainingTime / 8) * 100}%` }}
                                                 transition={{ duration: 1, ease: "linear" }}
                                             />
                                         </div>
@@ -376,7 +210,7 @@ return (
                                             className="px-4 py-2 border border-yellow-500/30 text-yellow-400 bg-yellow-500/10 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-yellow-500/20 hover:border-yellow-500/50 transition-all active:scale-95 flex items-center gap-2 animate-pulse"
                                         >
                                             <RotateCcw className="w-3 h-3" />
-                                            Undo ({pendingResolution.timer}s)
+                                            Undo ({remainingTime}s)
                                         </button>
                                     </div>
                                 ) : (

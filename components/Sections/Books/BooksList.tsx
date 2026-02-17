@@ -1,10 +1,11 @@
 "use client";
 import React from 'react';
 import { 
-    Plus, BookOpen, Loader2, Zap, Wallet, Clock, ShieldCheck 
+    Plus, BookOpen, Loader2, Zap, Wallet, Clock, ShieldCheck, RefreshCcw 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useLocalPreview } from '@/hooks/useLocalPreview';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn, getTimeAgo } from '@/lib/utils/helpers';
 
@@ -12,6 +13,7 @@ import { cn, toBn, getTimeAgo } from '@/lib/utils/helpers';
 const BookListItem = ({ book, onClick, onQuickAdd, balance, currencySymbol, lang, t }: any) => {
     const bookId = book.reactKey || book._id || book.localId;
     const isPositive = balance >= 0;
+    const { previewUrl, isLoading: isPreviewLoading, error: previewError } = useLocalPreview(book.image);
 
     return (
         <motion.div 
@@ -48,7 +50,25 @@ const BookListItem = ({ book, onClick, onQuickAdd, balance, currencySymbol, lang
                     "flex items-center justify-center overflow-hidden shrink-0 shadow-inner"
                 )}>
                     {book.image ? (
-                        <img src={book.image} alt="V" className="w-full h-full object-cover" />
+                        // 🚀 PRIORITY: Check for Cloudinary URL first (after sync)
+                        book.image.startsWith('http') ? (
+                            // Direct Cloudinary URL - no preview needed
+                            <img src={book.image} alt="V" className="w-full h-full object-cover" />
+                        ) : book.image.startsWith('cid_') ? (
+                            // Handle CID images with instant preview
+                            isPreviewLoading ? (
+                                <Loader2 size={16} className="text-orange-500 animate-spin" />
+                            ) : previewError ? (
+                                <Wallet size={16} className="text-red-500 opacity-40" />
+                            ) : previewUrl ? (
+                                <img src={previewUrl} alt="V" className="w-full h-full object-cover" />
+                            ) : (
+                                <RefreshCcw size={16} className="text-blue-500 animate-spin opacity-60" />
+                            )
+                        ) : (
+                            // Handle other/empty images
+                            <Wallet size={20} className="md:w-6 text-orange-500 opacity-20 group-hover:opacity-60 transition-opacity" />
+                        )
                     ) : (
                         <Wallet size={20} className="md:w-6 text-orange-500 opacity-20 group-hover:opacity-60 transition-opacity" />
                     )}

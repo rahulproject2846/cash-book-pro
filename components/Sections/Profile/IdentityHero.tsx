@@ -2,25 +2,80 @@
 import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { 
     Camera, Chrome, Zap, ShieldCheck, Activity, 
-    Trash2, User, MailCheck, Fingerprint, BadgeCheck 
+    Trash2, User, MailCheck, Fingerprint, BadgeCheck, Loader2, Cloud
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
+import { useLocalPreview } from '@/hooks/useLocalPreview';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 import { db } from '@/lib/offlineDB';
+import { useMediaStore } from '@/lib/vault/MediaStore';
+import { useConflictStore } from '@/lib/vault/ConflictStore';
 
-export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUser, fileInputRef }: any) => {
+export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUser, fileInputRef, handleRemoveImage }: any) => {
     const { t, language } = useTranslation();
+    const { uploadProgress, currentUpload, getQueueStatus } = useMediaStore();
+    const { getConflictCount } = useConflictStore();
     
-    // --- 🧬 ১. DYNAMIC INTEGRITY SCORE CALCULATION ---
+    // --- INSTANT LOCAL PREVIEW ---
+    const { previewUrl, isLoading: isPreviewLoading, error: previewError } = useLocalPreview(currentUser?.image);
+    
+    // --- SMART PRIORITY PROFILE IMAGE LOGIC ---
+    const getProfileImage = useCallback((user: any) => {
+        // Custom image being uploaded (CID reference)
+        if (user?.isCustomImage && user?.image?.startsWith('cid_')) {
+            return {
+                type: 'uploading',
+                url: previewUrl, // Use instant preview URL
+                text: 'Uploading...',
+                icon: Loader2,
+                progress: uploadProgress[user?.image] || 0,
+                isLoading: isPreviewLoading,
+                error: previewError
+            };
+        }
+        
+        // Custom image uploaded (Cloudinary URL)
+        if (user?.isCustomImage && user?.image && !user?.image.startsWith('cid_')) {
+            return {
+                type: 'custom',
+                url: user.image,
+                text: 'Custom',
+                icon: Cloud
+            };
+        }
+        
+        // Google image
+        if (!user?.isCustomImage && user?.image?.startsWith('https://')) {
+            return {
+                type: 'google',
+                url: user.image,
+                text: 'Google',
+                icon: Chrome
+            };
+        }
+        
+        // Default placeholder
+        return {
+            type: 'placeholder',
+            url: null,
+            text: 'Default',
+            icon: User
+        };
+    }, [uploadProgress, previewUrl, isPreviewLoading, previewError]);
+
+    const profileImage = useMemo(() => getProfileImage(currentUser), [getProfileImage, currentUser]);
+    
+    // --- STATE VARIABLES ---
     const [syncPercentage, setSyncPercentage] = useState(0);
     const [backupStatus, setBackupStatus] = useState(false);
     const [hasPendingItems, setHasPendingItems] = useState(false);
     const [isVerifiedSession, setIsVerifiedSession] = useState(false);
 
+    // --- CALCULATION FUNCTIONS ---
     // Calculate sync percentage and pending items from Dexie
     const calculateSyncPercentage = useCallback(async () => {
         try {
@@ -61,6 +116,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
         setIsVerifiedSession(!!isVerified);
     }, [currentUser]);
 
+    // --- EFFECTS ---
     // Initialize values on mount
     useEffect(() => {
         calculateSyncPercentage();
@@ -70,6 +126,8 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
 
     // Listen for sync events and profile changes
     useEffect(() => {
+        if (typeof window === 'undefined') return;
+        
         const handleVaultUpdate = () => {
             calculateSyncPercentage();
         };
@@ -89,7 +147,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
         };
     }, [calculateSyncPercentage, checkBackupStatus]);
 
-    // Dynamic health score calculation
+    // --- DYNAMIC HEALTH SCORE ---
     const healthScore = useMemo(() => {
         let score = 0;
         
@@ -116,6 +174,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
         return Math.min(score, 100); // Cap at 100%
     }, [formData.name, formData.image, hasPendingItems, backupStatus, isVerifiedSession]);
 
+    // --- HANDLERS ---
     const handleRemovePhoto = () => {
         setForm({ ...formData, image: '' });
     };
@@ -126,7 +185,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
             "p-8 flex flex-col items-center text-center overflow-hidden shadow-2xl transition-all duration-500 group"
         )}>
             
-            {/* --- 🛡️ INTEGRITY WATERMARK (Elite Badge Style) --- */}
+            {/* --- INTEGRITY WATERMARK (Elite Badge Style) --- */}
             <div className="absolute top-6 left-8 z-10">
                 <Tooltip text={t('tt_integrity_score') || "System Integrity Measurement"}>
                     <div className="flex flex-col items-start gap-1.5 cursor-help">
@@ -149,7 +208,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                 </Tooltip>
             </div>
 
-            {/* --- 📸 IDENTITY AVATAR & ENCRYPTED RING --- */}
+            {/* --- IDENTITY AVATAR & ENCRYPTED RING --- */}
             <div className="relative mt-10 group/avatar">
                 {/* Protocol Health Ring (Decorative SVG Logic) */}
                 <div className="absolute -inset-8 opacity-40 group-hover:opacity-100 transition-opacity duration-700">
@@ -170,19 +229,50 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                     </svg>
                 </div>
                 
-                {/* Elite Squircle Profile Image */}
+                {/* Elite Squircle Profile Image with Smart Priority */}
                 <div className={cn(
                     "w-48 h-48 rounded-[65px] flex items-center justify-center",
                     "shadow-[0_35px_70px_-15px_rgba(0,0,0,0.4)] border-[12px] border-[var(--bg-card)]",
                     "bg-[var(--bg-app)] relative z-10 overflow-hidden",
                     "group-hover:scale-[1.03] transition-all duration-700 ease-out"
                 )}>
-                    {formData.image ? (
+                    {/* SMART PRIORITY IMAGE DISPLAY */}
+                    {profileImage.type === 'uploading' && (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[var(--bg-app)] to-[var(--border)] relative">
+                            <Loader2 size={48} className="text-orange-500 animate-spin mb-2" />
+                            <span className="text-xs font-bold text-orange-500 uppercase tracking-wider">
+                                {profileImage.text}
+                            </span>
+                            {profileImage.progress && profileImage.progress > 0 && (
+                                <div className="absolute bottom-2 left-2 right-2">
+                                    <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                                        <motion.div 
+                                            className="h-full bg-orange-500"
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${profileImage.progress}%` }}
+                                            transition={{ duration: 0.3 }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    
+                    {profileImage.type === 'custom' && (
                         <motion.img 
                             initial={{ scale: 1.2, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                            src={formData.image} alt="ID" className="w-full h-full object-cover" 
+                            src={profileImage.url} alt="Custom Profile" className="w-full h-full object-cover" 
                         />
-                    ) : (
+                    )}
+                    
+                    {profileImage.type === 'google' && (
+                        <motion.img 
+                            initial={{ scale: 1.2, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                            src={profileImage.url} alt="Google Profile" className="w-full h-full object-cover" 
+                        />
+                    )}
+                    
+                    {profileImage.type === 'placeholder' && (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[var(--bg-app)] to-[var(--border)]">
                             <User size={72} strokeWidth={1} className="text-[var(--text-muted)] opacity-10" />
                             <span className="text-3xl font-black text-orange-500/10 italic uppercase mt-2">
@@ -190,6 +280,33 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                             </span>
                         </div>
                     )}
+                    
+                    {/* SOURCE BADGE */}
+                    <div className="absolute top-2 right-2">
+                        {profileImage.type === 'google' && (
+                            <Tooltip text="Google Profile Image">
+                                <div className="p-1.5 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                                    <Chrome size={12} className="text-blue-400" strokeWidth={2.5} />
+                                </div>
+                            </Tooltip>
+                        )}
+                        
+                        {profileImage.type === 'custom' && (
+                            <Tooltip text="Custom Upload">
+                                <div className="p-1.5 bg-green-500/10 rounded-lg border border-green-500/20">
+                                    <Cloud size={12} className="text-green-400" strokeWidth={2.5} />
+                                </div>
+                            </Tooltip>
+                        )}
+                        
+                        {profileImage.type === 'uploading' && (
+                            <Tooltip text="Uploading to Cloud">
+                                <div className="p-1.5 bg-orange-500/10 rounded-lg border border-orange-500/20">
+                                    <Loader2 size={12} className="text-orange-400 animate-spin" strokeWidth={2.5} />
+                                </div>
+                            </Tooltip>
+                        )}
+                    </div>
                 </div>
 
                 {/* Apple Style Haptic Action Buttons */}
@@ -209,7 +326,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                             <motion.button 
                                 initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }}
                                 whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.9 }}
-                                onClick={handleRemovePhoto}
+                                onClick={handleRemoveImage}
                                 className="bg-zinc-800 text-red-500 p-4 rounded-2xl shadow-xl border-4 border-[var(--bg-card)] hover:bg-red-500 hover:text-white transition-all"
                             >
                                 <Trash2 size={20} strokeWidth={2.5} />
@@ -220,7 +337,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                 <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => e.target.files && handleImageProcess(e.target.files[0])} />
             </div>
 
-            {/* --- 📝 IDENTITY INFO SECTION --- */}
+            {/* --- IDENTITY INFO SECTION --- */}
             <div className="mt-16 relative z-10 w-full space-y-4">
                 <div className="flex items-center justify-center gap-3">
                     <Tooltip text={t('tt_display_identity') || "System Registered Username"}>

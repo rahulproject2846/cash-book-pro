@@ -2,6 +2,10 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
+import { processMedia } from '@/lib/utils/mediaProcessor';
+import { useMediaStore } from '@/lib/vault/MediaStore';
+import { identityManager } from '@/lib/vault/core/IdentityManager';
+import { generateCID } from '@/lib/offlineDB';
 
 export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any) => {
     const [isLoading, setIsLoading] = useState(false);
@@ -14,38 +18,66 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
         image: currentUser?.image || ''
     });
 
-    // ১. ইমেজ প্রসেসিং
-   // ১. স্মার্ট ইমেজ কম্প্রেসর (Fixed for MongoDB Storage)
-    const handleImageProcess = useCallback((file: File) => {
-        // ফাইল সাইজ চেক (৫ এমবি এর বেশি হলে নিবে না)
-        if (file.size > 5 * 1024 * 1024) return toast.error("File too large (Max 5MB)");
-        
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target?.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                // 🔥 ফিক্স: সাইজ কমানো হয়েছে (৩০০px) যাতে ডাটাবেসে সেভ হয়
-                const MAX_WIDTH = 300; 
-                const scaleSize = MAX_WIDTH / img.width;
-                canvas.width = MAX_WIDTH;
-                canvas.height = img.height * scaleSize;
-
-                if (ctx) {
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    
-                    // 🔥 কোয়ালিটি ০.৬ (৬০%) করা হয়েছে
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6); 
-                    
-                    setForm(prev => ({ ...prev, image: compressedBase64 }));
-                    toast.success("Image Ready for Save");
-                }
-            };
-        };
+    // ১. ইমেজ প্রসেসিং (🚀 BANKING-GRADE MEDIA ENGINE)
+    const handleImageProcess = useCallback(async (file: File) => {
+        try {
+            console.log(`🚀 [PROFILE IMAGE] Processing profile image:`, {
+                name: file.name,
+                size: `${(file.size / 1024).toFixed(2)} KB`,
+                type: file.type
+            });
+            
+            // 🗜️ SMART COMPRESSION: Use our new media processor
+            const { blob, compressedSize, compressionRatio } = await processMedia(file);
+            
+            console.log(`✅ [PROFILE IMAGE] Compression complete:`, {
+                original: `${(file.size / 1024).toFixed(2)} KB`,
+                compressed: `${(compressedSize / 1024).toFixed(2)} KB`,
+                saved: `${compressionRatio.toFixed(1)}%`
+            });
+            
+            // 🆔 GENERATE MEDIA CID
+            const mediaCid = generateCID();
+            const userId = identityManager.getUserId();
+            
+            if (!userId) {
+                toast.error('User not logged in');
+                return;
+            }
+            
+            // 📤 SAVE TO MEDIA STORE
+            await db.mediaStore.add({
+                cid: mediaCid,
+                parentType: 'user',
+                parentId: userId,
+                localStatus: 'pending_upload',
+                blobData: blob,
+                mimeType: file.type,
+                originalSize: file.size,
+                compressedSize: blob.size,
+                createdAt: Date.now(),
+                userId
+            });
+            
+            // 🔄 UPDATE USER RECORD: Reference media CID and mark as custom
+            await db.users.update(userId, { 
+                image: mediaCid, // 🚨 Store CID reference
+                isCustomImage: true // 🚨 Mark as custom upload
+            });
+            
+            // 📤 ADD TO UPLOAD QUEUE
+            const mediaStore = useMediaStore.getState();
+            mediaStore.addToQueue(mediaCid);
+            
+            // 🎯 UPDATE FORM STATE: Show loading state
+            setForm(prev => ({ ...prev, image: mediaCid }));
+            
+            toast.success('Image uploaded successfully! Processing...');
+            
+        } catch (error) {
+            console.error('❌ [PROFILE IMAGE] Upload failed:', error);
+            toast.error('Image upload failed');
+        }
     }, []);
 
     // ২. প্রোফাইল আপডেট
@@ -171,10 +203,48 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
         finally { setIsLoading(false); }
     };
 
+    // 🗑️ REMOVE IMAGE LOGIC: Re-enable Google sync
+    const handleRemoveImage = async () => {
+        try {
+            if (!currentUser?._id) {
+                toast.error('User not found');
+                return;
+            }
+            
+            setIsLoading(true);
+            
+            // 🔄 UPDATE SERVER: Remove custom image and re-enable Google sync
+            const res = await fetch('/api/auth/update', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    userId: currentUser._id,
+                    image: '', // 🗑️ Clear image
+                    isCustomImage: false // 🗑️ Re-enable Google sync
+                }),
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                setCurrentUser(data.user);
+                localStorage.setItem('cashbookUser', JSON.stringify(data.user));
+                setForm(prev => ({ ...prev, image: '' }));
+                toast.success('Image removed. Google sync re-enabled');
+            } else {
+                toast.error(data.message || 'Failed to remove image');
+            }
+        } catch (error) {
+            toast.error('Connection error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return {
         formData, setForm,
         isLoading, isExporting,
         handleImageProcess,
+        handleRemoveImage, // 🗑️ NEW: Remove image logic
         updateProfile,
         exportMasterData,
         importMasterData, // নতুন ফাংশন এক্সপোর্ট

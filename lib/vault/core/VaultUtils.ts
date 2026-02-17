@@ -67,15 +67,16 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     // 🔍 RECORD TYPE DETECTION: Books have name field, Entries have title field
     const isBook = !!normalized.name; // Books use name, Entries use title
 
-    // 🔴 STRICT REJECTION: Only reject Entries with missing bookId
+    // 🔴 ORPHAN RESCUE: Rescue entries with missing bookId instead of rejecting
     if (!isBook && (!normalized.bookId || normalized.bookId === 'undefined' || normalized.bookId === '')) {
-        console.error(`🚫 [STRICT REJECT] Dropping invalid entry CID: ${normalized.cid} - Missing bookId`);
-        return null; // 🚨 REJECT INSTEAD OF FALLBACK
+        console.warn(`⚠️ [ORPHAN RESCUE] Assigning fallback ID to entry CID: ${normalized.cid} - Missing bookId`);
+        normalized.bookId = data.bookId || 'orphaned-data';
     }
 
     // Generate required fields if missing
     if (!normalized.vKey) {
-        normalized.vKey = 1; // Start with incremental vKey = 1
+        // 🔥 UNIFIED VKEY STRATEGY: Use Date.now() for absolute and incremental versioning
+        normalized.vKey = Date.now();
     }
     
     if (!normalized.checksum) {
@@ -99,7 +100,8 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     // ৪. টাইমস্ট্যাম্প ইউনিফিকেশন
     normalized.createdAt = normalizeTimestamp(normalized.createdAt);
     normalized.updatedAt = normalizeTimestamp(normalized.updatedAt);
-    if (normalized.date) normalized.date = normalizeTimestamp(normalized.date);
+    // 🚨 CRITICAL FIX: Don't normalize date field - keep as ISO string for checksum consistency
+    // if (normalized.date) normalized.date = normalizeTimestamp(normalized.date);
 
     // ৫. ফিল্ড এলিয়াস (Legacy Support)
     if (normalized.memo && !normalized.note) normalized.note = normalized.memo;
@@ -113,14 +115,14 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
         }
     }
 
-    // 🔧 FIELD NORMALIZATION: Force category, paymentMethod, and status to lowercase
-    if (normalized.category) {
+    // 🔧 FIELD NORMALIZATION: Only normalize if field exists (preserve undefined for selective merge)
+    if (normalized.category !== undefined) {
         normalized.category = String(normalized.category).toLowerCase().trim();
     }
-    if (normalized.paymentMethod) {
+    if (normalized.paymentMethod !== undefined) {
         normalized.paymentMethod = String(normalized.paymentMethod).toLowerCase().trim();
     }
-    if (normalized.status) {
+    if (normalized.status !== undefined) {
         normalized.status = String(normalized.status).toLowerCase().trim();
     }
 

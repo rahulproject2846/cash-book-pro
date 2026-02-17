@@ -41,6 +41,7 @@ export interface LocalBook {
   conflicted?: 0 | 1;     // 🚨 CONFLICT TRACKING: 0 = no conflict, 1 = conflict detected
   conflictReason?: string;    // 🚨 CONFLICT REASON: "VERSION_CONFLICT", "MERGE_CONFLICT", etc.
   serverData?: any;        // 🚨 SERVER DATA: Original server data that caused conflict
+  mediaCid?: string;       // 🚨 MEDIA CID: Reference to mediaStore record
 }
 
 export interface LocalEntry {
@@ -72,6 +73,7 @@ export interface LocalEntry {
   conflicted?: 0 | 1;     // 🚨 CONFLICT TRACKING: 0 = no conflict, 1 = conflict detected
   conflictReason?: string;    // 🚨 CONFLICT REASON: "VERSION_CONFLICT", "MERGE_CONFLICT", etc.
   serverData?: any;        // 🚨 SERVER DATA: Original server data that caused conflict
+  mediaId?: string;        // 🚨 MEDIA ID: Reference to mediaStore record for entry images
 }
 
 // Phase 3 Prep: সাইলেন্ট অ্যাক্টিভিটি ট্র্যাকিং
@@ -93,18 +95,65 @@ export interface LocalAuditLog {
   userId: string;
 }
 
+// 🛡️ SAFETY SNAPSHOT: Pre-resolution backup interface
+export interface LocalSnapshot {
+  localId?: number;
+  cid: string;
+  type: 'book' | 'entry';
+  record: any;               // 🚨 COMPLETE RECORD BACKUP
+  timestamp: number;
+  reason: 'pre_resolution_backup' | 'auto_backup' | 'manual_backup';
+  userId: string;
+}
+
+// 🚀 BANKING-GRADE MEDIA ENGINE: Local Media Interface
+export interface LocalMedia {
+  localId?: number;
+  cid: string;                    // 🚨 CRITICAL: Link to Book/Entry
+  parentType: 'book' | 'entry' | 'user';  // Parent record type
+  parentId: string;               // Parent record ID
+  localStatus: 'pending_upload' | 'uploaded' | 'failed';  // 🚨 KEY FIELD
+  blobData?: Blob;                // 🚨 TEMPORARY: Local blob storage
+  cloudinaryUrl?: string;         // 🚨 FINAL: Cloudinary URL
+  cloudinaryPublicId?: string;    // 🚨 CLOUDINARY REFERENCE
+  mimeType: string;               // image/jpeg, application/pdf
+  originalSize: number;           // File size in bytes
+  compressedSize?: number;        // After local compression
+  uploadProgress?: number;        // 0-100 percentage
+  uploadError?: string;           // Error message if failed
+  createdAt: number;
+  uploadedAt?: number;            // When successfully uploaded
+  userId: string;                 // Owner for security
+}
+
 // --- ২. হেল্পার ফাংশনস (Integrity & Utilities) ---
 
 /**
- * Logic C: SHA-256 Checksum Generator (Matches Server Format)
+ * Logic C: SHA-256 Checksum Generator (Enhanced for Field-Level Integrity)
  */
-export const generateEntryChecksum = async (entry: { amount: number; date: string; title: string }): Promise<string> => {
-    // 1. Normalize Title (Trim & Lowercase)
-    const title = entry.title?.trim().toLowerCase() || "";
-    const dateStr = String(entry.date).split('T')[0];
+export const generateEntryChecksum = async (entry: { 
+  amount: number; 
+  date: string; 
+  time?: string;
+  title: string;
+  note?: string;
+  category?: string;
+  paymentMethod?: string;
+  type?: string;
+  status?: string;
+}): Promise<string> => {
+    // 1. Normalize all fields (Trim ONLY - respect user's case)
+    const title = entry.title?.trim() || "";
+    const note = entry.note?.trim() || "";
+    const category = entry.category?.trim() || "";
+    const paymentMethod = entry.paymentMethod?.trim() || "";
+    const type = entry.type?.trim() || "";
+    const status = entry.status?.trim() || "";
+    // 🚨 ROBUST DATE HANDLING: Works with both string and timestamp inputs
+    const dateStr = String(entry.date);  // ZERO-LOGIC: Use raw string directly
     
-    // 2. Construct Payload with COLONS (Matches Server Format)
-    const payload = `${entry.amount}:${dateStr}:${title}`;
+    // 2. Construct Payload with ALL business fields (Enhanced integrity)
+    const payload = `${entry.amount}:${String(entry.date)}:${String(entry.time || "")}:${title}:${note}:${category}:${paymentMethod}:${type}:${status}`;
     
     // 3. Generate SHA-256 Hash
     const msgUint8 = new TextEncoder().encode(payload);
@@ -131,6 +180,8 @@ export class VaultProDB extends Dexie {
   telemetry!: Table<LocalTelemetry>; // Phase 3 Table
   audits!: Table<any>; // Audit Framework Table
   auditLogs!: Table<LocalAuditLog>; // Safety Net - Conflict Audit Log
+  snapshots!: Table<LocalSnapshot>; // 🛡️ Safety Snapshots Table
+  mediaStore!: Table<LocalMedia>;  // 🚀 BANKING-GRADE MEDIA ENGINE
 
   constructor() {
     super('VaultPro_Core_V1'); 
@@ -223,9 +274,57 @@ export class VaultProDB extends Dexie {
       users: '_id',
       telemetry: '++id, type, synced, timestamp',
       audits: '++id, type, level, timestamp, sessionId, userId',
-      auditLogs: '++localId, cid, userId, timestamp'
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp'  // SAFETY SNAPSHOTS
     }).upgrade(async (tx) => {
       console.log('Vault Pro: Safety Net - Conflict Audit Log initialized');
+    });
+
+    // Version 11: BANKING-GRADE MEDIA ENGINE
+    // Added mediaStore table for offline-first Cloudinary pipeline
+    this.version(11).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp',  // SAFETY SNAPSHOTS
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt'  // MEDIA STORE
+    }).upgrade(async (tx) => {
+      console.log(' Vault Pro: Banking-Grade Media Engine initialized');
+    });
+
+    // Version 12: MEDIA CID INDEX FIX
+    // Added mediaCid index to books store for efficient CID clearing
+    // Added mediaId index to entries store for efficient entry image operations
+    this.version(12).stores({
+      books: '++localId, _id, userId, &cid, &image, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted, &mediaCid',
+      entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp',  // SAFETY SNAPSHOTS
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt'  // MEDIA STORE
+    }).upgrade(async (tx) => {
+      // Add mediaCid index to books store for efficient CID clearing
+      const booksTable = tx.table('books') as any;
+      if (booksTable) {
+        booksTable.createIndex('mediaCid', 'mediaCid', { unique: false });
+      }
+      // Add image index to books store for efficient image queries
+      if (booksTable) {
+        booksTable.createIndex('image', 'image', { unique: false });
+      }
+      
+      // Add mediaId index to entries store for efficient entry image operations
+      const entriesTable = tx.table('entries') as any;
+      if (entriesTable) {
+        entriesTable.createIndex('mediaId', 'mediaId', { unique: false });
+      }
+      
+      console.log('🔧 Vault Pro: mediaCid, image, and mediaId indexes added to stores');
     });
   }
 }
@@ -245,7 +344,8 @@ export const clearVaultData = async () => {
     db.users.clear(),
     db.telemetry.clear(),
     db.audits.clear(),
-    db.auditLogs.clear()
+    db.auditLogs.clear(),
+    db.snapshots.clear()  // CLEAR SAFETY SNAPSHOTS
   ]);
 };
 

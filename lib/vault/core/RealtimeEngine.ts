@@ -226,13 +226,13 @@ export class RealtimeEngine {
         console.log(`💉 [PRIORITY INJECTION] Injecting ${eventType} data`);
         await this.injectCallback(eventType, data);
         
-        // 🌊 DEBOUNCED HYDRATION: Skip during mass injection
-        if (!this.isMassInjectionMode) {
-          console.log(`🌊 [PRIORITY HYDRATION] Triggering debounced sync after ${eventType}`);
-          await this.debouncedHydration(this.userId, false);
-        } else {
-          console.log(`🚀 [MASS INJECTION] Skipping hydration for ${eventType} - mass injection mode active`);
-        }
+        // 🌊 DEBOUNCED HYDRATION: REMOVED - Trust Pusher signals for instant updates
+        // if (!this.isMassInjectionMode) {
+        //   console.log(`🌊 [PRIORITY HYDRATION] Triggering debounced sync after ${eventType}`);
+        //   await this.debouncedHydration(this.userId, false);
+        // } else {
+        //   console.log(`🚀 [MASS INJECTION] Skipping hydration for ${eventType} - mass injection mode active`);
+        // }
         
         // 📡 BROADCAST: Trigger UI refresh
         this.broadcastCallback();
@@ -278,17 +278,26 @@ export class RealtimeEngine {
         await this.injectCallback(eventType, data);
       }
       
-      // 🌊 DEBOUNCED HYDRATION: Skip during mass injection
-      if (!this.isMassInjectionMode) {
-        console.log(`🌊 [PRIORITY HYDRATION] Triggering debounced sync after ${eventType}`);
-        await this.debouncedHydration(this.userId, false);
-      } else {
-        console.log(`🚀 [MASS INJECTION] Skipping hydration for ${eventType} - mass injection mode active`);
-        console.log(`🚀 [MASS INJECTION] Skipping hydration for ${eventType} - mass injection mode active (${this.recentEventCount} events)`);
-      }
+      // 🌊 DEBOUNCED HYDRATION: REMOVED - Trust Pusher signals for instant updates
+      // if (!this.isMassInjectionMode) {
+      //   console.log(`🌊 [PRIORITY HYDRATION] Triggering debounced sync after ${eventType}`);
+      //   await this.debouncedHydration(this.userId, false);
+      // } else {
+      //   console.log(`🚀 [MASS INJECTION] Skipping hydration for ${eventType} - mass injection mode active`);
+      //   console.log(`🚀 [MASS INJECTION] Skipping hydration for ${eventType} - mass injection mode active (${this.recentEventCount} events)`);
+      // }
       
-      // 📡 BROADCAST: Trigger UI refresh
-      this.broadcastCallback();
+      // 📡 BROADCAST: Trigger UI refresh with delay for Dexie completion
+      requestAnimationFrame(() => {
+        console.log('📡 [REALTIME] UI Broadcast Triggered');
+        
+        // 🚀 HIGH PRIORITY: Force immediate UI refresh via global event
+        window.dispatchEvent(new CustomEvent('VAULT_FORCE_REFRESH', {
+          detail: { source: 'realtime', eventType, timestamp: Date.now() }
+        }));
+        
+        this.broadcastCallback();
+      });
       
       // 🧹 CLEANUP: Remove from processing sets after handling
       setTimeout(() => {

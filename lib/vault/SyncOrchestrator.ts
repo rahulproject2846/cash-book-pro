@@ -7,6 +7,7 @@ import { normalizeRecord, normalizeTimestamp } from './core/VaultUtils';
 import { migrationManager } from './core/MigrationManager';
 import { telemetry } from './Telemetry';
 import { identityManager } from './core/IdentityManager';
+import toast from 'react-hot-toast';
 
 /**
  * VAULT PRO: MASTER SYNC ORCHESTRATOR (V35.0)
@@ -85,25 +86,27 @@ class SyncOrchestrator {
       
       this.userId = uid;
 
-      // ১. আগে ইন্টিগ্রিটি চেক চালিয়ে সার্ভার ক্লিন করা (The Janitor)
-      console.log('🏁 [SYNC] Step A: Running Integrity Check & Server Cleanup');
-      await this.performIntegrityCheck(uid);
-
-      // ২. লোকাল রিপেয়ার (Data Repair)
-      console.log('🏁 [SYNC] Step B: Running Local Database Repair');
+      // 🛡️ STEP 1 - GLOBAL REPAIR (Blocking): Fix local data issues first
+      console.log('🏁 [SYNC] Step 1: Running Global Database Repair');
       this.globalDatabaseRepair();
+      
+      // 🔧 STEP 1.5 - REPAIR CORRUPTED DATA: Fix undefined/null fields after reload trap handling
+      console.log('🏁 [SYNC] Step 1.5: Running Corrupted Data Repair');
       this.repairCorruptedData();
 
-      // ৩. সবশেষে হাইড্রেট করা (Data Fetch)
-      if (!this.isHydrating) {
-        console.log('🏁 [SYNC] Step C: Starting Final Hydration');
-        await this.hydrate(uid, true);
-      }
+      // 🚀 STEP 2 - INITIAL HYDRATION (Blocking): Establish baseline truth from server
+      console.log('🏁 [SYNC] Step 2: Running Initial Hydration');
+      await this.hydrate(uid, true); // Force full sync - MUST complete before next step
 
-      // ৪. সিডিউল শুরু করা
+      // 🔍 STEP 3 - INTEGRITY AUDIT: Only after hydration is complete
+      console.log('🏁 [SYNC] Step 3: Running Integrity Audit');
+      await this.performIntegrityCheck(uid);
+
+      // 🔄 STEP 4 - SCHEDULING: Start background services last
+      console.log('🏁 [SYNC] Step 4: Starting Background Services');
       this.scheduleIntegrityChecks();
       
-      console.log('🏁 [SYNC] Startup Sequence Complete');
+      console.log('🏁 [SYNC] Startup Sequence Complete - All systems ready');
     });
     }
   }
@@ -126,13 +129,14 @@ class SyncOrchestrator {
         Boolean(local.isDeleted) === Boolean(remote.isDeleted)
       );
     } else if (type === 'BOOK') {
-      // Compare book business fields
+      // Compare book business fields - ALL fields included for reliable updates
       return (
         String(local.name || '').trim().toLowerCase() === String(remote.name || '').trim().toLowerCase() &&
         String(local.description || '').trim() === String(remote.description || '').trim() &&
         String(local.type || '').toLowerCase() === String(remote.type || '').toLowerCase() &&
         String(local.phone || '').trim() === String(remote.phone || '').trim() &&
         String(local.image || '') === String(remote.image || '') &&
+        String(local.currency || '').toLowerCase() === String(remote.currency || '').toLowerCase() &&
         Boolean(local.isDeleted) === Boolean(remote.isDeleted)
       );
     }
@@ -182,7 +186,6 @@ class SyncOrchestrator {
       for (const entry of allEntries) {
         const needsRepair = 
           entry.userId !== this.userId || 
-          entry.isDeleted !== 0 ||
           entry.isDeleted === undefined ||
           entry.isDeleted === null;
         
@@ -202,7 +205,6 @@ class SyncOrchestrator {
       for (const book of allBooks) {
         const needsRepair = 
           book.userId !== this.userId || 
-          book.isDeleted !== 0 ||
           book.isDeleted === undefined ||
           book.isDeleted === null;
         
@@ -253,6 +255,15 @@ class SyncOrchestrator {
           needsUpdate = true;
         }
         
+        // 🚨 RELOAD TRAP FIX: Handle interrupted delete operations
+        if (entry.isDeleted === 1 && entry.synced === 0) {
+          console.log(`🔄 [RELOAD TRAP] Auto-undoing interrupted delete for entry CID: ${entry.cid}`);
+          console.log('✅ [RELOAD TRAP] Restored item to active state, synced with server');
+          updates.isDeleted = 0;
+          updates.synced = 1;  // Mark as synced since server still has it
+          needsUpdate = true;
+        }
+        
         // RULE: Force isDeleted to 0 if undefined/null
         if (entry.isDeleted === undefined || entry.isDeleted === null) {
           updates.isDeleted = Number(entry.isDeleted || 0);
@@ -285,6 +296,15 @@ class SyncOrchestrator {
           needsUpdate = true;
         }
         
+        // 🚨 RELOAD TRAP FIX: Handle interrupted delete operations
+        if (book.isDeleted === 1 && book.synced === 0) {
+          console.log(`🔄 [RELOAD TRAP] Auto-undoing interrupted delete for book CID: ${book.cid}`);
+          console.log('✅ [RELOAD TRAP] Restored item to active state, synced with server');
+          updates.isDeleted = 0;
+          updates.synced = 1;  // Mark as synced since server still has it
+          needsUpdate = true;
+        }
+        
         // RULE: Force isDeleted to 0 if undefined/null
         if (book.isDeleted === undefined || book.isDeleted === null) {
           updates.isDeleted = Number(book.isDeleted || 0);
@@ -310,11 +330,64 @@ class SyncOrchestrator {
 
   public notifyUI() {
     window.dispatchEvent(new Event('vault-updated'));
+    this.checkForNewConflicts(); // 🚨 CONFLICT DETECTION BRIDGE
   }
 
   private getEffectiveUserId(providedId?: string): string | null {
     const finalId = providedId || this.userId;
     return finalId ? String(finalId) : null;
+  }
+
+  /**
+   * 🚨 CONFLICT DETECTION BRIDGE
+   * Check for new conflicts and update global store
+   */
+  private async checkForNewConflicts(): Promise<void> {
+    try {
+      // Dynamic import to avoid circular dependency
+      const { useConflictStore } = await import('./ConflictStore');
+      
+      // Query for all conflicted records
+      const conflictedBooks = await db.books.where('conflicted').equals(1).toArray();
+      const conflictedEntries = await db.entries.where('conflicted').equals(1).toArray();
+      
+      const totalConflicts = conflictedBooks.length + conflictedEntries.length;
+      
+      if (totalConflicts > 0) {
+        // Map conflicts for store
+        const mappedConflicts = [
+          ...conflictedBooks.map((book: any) => ({
+            type: 'book' as const,
+            cid: book.cid,
+            localId: book.localId,
+            record: book,
+            conflictType: 'version' // Map VERSION_CONFLICT to 'version'
+          })),
+          ...conflictedEntries.map((entry: any) => ({
+            type: 'entry' as const,
+            cid: entry.cid,
+            localId: entry.localId,
+            record: entry,
+            conflictType: 'version' // Map VERSION_CONFLICT to 'version'
+          }))
+        ];
+        
+        // Update global conflict store
+        const { setConflicts } = useConflictStore.getState();
+        setConflicts(mappedConflicts);
+        
+        // 🚨 TOAST NOTIFICATION
+        toast.error(`${totalConflicts} conflict${totalConflicts === 1 ? '' : 's'} detected!`, {
+          duration: 8000,
+        });
+        
+        console.log(`🚨 [CONFLICT DETECTION] Found ${totalConflicts} conflicts and updated global store`);
+      } else {
+        console.log('✅ [CONFLICT DETECTION] No conflicts found');
+      }
+    } catch (error) {
+      console.error('🚨 [CONFLICT DETECTION] Failed to check for conflicts:', error);
+    }
   }
 
   /**
@@ -522,6 +595,13 @@ class SyncOrchestrator {
           delete (cleanBook as any)._id;
         }
         
+        // 🔥 SYNC GUARD: Selective payload for CID fields during sync
+        if (cleanBook.image && cleanBook.image.startsWith('cid_')) {
+          // Send empty string to server but preserve local CID for upload
+          cleanBook.image = '';
+          console.log(`🔒 [SYNC GUARD] Preserving CID locally, sending empty to server for book ${book.cid}`);
+        }
+        
         const payload = {
           ...cleanBook,
           userId: uid,
@@ -601,6 +681,13 @@ class SyncOrchestrator {
           delete (cleanEntry as any)._id;
         }
         
+        // 🔥 SYNC GUARD: Selective payload for CID fields during sync
+        if (cleanEntry.mediaId && cleanEntry.mediaId.startsWith('cid_')) {
+          // Send empty string to server but preserve local CID for upload
+          cleanEntry.mediaId = '';
+          console.log(`🔒 [SYNC GUARD] Preserving CID locally, sending empty to server for entry ${entry.cid}`);
+        }
+        
         const payload = {
           ...cleanEntry,
           userId: uid,
@@ -677,6 +764,10 @@ class SyncOrchestrator {
       console.log('🔍 [SYNC DEBUG] Sync process completed. Resetting isSyncing flag from', this.isSyncing, 'to false');
       this.isSyncing = false;
       console.log('🔍 [SYNC DEBUG] isSyncing flag is now:', this.isSyncing);
+      
+      // 🔄 TRIGGER MEDIA PROCESSING: Process any pending uploads after sync
+      this.triggerMediaProcessing();
+      
       // Removed: this.hydrate(uid); // Prevent blinking - let Pusher handle updates
     }
   }
@@ -842,9 +933,22 @@ class SyncOrchestrator {
               // কনফ্লিক্ট চেক (সার্ভার বনাম লোকাল)
               const businessFieldsMatch = this.compareBusinessFields(existing, normalizedBook, 'BOOK');
               if (businessFieldsMatch) {
+                // 🔥 HYDRATION GUARD: Preserve local CID if server returns empty
+                if (existing.image && existing.image.startsWith('cid_') && !normalizedBook.image) {
+                  normalizedBook.image = existing.image; // Preserve local CID
+                  console.log(`🔒 [HYDRATION GUARD] Preserving local CID for book ${existing.cid}`);
+                }
                 await db.books.update(existing.localId!, { ...normalizedBook, synced: 1 });
               } else {
-                await db.books.update(existing.localId!, { conflicted: 1, serverData: normalizedBook });
+                // 🔥 SMART VKEY INCREMENT: If server has higher vKey but we want local changes to win
+                const winningVKey = Math.max(normalizedBook.vKey, existing.vKey) + 1;
+                await db.books.update(existing.localId!, { 
+                  ...normalizedBook, 
+                  vKey: winningVKey, 
+                  conflicted: 1, 
+                  serverData: normalizedBook 
+                });
+                console.log(`🔥 [SMART VKEY] Local wins with incremented vKey: ${winningVKey} for CID: ${cid}`);
               }
             } else if (normalizedBook.vKey > existing.vKey) {
               // সাধারণ আপডেট
@@ -889,7 +993,25 @@ class SyncOrchestrator {
 
         for (const se of batchEntries) {
           try {
-            // 👻 GHOST HUNT: Log raw server response for problematic records
+            // �️ SPY LOGIC: Catch specific IDs appearing in the Integrity Error
+            const targetIds = ['69939e4f079afa28f58249ea', '69939e98079afa28f5824a22', '6993a017079afa28f5824ab5'];
+
+            if (targetIds.includes(se._id) || targetIds.includes(se.cid)) {
+              console.group(`👻 [GHOST HUNT] Found Target Entry: ${se._id}`);
+              console.log('1. Raw Server Data:', se);
+              
+              const norm = normalizeRecord({ ...se, synced: 1 }, uid);
+              console.log('2. After Normalization:', norm);
+              
+              if (!norm) {
+                console.error('❌ REJECTED by normalizeRecord! (This is why it is missing)');
+              } else {
+                console.log('3. Ready to Save. BookId:', norm.bookId);
+              }
+              console.groupEnd();
+            }
+            
+            // �👻 GHOST HUNT: Log raw server response for problematic records
             if (se.cid === '699330c3bdb7116a222acc02' || se._id === '699330c3bdb7116a222acc02') {
               console.error('👻 [GHOST HUNT] Found problematic record in server response:', {
                 cid: se.cid,
@@ -1044,14 +1166,43 @@ class SyncOrchestrator {
       // 🔥 LOCAL: Calculate local counts and hashes
       const localBooks = await db.books.where('userId').equals(uid).and((book: any) => book.isDeleted !== 1).toArray();
       const localEntries = await db.entries.where('userId').equals(uid).and((entry: any) => entry.isDeleted !== 1).toArray();
+      
+      // 🔍 DEBUG: Log local count query results to match server logic
+      console.log('🔍 [INTEGRITY DEBUG] Local Count Query Result:', { 
+        activeBooks: localBooks.length, 
+        activeEntries: localEntries.length,
+        queryLogic: 'userId === uid AND isDeleted !== 1 (matches server: isDeleted: { $ne: 1 })'
+      });
+
+      // 🛡️ SYNC LOCK: Check for active operations before proceeding
+      const localUnsyncedCount = localBooks.filter((book: any) => book.synced === 0).length + 
+                               localEntries.filter((entry: any) => entry.synced === 0).length;
+      
+      // Import useMediaStore to check upload status
+      const { useMediaStore } = await import('@/lib/vault/MediaStore');
+      const mediaStoreState = useMediaStore.getState();
+      
+      if (this.isSyncing || mediaStoreState.uploadingCount > 0 || localUnsyncedCount > 0) {
+        console.log('[INTEGRITY GUARD] Skipping check due to active sync/media upload.', {
+          isSyncing: this.isSyncing,
+          uploadingCount: mediaStoreState.uploadingCount,
+          unsyncedCount: localUnsyncedCount,
+          message: 'Waiting for all operations to complete before integrity check'
+        });
+        return; // Skip integrity check entirely
+      }
 
       const calculateLocalHash = (items: any[]) => {
-        const vKeySum = items.reduce((sum, item) => sum + (item.vKey || 0), 0);
-        const cidHash = items.reduce((hash, item) => {
-          const cid = item.cid || item.localId || 'unknown';
+        // 🔥 SORT BY CID: Ensure consistent order for hash calculation
+        const sorted = items.sort((a, b) => (a.cid || '').localeCompare(b.cid || ''));
+        
+        const vKeySum = sorted.reduce((sum, item) => sum + (item.vKey || 0), 0);
+        const cidHash = sorted.reduce((hash, item) => {
+          // 🔥 UNIFIED HASH LOGIC: Match server exactly - use (item.cid || item._id || '').toString()
+          const cid = (item.cid || item._id || '').toString();
           return hash + cid.split('').reduce((charSum: number, char: string) => charSum + char.charCodeAt(0), 0);
         }, 0);
-        return `${items.length}-${vKeySum}-${cidHash}`;
+        return `${sorted.length}-${vKeySum}-${cidHash}`;
       };
 
       const localBooksHash = calculateLocalHash(localBooks);
@@ -1081,8 +1232,45 @@ class SyncOrchestrator {
         });
         
         if (localBookCount > serverBookCount || localEntryCount > serverEntryCount) {
-          // 🗑️ SILENT HEALING: Local has extra records - run orphaned cleanup
+          // SYNC GRACE PERIOD: Check if there are unsynced records before running Silent Healing
+          const unsyncedBooks = localBooks.filter((book: any) => book.synced === 0);
+          const unsyncedEntries = localEntries.filter((entry: any) => entry.synced === 0);
+          
+          // 🚨 NEW: Check for recent activity (last 60 seconds)
+          const recentActivity = localBooks.some((b: any) => (Date.now() - (b.updatedAt || 0)) < 60000) ||
+                                localEntries.some((e: any) => (Date.now() - (e.updatedAt || 0)) < 60000);
+          
+          if (unsyncedBooks.length > 0 || unsyncedEntries.length > 0 || recentActivity) {
+            console.log('⏳ [GRACE PERIOD] Recent activity detected. Skipping Silent Healing.', {
+              unsyncedBooks: unsyncedBooks.length,
+              unsyncedEntries: unsyncedEntries.length,
+              recentActivity,
+              message: 'Waiting for all operations to complete before integrity check'
+            });
+            return; // Skip Silent Healing this cycle
+          }
+          
+          // ��️ SILENT HEALING: Local has extra records - run orphaned cleanup
           console.log('🗑️ [INTEGRITY] Local count > Server count - Running Silent Healing for orphaned records');
+          
+          // 🛡️ PARENT-CHILD CONFLICT DETECTION: Check for deleted parent with local children
+          const parentConflictBooks = await this.detectParentChildConflicts(localBooks, localEntries, serverData);
+          
+          if (parentConflictBooks.length > 0) {
+            // 🛡️ PARENT CONFLICT: Mark books as conflicted for modal resolution
+            for (const conflictBook of parentConflictBooks) {
+              await db.books.update(conflictBook.localId!, {
+                conflicted: 1,
+                conflictReason: 'PARENT_DELETED_CHILDREN_EXIST',
+                serverData: {
+                  isDeleted: true,
+                  pendingChildrenCount: conflictBook.pendingChildrenCount
+                }
+              });
+              console.warn(`🛡️ [PARENT CONFLICT] Book marked: ${conflictBook.cid} | Children: ${conflictBook.pendingChildrenCount}`);
+            }
+          }
+          
           await this.markConflictedRecords(localBooks, localEntries, serverData);
           
           // Re-fetch counts after Silent Healing
@@ -1113,8 +1301,22 @@ class SyncOrchestrator {
 
       // 🔥 RECOVERY ACTIONS
       if (needsBackgroundSync) {
-        console.log('🔄 [INTEGRITY] Triggering background hydration to recover missing data');
-        await this.hydrate(uid, true); // Force full sync
+        console.log('🔄 [INTEGRITY] Triggering SILENT background hydration to recover missing data');
+        // 🤫 SILENT RECOVERY: Avoid disturbing user with progress bars
+        const originalProgressEvent = this.progressEventDebounced;
+        this.progressEventDebounced = () => {}; // Disable progress events during silent sync
+        
+        try {
+          await this.hydrate(uid, true); // Force full sync silently
+          
+          // 🚀 HIGH PRIORITY: Force immediate UI refresh after hydration
+          window.dispatchEvent(new CustomEvent('VAULT_FORCE_REFRESH', {
+            detail: { source: 'silent-integrity-recovery', timestamp: Date.now() }
+          }));
+        } finally {
+          // Restore progress events
+          this.progressEventDebounced = originalProgressEvent;
+        }
       } else if (hasConflicts) {
         console.log('⚠️ [INTEGRITY] Marking conflicted records for manual resolution');
         // Mark records as conflicted for ConflictResolverModal (only if not already handled by Silent Healing)
@@ -1170,37 +1372,71 @@ class SyncOrchestrator {
   }
 
   /**
+   * 🛡️ PARENT-CHILD CONFLICT DETECTION: Find deleted parents with local children
+   */
+  private async detectParentChildConflicts(localBooks: any[], localEntries: any[], serverData: any): Promise<any[]> {
+    const conflicts: any[] = [];
+    
+    for (const book of localBooks) {
+      // Check if book exists on server and is deleted
+      const serverBook = serverData.books.sampleIds.find((s: any) => 
+        String(s.cid) === String(book.cid) || String(s._id) === String(book._id)
+      );
+      
+      if (serverBook && serverBook.isDeleted === true) {
+        // 🚨 PARENT DELETED: Check for local children
+        const pendingChildren = localEntries.filter(entry => 
+          (entry.bookId === book._id || entry.bookId === book.cid) && 
+          entry.synced === 0
+        );
+        
+        if (pendingChildren.length > 0) {
+          conflicts.push({
+            ...book,
+            pendingChildrenCount: pendingChildren.length,
+            serverDeleted: true
+          });
+        }
+      }
+    }
+    
+    return conflicts;
+  }
+
+  /**
    * ⚠️ MARK CONFLICTED RECORDS: For ConflictResolverModal handling
    */
   private async markConflictedRecords(localBooks: any[], localEntries: any[], serverData: any) {
     try {
-      // 🗑️ SILENT HEALING: Identify and delete orphaned records first
+      // 🗑️ ORPHAN DELETION: Delete records missing from server (instant mirror sync)
       const orphanedBooks = localBooks.filter(book => {
         const serverBook = serverData.books.sampleIds.find((s: any) => 
           String(s.cid) === String(book.cid) || String(s._id) === String(book._id)
         );
-        return !serverBook; // ❌ MISSING FROM SERVER
+        // 🛡️ SAFE GUARD: Only delete if it was fully synced AND NOT recently updated
+        return !serverBook && book.synced === 1 && book.isDeleted !== 1 && 
+               (Date.now() - (book.updatedAt || 0)) > 120000; // 120 SECONDS GRACE PERIOD
       });
+
+      for (const book of orphanedBooks) {
+        await db.books.delete(book.localId!);
+        console.warn(`🗑️ [SILENT HEALING] Deleted orphaned book: ${book.cid}`);
+      }
 
       const orphanedEntries = localEntries.filter(entry => {
         const serverEntry = serverData.entries.sampleIds.find((s: any) => 
           String(s.cid) === String(entry.cid) || String(s._id) === String(entry._id)
         );
-        return !serverEntry; // ❌ MISSING FROM SERVER
+        // 🛡️ SAFE GUARD: Only delete if it was once synced but now missing from server
+        return !serverEntry && entry.synced === 1 && entry.isDeleted !== 1;
       });
-
-      // 🗑️ SILENT CLEANUP: Delete orphaned records without UI notification
-      for (const book of orphanedBooks) {
-        await db.books.delete(book.localId!);
-        console.log(`🗑️ [SILENT HEALING] Purged orphaned record: ${book.cid} (${book.localId})`);
-      }
 
       for (const entry of orphanedEntries) {
         await db.entries.delete(entry.localId!);
-        console.log(`🗑️ [SILENT HEALING] Purged orphaned record: ${entry.cid} (${entry.localId})`);
+        console.warn(`🗑️ [SILENT HEALING] Deleted orphaned entry: ${entry.cid}`);
       }
 
-      // 🚨 CONFLICT MARKING: Only for actual version conflicts
+      // ⚠️ CONFLICT MARKING: Only for actual version conflicts (not missing records)
       const conflictedBooks = localBooks.filter(book => {
         const serverBook = serverData.books.sampleIds.find((s: any) => 
           String(s.cid) === String(book.cid) || String(s._id) === String(book._id)
@@ -1232,6 +1468,40 @@ class SyncOrchestrator {
 
     } catch (error) {
       console.error('🚨 [INTEGRITY] Failed to process records:', error);
+    }
+  }
+
+  /**
+   * 🚀 BANKING-GRADE MEDIA ENGINE: Process Media Upload Queue
+   * Live implementation with online check and store integration
+   */
+  public async processMediaQueue(): Promise<void> {
+    console.log('🚀 [SYNC ORCHESTRATOR] Media Queue Processing - LIVE IMPLEMENTATION');
+    
+    // 🚨 INTERNET CHECK: Only process if online
+    if (!navigator.onLine) {
+      console.log('📴 [SYNC ORCHESTRATOR] Offline - skipping media queue processing');
+      return;
+    }
+    
+    // 🚨 PHASE 2: Trigger media store processing
+    if (typeof window !== 'undefined' && (window as any).mediaStore) {
+      const mediaStore = (window as any).mediaStore.getState();
+      await mediaStore.processQueue();
+      console.log('✅ [SYNC ORCHESTRATOR] Media queue processing triggered');
+    } else {
+      console.warn('⚠️ [SYNC ORCHESTRATOR] Media store not available');
+    }
+  }
+
+  /**
+   * 🚀 BANKING-GRADE MEDIA ENGINE: Trigger Media Queue Processing
+   * Call this after sync operations to process pending media uploads
+   */
+  private triggerMediaProcessing(): void {
+    // Process media queue when internet is available
+    if (navigator.onLine) {
+      this.processMediaQueue();
     }
   }
 }

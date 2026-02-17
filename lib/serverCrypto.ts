@@ -12,21 +12,28 @@ import { createHash } from 'crypto';
 export const generateServerChecksum = (data: { 
     amount: number; 
     date: string | Date; 
-    title: string 
+    time?: string;
+    title: string;
+    note?: string;
+    category?: string;
+    paymentMethod?: string;
+    type?: string;
+    status?: string;
 }): string => {
-    // ১. ডাটা নরমালাইজেশন (Strict lowercase & formatting)
-    const title = data.title?.trim().toLowerCase() || "";
+    // ১. ডাটা নরমালাইজেশন (Trim ONLY - respect user's case)
+    const title = data.title?.trim() || "";
+    const note = data.note?.trim() || "";
+    const category = data.category?.trim() || "";
+    const paymentMethod = data.paymentMethod?.trim() || "";
+    const type = data.type?.trim() || "";
+    const status = data.status?.trim() || "";
     
     // ২. ডেট ফরম্যাটিং (নিশ্চিত করা যে টাইমস্ট্যাম্প নয়, শুধু তারিখ ব্যবহার হচ্ছে)
-    let dateStr = "";
-    if (data.date instanceof Date) {
-        dateStr = data.date.toISOString().split('T')[0];
-    } else {
-        dateStr = String(data.date).split('T')[0];
-    }
+    const dateStr = String(data.date);  // 🚨 ZERO-LOGIC: Use raw string directly
+    const timeStr = String(data.time || "");  // 🚨 ZERO-LOGIC: Use raw string directly
 
-    // ৩. পেলোড তৈরি (consistent format for hashing - same as client)
-    const payload = `${data.amount}:${dateStr}:${title}`;
+    // ৩. পেলোড তৈরি (consistent format for hashing - ALL 8 FIELDS matching client)
+    const payload = `${data.amount}:${String(data.date)}:${String(data.time || "")}:${title}:${note}:${category}:${paymentMethod}:${type}:${status}`;
     
     try {
         // ৪. SHA-256 হ্যাশিং (Node.js crypto module)

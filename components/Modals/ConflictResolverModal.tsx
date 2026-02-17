@@ -4,12 +4,16 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Cloud, Save } from 'lucide-react';
 import { cn, toBn } from '@/lib/utils/helpers';
+import { useConflictStore } from '@/lib/vault/ConflictStore';
+import { mapConflictType } from '@/lib/vault/ConflictMapper';
 
 interface ConflictResolverModalProps {
   isOpen: boolean;
   onClose: () => void;
   record: any; // Book or Entry record with serverData
   type: 'book' | 'entry';
+  conflictType?: 'version' | 'parent_deleted'; // 🛡️ NEW: Conflict type discriminator
+  pendingChildrenCount?: number; // 🛡️ NEW: Child count for display
   onResolve: (resolution: 'local' | 'server') => void;
 }
 
@@ -24,9 +28,12 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
   onClose,
   record,
   type,
+  conflictType, // 🛡️ NEW: Conflict type discriminator
+  pendingChildrenCount, // 🛡️ NEW: Child count for display
   onResolve
 }) => {
   const [isResolving, setIsResolving] = useState(false);
+  const { addPendingResolution } = useConflictStore();
 
   if (!isOpen || !record) return null;
 
@@ -53,25 +60,23 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
     vKey: serverData.vKey || 0
   };
 
-  const handleKeepLocal = async () => {
+  const handleResolution = async (resolution: 'local' | 'server') => {
     setIsResolving(true);
     try {
-      await onResolve('local');
-      onClose();
+      // Create conflict item using mapper
+      const conflictItem = {
+        type: type,
+        cid: record.cid,
+        localId: record.localId,
+        record: record,
+        conflictType: mapConflictType(record.conflictReason)
+      };
+      
+      // Add to store's pending resolutions
+      addPendingResolution(conflictItem, resolution);
+      onClose(); // Close modal immediately
     } catch (error) {
-      console.error('Failed to keep local version:', error);
-    } finally {
-      setIsResolving(false);
-    }
-  };
-
-  const handleAcceptServer = async () => {
-    setIsResolving(true);
-    try {
-      await onResolve('server');
-      onClose();
-    } catch (error) {
-      console.error('Failed to accept server version:', error);
+      console.error('Failed to queue resolution:', error);
     } finally {
       setIsResolving(false);
     }
@@ -119,16 +124,28 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
             className="relative w-full max-w-6xl max-h-[90vh] bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl shadow-red-500/20 overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/10 bg-gradient-to-r from-red-500/10 to-transparent">
+            <div className="flex items-center justify-between p-6 border-b border-white/10 bg-linear-to-r from-red-500/10 to-transparent">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-red-500/20 rounded-2xl flex items-center justify-center border border-red-500/30">
                   <AlertTriangle className="w-6 h-6 text-red-400" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Data Conflict Detected</h2>
-                  <p className="text-sm text-white/60">
-                    {type === 'book' ? 'Book' : 'Entry'} version mismatch requires manual resolution
-                  </p>
+                  {/* PARENT-DELETED SPECIFIC WARNING */}
+                  {conflictType === 'parent_deleted' ? (
+                    <>
+                      <h2 className="text-xl font-bold text-white">Ledger Deleted Remotely</h2>
+                      <p className="text-sm text-white/60">
+                        You have {pendingChildrenCount || 0} pending local entries. Choose your resolution:
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-xl font-bold text-white">Data Conflict Detected</h2>
+                      <p className="text-sm text-white/60">
+                        {type === 'book' ? 'Book' : 'Entry'} version mismatch requires manual resolution
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
               <button
@@ -287,7 +304,7 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between p-6 border-t border-white/10 bg-gradient-to-r from-transparent to-red-500/10">
+            <div className="flex items-center justify-between p-6 border-t border-white/10 bg-linear-to-r from-transparent to-red-500/10">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
                   <AlertTriangle className="w-4 h-4 text-red-400" />
@@ -297,27 +314,52 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                   <p className="text-xs text-white/60">This action cannot be undone</p>
                 </div>
               </div>
-
               <div className="flex items-center gap-3">
-                {/* Keep Local Version */}
-                <button
-                  onClick={handleKeepLocal}
-                  disabled={isResolving}
-                  className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-xl font-semibold hover:bg-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Save className="w-4 h-4" />
-                  Keep My Version
-                </button>
+                {/* PARENT-DELETED SPECIFIC ACTIONS */}
+                {conflictType === 'parent_deleted' ? (
+                  <>
+                    {/* PARENT-DELETED SPECIFIC ACTIONS */}
+                    <button
+                      onClick={() => handleResolution('local')}
+                      disabled={isResolving}
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-xl font-semibold hover:bg-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Save className="w-4 h-4" />
+                      Keep Local & Restore
+                    </button>
 
-                {/* Accept Server Version */}
-                <button
-                  onClick={handleAcceptServer}
-                  disabled={isResolving}
-                  className="flex items-center gap-2 px-6 py-3 bg-green-500/20 border border-green-500/30 text-green-400 rounded-xl font-semibold hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Cloud className="w-4 h-4" />
-                  Accept Cloud Version
-                </button>
+                    {/* Option B: Confirm Remote Deletion */}
+                    <button
+                      onClick={() => handleResolution('server')}
+                      disabled={isResolving}
+                      className="flex items-center gap-2 px-6 py-3 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl font-semibold hover:bg-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                      Confirm Remote Deletion
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Default Version Conflict Actions */}
+                    <button
+                      onClick={() => handleResolution('local')}
+                      disabled={isResolving}
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-xl font-semibold hover:bg-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Save className="w-4 h-4" />
+                      Keep My Version
+                    </button>
+
+                    <button
+                      onClick={() => handleResolution('server')}
+                      disabled={isResolving}
+                      className="flex items-center gap-2 px-6 py-3 bg-green-500/20 border border-green-500/30 text-green-400 rounded-xl font-semibold hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Cloud className="w-4 h-4" />
+                      Accept Cloud Version
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

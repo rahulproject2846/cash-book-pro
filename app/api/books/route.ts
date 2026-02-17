@@ -136,9 +136,11 @@ export async function POST(req: Request) {
     }
     
     // চেক: এই ইউজারের এই নামে অন্য কোনো বই আছে কি না - Use string userId
+    // 🔒 STRICT INTEGRITY: Ignore deleted books when checking for name conflicts
     const existingBook = await Book.findOne({ 
         userId: userId, 
-        name: { $regex: new RegExp(`^${name.trim()}$`, "i") } 
+        name: { $regex: new RegExp(`^${name.trim()}$`, "i") },
+        isDeleted: { $ne: 1 } // 🔥 CRITICAL: Only consider active books, ignore deleted ones
     });
 
     if (existingBook) {
@@ -171,25 +173,12 @@ export async function POST(req: Request) {
         type: String(type || 'general').toLowerCase(), 
         phone, 
         image,
-        vKey: vKey || 1,
+        vKey: vKey || Date.now(), // 🔥 UNIFIED VKEY STRATEGY: Use Date.now() for absolute versioning
         cid: cid || undefined // 🔥 CRITICAL: Include cid field if provided
     });
     
-    // 🔗 RELINK ENTRIES: Update all entries pointing to the old CID to use the new _id
-    if (newBook.cid) {
-      try {
-        const Entry = (await import('@/models/Entry')).default;
-        const relinkResult = await Entry.updateMany(
-          { bookId: newBook.cid, userId: userId }, 
-          { $set: { bookId: String(newBook._id) } }
-        );
-        if (relinkResult.modifiedCount > 0) {
-          console.log(`🔗 [RELINK SUCCESS] Updated ${relinkResult.modifiedCount} entries to new Book ID: ${newBook._id} (from CID: ${newBook.cid})`);
-        }
-      } catch (relinkError) {
-        console.error('🔗 [RELINK ERROR] Failed to relink entries:', relinkError);
-      }
-    }
+    // � [STRICT INTEGRITY] Book created without automatic entry relinking
+    console.log('� [STRICT INTEGRITY] Book created without automatic entry relinking');
     
     // সিগন্যাল ট্রিগার
     try {

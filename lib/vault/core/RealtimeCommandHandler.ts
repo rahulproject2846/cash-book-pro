@@ -151,6 +151,12 @@ export class RealtimeCommandHandler {
         console.log(` [BOOK CREATED] Smart merge CID: ${data.cid} | Status: New | Name: "${data.name}"`);
         this.notifyUI();
       } else {
+        // 🔒 PROTECT NEW CREATIONS: Block deletion of optimistic creations
+        if (existingBook.synced === 0 && Number(data.isDeleted) === 1) {
+          console.log(`🛡️ [PROTECTION] Blocking deletion of optimistic creation CID: ${data.cid} | Local synced: 0 | Server isDeleted: 1`);
+          return; // 🚫 BLOCK: Do not delete our new creation with stale server data
+        }
+        
         // Case 2: Existing Record - Update if newer or on fresh login
         const isFreshLogin = !existingBook.updatedAt || (Date.now() - existingBook.updatedAt.getTime()) < 5000;
         const shouldUpdate = data.vKey > existingBook.vKey || isFreshLogin;
@@ -190,22 +196,48 @@ export class RealtimeCommandHandler {
     // 🔕 DELETE AUTHORITY: Handle server-deleted books
     if (Number(data.isDeleted) === 1) {
       if (existingBook) {
-        // 🗑️ CASCADE DELETE: Remove book and all associated entries
+        // � PROTECT NEW CREATIONS: Block deletion of optimistic creations
+        if (existingBook.synced === 0) {
+          console.log(`🛡️ [PROTECTION] Blocking deletion of optimistic creation in BOOK_UPDATED CID: ${data.cid} | Local synced: 0 | Server isDeleted: 1`);
+          return; // 🚫 BLOCK: Do not delete our new creation with stale server data
+        }
+        
+        // �🗑️ CASCADE DELETE: Remove book and all associated entries
         console.log(`🗑️ [BOOK DELETED] Removing deleted book and all entries for CID: ${data.cid}`);
         
-        // Delete all entries associated with this book
-        await db.entries.where('bookId').equals(existingBook._id).delete();
+        // Robust Deletion: Match by MongoDB _id OR the temporary CID
+        const deletedEntriesCount = await db.entries
+          .where('[bookId+userId]').equals([existingBook._id, this.userId]) // 1. Match by final _id
+          .or('[bookId+userId]').equals([existingBook.cid, this.userId])   // 2. Match by temporary CID
+          .delete();
+        
+        console.log(`🗑️ [CASCADE DELETE] Removed ${deletedEntriesCount} entries for book ${data.cid} (_id: ${existingBook._id}, cid: ${existingBook.cid})`);
         
         // Hard delete the book from Dexie
         await db.books.delete(existingBook.localId!);
         
-        console.log(`🗑️ [BOOK DELETED] Cascade complete: Book ${data.cid} and all entries removed`);
+        console.log(`🗑️ [BOOK DELETED] Cascade complete: Book ${data.cid} and all ${deletedEntriesCount} entries removed`);
         this.notifyUI();
       }
       return; // Exit early for deleted books
     }
 
     if (!existingBook) {
+      // 🌟 ROBUST RESURRECTION: Recreate hard-deleted record from server payload
+      if (Number(data.isDeleted) === 0) {
+        console.log(`🌟 [RESURRECTION] Recreating deleted book CID: ${data.cid}`);
+        await db.books.put({
+          ...data,
+          localId: await this.generateLocalId(),
+          synced: 1,
+          conflicted: 0,
+          updatedAt: ts
+        });
+        console.log(`✅ [RESURRECTION] Book ${data.cid} restored from server payload`);
+        this.notifyUI();
+        return;
+      }
+      
       // Case 1: New Record - Insert as synced
       await db.books.put({ ...data, updatedAt: ts });
       console.log(`📡 [BOOK UPDATED] Smart merge CID: ${data.cid} | Status: New`);
@@ -238,25 +270,29 @@ export class RealtimeCommandHandler {
           console.log(`🤫 [BOOK UPDATED] Silent auto-resolve for CID: ${data.cid}`);
           this.notifyUI();
         } else {
-          // 🚨 CONFLICT: Data differs, mark as conflicted
+          // 🚨 CONFLICT: Data differs, use selective merge to preserve field-level changes
+          const selectiveMerged = this.selectiveMerge(existingBook, data, 'BOOK');
           await db.books.update(existingBook.localId!, {
+            ...selectiveMerged,
             conflicted: 1,
-            conflictReason: 'REALTIME_CONFLICT',
+            conflictReason: 'FIELD_LEVEL_CONFLICT',
             serverData: data,
             updatedAt: ts
           });
-          console.log(`🚨 [BOOK UPDATED] Conflict detected for CID: ${data.cid}`);
+          console.log(`🚨 [BOOK UPDATED] Field-level conflict detected for CID: ${data.cid} - Selective merge applied`);
           this.notifyUI();
         }
       }
     } else {
-      // Case 3: Update Synced Record - Check vKey
-      if (data.vKey > existingBook.vKey) {
-        await db.books.update(existingBook.localId!, { ...data, updatedAt: ts });
-        console.log(`📡 [BOOK UPDATED] Smart merge CID: ${data.cid} | Status: Updated`);
+      // Case 3: Update Synced Record - Use selective merge to preserve field changes
+      // 🔧 BOOK EDIT PERSISTENCE: Always update if vKey is equal or newer
+      if (data.vKey >= existingBook.vKey) {
+        const selectiveMerged = this.selectiveMerge(existingBook, data, 'BOOK');
+        await db.books.update(existingBook.localId!, { ...selectiveMerged, updatedAt: ts });
+        console.log(`📡 [BOOK UPDATED] Smart merge CID: ${data.cid} | Status: Updated (Selective Merge) | vKey: ${data.vKey} >= ${existingBook.vKey}`);
         this.notifyUI();
       } else {
-        console.log(`📡 [BOOK UPDATED] Smart merge CID: ${data.cid} | Status: Skipped (vKey not newer)`);
+        console.log(`📡 [BOOK UPDATED] Smart merge CID: ${data.cid} | Status: Skipped (vKey not newer) | Local: ${existingBook.vKey} > Remote: ${data.vKey}`);
       }
     }
   }
@@ -297,15 +333,28 @@ export class RealtimeCommandHandler {
       // 🗑️ CASCADE DELETE: Remove book and all associated entries
       console.log(`🗑️ [BOOK DELETED] Removing deleted book and all entries for CID: ${payload.cid}`);
       
-      // Delete all entries associated with this book
-      await db.entries.where('bookId').equals(existingBook._id).delete();
+      // Robust Deletion: Match by MongoDB _id OR the temporary CID
+      const deletedEntriesCount = await db.entries
+        .where('[bookId+userId]').equals([existingBook._id, this.userId]) // 1. Match by final _id
+        .or('[bookId+userId]').equals([existingBook.cid, this.userId])   // 2. Match by temporary CID
+        .delete();
+      
+      console.log(`🗑️ [CASCADE DELETE] Removed ${deletedEntriesCount} entries for book ${payload.cid} (_id: ${existingBook._id}, cid: ${existingBook.cid})`);
       
       // Hard delete the book from Dexie
       await db.books.delete(existingBook.localId!);
       
-      console.log(`🗑️ [BOOK DELETED] Cascade complete: Book ${payload.cid} and all entries removed`);
+      console.log(`🗑️ [BOOK DELETED] Cascade complete: Book ${payload.cid} and all ${deletedEntriesCount} entries removed`);
       
       this.notifyUI();
+      
+      // 🔍 IMMEDIATE VERIFICATION: Trigger integrity check to verify counts match instantly
+      if (typeof window !== 'undefined' && window.orchestrator) {
+        console.log(`🔍 [IMMEDIATE VERIFICATION] Triggering integrity check after book deletion`);
+        setTimeout(() => {
+          window.orchestrator?.performIntegrityCheck?.(this.userId);
+        }, 100); // Small delay to ensure Dexie writes complete
+      }
     } else {
       console.log(`🗑️ [BOOK DELETED] Book not found for CID: ${payload.cid}`);
     }
@@ -380,6 +429,21 @@ export class RealtimeCommandHandler {
     }
 
     if (!existing) {
+      // 🌟 ROBUST RESURRECTION: Recreate hard-deleted record from server payload
+      if (Number(data.isDeleted) === 0) {
+        console.log(`🌟 [RESURRECTION] Recreating deleted entry CID: ${data.cid}`);
+        await db.entries.put({
+          ...data,
+          localId: await this.generateLocalId(),
+          synced: 1,
+          conflicted: 0,
+          updatedAt: ts
+        });
+        console.log(`✅ [RESURRECTION] Entry ${data.cid} restored from server payload`);
+        this.notifyUI();
+        return;
+      }
+      
       // Case 1: New Record - Insert as synced
       await db.entries.put({ ...data, updatedAt: ts });
       console.log(`📡 [ENTRY UPDATED] Smart merge CID: ${data.cid} | Status: New`);
@@ -412,22 +476,25 @@ export class RealtimeCommandHandler {
           console.log(`🤫 [ENTRY UPDATED] Silent auto-resolve for CID: ${data.cid}`);
           this.notifyUI();
         } else {
-          // 🚨 CONFLICT: Data differs, mark as conflicted
+          // 🚨 CONFLICT: Data differs, use selective merge to preserve field-level changes
+          const selectiveMerged = this.selectiveMerge(existing, data, 'ENTRY');
           await db.entries.update(existing.localId!, {
+            ...selectiveMerged,
             conflicted: 1,
-            conflictReason: 'REALTIME_CONFLICT',
+            conflictReason: 'FIELD_LEVEL_CONFLICT',
             serverData: data,
             updatedAt: ts
           });
-          console.log(`🚨 [ENTRY UPDATED] Conflict detected for CID: ${data.cid}`);
+          console.log(`🚨 [ENTRY UPDATED] Field-level conflict detected for CID: ${data.cid} - Selective merge applied`);
           this.notifyUI();
         }
       }
     } else {
-      // Case 3: Update Synced Record - Check vKey
-      if (data.vKey > existing.vKey) {
-        await db.entries.update(existing.localId!, { ...data, updatedAt: ts });
-        console.log(`📡 [ENTRY UPDATED] Smart merge CID: ${data.cid} | Status: Updated`);
+      // Case 3: Update Synced Record - Use selective merge to preserve field changes
+      if (data.vKey >= existing.vKey) {
+        const selectiveMerged = this.selectiveMerge(existing, data, 'ENTRY');
+        await db.entries.update(existing.localId!, { ...selectiveMerged, updatedAt: ts });
+        console.log(`📡 [ENTRY UPDATED] Smart merge CID: ${data.cid} | Status: Updated (Selective Merge)`);
         this.notifyUI();
       } else {
         console.log(`📡 [ENTRY UPDATED] Smart merge CID: ${data.cid} | Status: Skipped (vKey not newer)`);
@@ -441,14 +508,31 @@ export class RealtimeCommandHandler {
   private async handleEntryDeleted(payload: any): Promise<void> {
     console.log(`🗑️ [ENTRY DELETED] Processing CID: ${payload.cid}`);
 
-    // 🔍 IDENTITY RECOVERY: Find existing record by CID
+    // 🔍 STRICT DELETION: Delete by entry's own CID directly - no bookId dependency
     const existing = payload.cid ? 
       await db.entries.where('cid').equals(payload.cid).first() : null;
 
     if (existing) {
       await db.entries.delete(existing.localId!);
-      console.log(`🗑️ [ENTRY DELETED] Hard deleted entry CID: ${payload.cid}`);
+      console.log(`🗑️ [ENTRY DELETED] Hard deleted entry CID: ${payload.cid} | Local ID: ${existing.localId}`);
+      
+      // 🚨 FORCE UI REFRESH: Dispatch specific event for immediate update across all devices
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('VAULT_ENTRY_DELETED', { 
+          detail: { cid: payload.cid } 
+        }));
+        console.log(`🚨 [ENTRY DELETED] Dispatched VAULT_ENTRY_DELETED for entry: ${payload.cid}`);
+      }
+      
       this.notifyUI();
+      
+      // 🔍 IMMEDIATE VERIFICATION: Trigger integrity check to verify counts match instantly
+      if (typeof window !== 'undefined' && window.orchestrator) {
+        console.log(`🔍 [IMMEDIATE VERIFICATION] Triggering integrity check after entry deletion`);
+        setTimeout(() => {
+          window.orchestrator?.performIntegrityCheck?.(this.userId);
+        }, 100); // Small delay to ensure Dexie writes complete
+      }
     } else {
       console.log(`🗑️ [ENTRY DELETED] Entry not found for CID: ${payload.cid}`);
     }
@@ -478,5 +562,75 @@ export class RealtimeCommandHandler {
       console.error(`❌ [COMMAND CENTER] Business fields comparison failed:`, error);
       return false;
     }
+  }
+
+  /**
+   * 🛡️ SELECTIVE MERGE: Field-level merging to prevent data loss
+   */
+  private selectiveMerge(existing: any, incoming: any, type: 'BOOK' | 'ENTRY'): any {
+    const merged = { ...existing };
+    
+    if (type === 'BOOK') {
+      // Book fields: Only merge if explicitly provided and different
+      if (incoming.name !== undefined && incoming.name !== existing.name) {
+        merged.name = incoming.name;
+      }
+      if (incoming.description !== undefined && incoming.description !== existing.description) {
+        merged.description = incoming.description;
+      }
+      if (incoming.type !== undefined && incoming.type !== existing.type) {
+        merged.type = incoming.type;
+      }
+      if (incoming.phone !== undefined && incoming.phone !== existing.phone) {
+        merged.phone = incoming.phone;
+      }
+      if (incoming.image !== undefined && incoming.image !== existing.image) {
+        merged.image = incoming.image;
+      }
+    } else {
+      // Entry fields: Only merge if explicitly provided and different
+      if (incoming.title !== undefined && incoming.title !== existing.title) {
+        merged.title = incoming.title;
+      }
+      if (incoming.amount !== undefined && incoming.amount !== existing.amount) {
+        merged.amount = incoming.amount;
+      }
+      if (incoming.type !== undefined && incoming.type !== existing.type) {
+        merged.type = incoming.type;
+      }
+      if (incoming.category !== undefined && incoming.category !== existing.category) {
+        merged.category = incoming.category;
+      }
+      if (incoming.paymentMethod !== undefined && incoming.paymentMethod !== existing.paymentMethod) {
+        merged.paymentMethod = incoming.paymentMethod;
+      }
+      if (incoming.note !== undefined && incoming.note !== existing.note) {
+        merged.note = incoming.note;
+      }
+      if (incoming.date !== undefined && incoming.date !== existing.date) {
+        merged.date = incoming.date;
+      }
+      if (incoming.time !== undefined && incoming.time !== existing.time) {
+        merged.time = incoming.time;
+      }
+      if (incoming.status !== undefined && incoming.status !== existing.status) {
+        merged.status = incoming.status;
+      }
+    }
+    
+    // Always update system fields
+    merged.vKey = incoming.vKey;
+    merged.updatedAt = incoming.updatedAt;
+    merged.synced = incoming.synced;
+    
+    return merged;
+  }
+
+  /**
+   * 🔧 GENERATE LOCAL ID: Helper for resurrection logic
+   */
+  private async generateLocalId(): Promise<number> {
+    // Generate a unique local ID for resurrection
+    return Date.now() + Math.floor(Math.random() * 1000);
   }
 }

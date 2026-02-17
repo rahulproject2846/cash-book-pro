@@ -24,11 +24,9 @@ export async function GET(req: Request) {
         userId: userId,
         $or: [
           { bookId: { $exists: false } },
-          { bookId: { $type: null } },
-          { bookId: "" },
           { bookId: null },
-          { bookId: "undefined" },
-          { bookId: "null" }
+          { bookId: "" },
+          { bookId: "orphaned-data" }
         ]
       });
       
@@ -45,20 +43,33 @@ export async function GET(req: Request) {
       isDeleted: { $ne: 1 } 
     }).select('vKey cid _id').lean();
 
-    const serverEntries = await Entry.find({ 
+    // 🛡️ STEP 1 - GET ACTIVE BOOKS: Only count entries from active books
+    const activeBooks = await Book.find({ 
       userId: userId, 
       isDeleted: { $ne: 1 } 
+    }).select('_id').lean();
+    
+    const activeBookIds = activeBooks.map(book => book._id?.toString()).filter(id => id);
+    
+    // 🛡️ STEP 2 - COUNT ENTRIES FROM ACTIVE BOOKS ONLY
+    const serverEntries = await Entry.find({ 
+      userId: userId, 
+      isDeleted: { $ne: 1 },
+      bookId: { $in: activeBookIds }  // 🚨 ALIGNMENT: Only count entries from active books
     }).select('vKey cid _id').lean();
 
-    // 🔥 HASH CALCULATION: Match client logic exactly
+    // 🔥 HASH CALCULATION: Match client logic exactly with sorting
     const calculateHash = (items: any[]) => {
-      const vKeySum = items.reduce((sum, item) => sum + (item.vKey || 0), 0);
-      const cidHash = items.reduce((hash, item) => {
-        // Match client: cid || localId || 'unknown'
-        const cid = item.cid || item._id?.toString() || 'unknown';
+      // 🔥 SORT BY CID: Ensure consistent order for hash calculation
+      const sorted = items.sort((a, b) => (a.cid || '').localeCompare(b.cid || ''));
+      
+      const vKeySum = sorted.reduce((sum, item) => sum + (item.vKey || 0), 0);
+      const cidHash = sorted.reduce((hash, item) => {
+        // 🔥 UNIFIED HASH LOGIC: Match client exactly - use (item.cid || item._id || '').toString()
+        const cid = (item.cid || item._id || '').toString();
         return hash + cid.split('').reduce((charSum: number, char: string) => charSum + char.charCodeAt(0), 0);
       }, 0);
-      return `${items.length}-${vKeySum}-${cidHash}`;
+      return `${sorted.length}-${vKeySum}-${cidHash}`;
     };
 
     const booksHash = calculateHash(serverBooks);

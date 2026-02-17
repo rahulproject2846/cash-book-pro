@@ -119,12 +119,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     // 🔧 SERVER AUTHORITY: Strict data parsing for conflict resolution
     const strictAmount = Number(data.amount) || 0;
     const strictIsDeleted = data.isDeleted ? 1 : 0; // Force Number type
-    const strictDate = new Date(data.date);
-    const strictTitle = String(data.title || '').trim().toLowerCase();
+    const strictDate = String(data.date);  // 🚨 RAW STRING: Keep as string for hashing
+    const strictTitle = String(data.title || '').trim();  // Respect user's case
+    const strictTime = String(data.time || "");  // 🚨 ADD TIME FIELD
     
     const serverCalculatedChecksum = generateServerChecksum({
         amount: strictAmount,
         date: strictDate,
+        time: strictTime,
         title: strictTitle
     });
     
@@ -141,7 +143,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         // Generate server-authoritative checksum from strictly parsed data
         const serverAuthorityChecksum = generateServerChecksum({
             amount: strictAmount,
-            date: strictDate,
+            date: strictDate,  // 🚨 RAW STRING: Pass string, not Date object
+            time: strictTime,
             title: strictTitle
         });
         
@@ -149,13 +152,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         const updatePayload: any = {
             title: strictTitle,
             amount: strictAmount,
-            type: String(data.type || 'expense').toLowerCase(),
-            status: String(data.status || 'completed').toLowerCase(),
-            category: String(data.category || 'general').toLowerCase(),
-            paymentMethod: String(data.paymentMethod || 'cash').toLowerCase(),
+            type: String(data.type || 'expense'),
+            status: String(data.status || 'completed'),
+            category: String(data.category || 'general'),
+            paymentMethod: String(data.paymentMethod || 'cash'),
             note: String(data.note || '').trim(),
-            date: strictDate,
-            time: String(data.time || ''),
+            date: strictDate,  // 🚨 RAW STRING: Store as string, let Mongoose handle conversion
+            time: strictTime,
             vKey: Number(data.vKey || 0) + 1, // 🔧 FORCE VKEY INCREMENT
             checksum: serverAuthorityChecksum, // 🚨 SERVER AUTHORITY CHECKSUM
             isDeleted: strictIsDeleted, // 🔥 BOOLEAN NORMALIZATION
@@ -181,6 +184,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     
     // Normal checksum validation for non-conflict updates
+    console.log('🔍 [CHECKSUM DEBUG] Server payload for hashing:', {
+        amount: strictAmount,
+        date: strictDate,
+        time: strictTime,
+        title: strictTitle,
+        note: data.note,
+        category: data.category,
+        paymentMethod: data.paymentMethod,
+        type: data.type,
+        status: data.status
+    });
+    console.log('🔍 [CHECKSUM DEBUG] Client checksum:', data.checksum);
+    console.log('🔍 [CHECKSUM DEBUG] Server checksum:', serverCalculatedChecksum);
+    
     if (serverCalculatedChecksum !== data.checksum) {
         return NextResponse.json({ 
             message: "Data solidarity failure: Checksum mismatch",
@@ -204,13 +221,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updatePayload: any = {
         title: data.title.trim(),
         amount: Number(data.amount),
-        type: String(data.type).toLowerCase(),
-        status: String(data.status || 'completed').toLowerCase(),
-        category: String(data.category || 'general').toLowerCase(),
-        paymentMethod: String(data.paymentMethod || 'cash').toLowerCase(),
+        type: String(data.type),
+        status: String(data.status || 'completed'),
+        category: String(data.category || 'general'),
+        paymentMethod: String(data.paymentMethod || 'cash'),
         note: data.note?.trim() || "",
-        date: new Date(data.date),
-        time: data.time || "",
+        date: String(data.date),  // 🚨 RAW STRING: Store as string, let Mongoose handle conversion
+        time: String(data.time || ""),
         vKey: Number(data.vKey || 0) + 1, // 🔧 FORCE VKEY INCREMENT: Always increment
         checksum: data.checksum,
         isDeleted: false,

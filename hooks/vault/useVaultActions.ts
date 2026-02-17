@@ -86,7 +86,13 @@ export const useVaultActions = (currentUser: any, currentBook: any, forceRefresh
             const checksum = await generateEntryChecksum({
                 amount: normalized.amount,
                 date: normalized.date,
-                title: normalized.title
+                time: normalized.time || "",  // 🚨 ADD TIME FIELD
+                title: normalized.title,
+                note: normalized.note || "",
+                category: normalized.category || "",
+                paymentMethod: normalized.paymentMethod || "",
+                type: normalized.type || "",
+                status: normalized.status || ""
             });
             
             // 🔥 ADD CHECKSUM TO NORMALIZED DATA

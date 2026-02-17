@@ -57,13 +57,34 @@ export async function GET(req: Request) {
       console.log('🔍 [API-ENTRIES] No books found, using direct userId query for entries (SILENCED)');
       entriesQuery = { $or: queryConditions, isDeleted: false }; // Same userId formats as books
     } else {
-      // Standard bookId-based query
+      // Standard bookId-based query with orphaned entry prevention
       const baseEntryConditions = [
         { bookId: { $in: bookIds }, isDeleted: false }, // New String format
         { bookId: { $in: bookIds.map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null) }, isDeleted: false } // Legacy ObjectId format
       ].filter(q => q.bookId && q.bookId.$in && q.bookId.$in.length > 0);
 
       entriesQuery = { $or: baseEntryConditions };
+      
+      // 🔥 ORPHANED ENTRY PREVENTION: Ensure parent books are not deleted
+      // This prevents "ghost entries" from reappearing after book deletion
+      const activeBookIds = userBooks
+        .filter(book => book.isDeleted !== 1 && book.isDeleted !== true)
+        .map(book => book._id?.toString() || book.cid || '');
+      
+      if (activeBookIds.length > 0) {
+        // Additional filter to only include entries whose parent books are active
+        entriesQuery = {
+          $and: [
+            entriesQuery,
+            {
+              $or: [
+                { bookId: { $in: activeBookIds } },
+                { bookId: { $in: activeBookIds.map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null) } }
+              ]
+            }
+          ]
+        };
+      }
     }
     
     // Add timestamp filter if since is provided and not '0'

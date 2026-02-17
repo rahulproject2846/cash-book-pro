@@ -114,11 +114,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // Logic C: SHA-256 Checksum Validation
+    // Logic C: SHA-256 Checksum Validation (Enhanced with all 8 fields)
     const serverCalculatedChecksum = generateServerChecksum({
         amount: Number(amount),
-        date: date,
-        title: title || `${category || 'GENERAL'} RECORD`
+        date: date,  // 🚨 RAW STRING: Pass directly without Date conversion
+        time: data.time || "",  // 🚨 ADD TIME FIELD
+        title: title || `${category || 'GENERAL'} RECORD`,  // Respect user's case
+        note: data.note || "",
+        category: data.category || "general",
+        paymentMethod: data.paymentMethod || "cash",
+        type: data.type || "expense",
+        status: data.status || "completed"
     });
 
     if (serverCalculatedChecksum !== checksum) {
@@ -132,12 +138,12 @@ export async function POST(req: Request) {
     // ডাটা ক্রিয়েশন
     const newEntryData = {
         ...data,
-        title: title?.trim() || `${category || 'GENERAL'} RECORD`,
-        date: new Date(date),
-        status: String(data.status || 'completed').toLowerCase(),
-        type: String(data.type || 'expense').toLowerCase(),
-        category: String(data.category || 'general').toLowerCase(),
-        paymentMethod: String(data.paymentMethod || 'cash').toLowerCase(),
+        title: title?.trim() || `${category || 'GENERAL'} RECORD`,  // Respect user's case
+        date: date,  // 🚨 RAW STRING: Let Mongoose handle conversion internally
+        status: String(data.status || 'completed'),  // Remove manual lowercase
+        type: String(data.type || 'expense'),  // Remove manual lowercase
+        category: String(data.category || 'general'),  // Remove manual lowercase
+        paymentMethod: String(data.paymentMethod || 'cash'),  // Remove manual lowercase
         vKey: vKey || 1,
         checksum: checksum
     };

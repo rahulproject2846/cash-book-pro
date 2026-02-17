@@ -284,25 +284,30 @@ export class MigrationManager {
           needsUpdate = true;
         }
         
-        // 🔥 ORPHANED ENTRY RECOVERY: Assign bookId to legacy entries
-        if (!entry.bookId || entry.bookId === 'undefined' || entry.bookId === '') {
-          // Get first available book for this user
-          const firstBook = db.books.where('userId').equals(currentUserId || 'user-default').first();
-          if (firstBook) {
-            entry.bookId = firstBook._id || firstBook.cid;
-            needsUpdate = true;
-            console.log('🔧 [ORPHAN RECOVERY] Assigned book to entry:', {
-              entryCid: entry.cid,
-              assignedBookId: entry.bookId,
-              bookName: firstBook.name
-            });
-          } else {
-            console.warn('⚠️ [ORPHAN RECOVERY] No books found for user, cannot assign bookId:', {
-              entryCid: entry.cid,
-              userId: currentUserId
-            });
-          }
-        }
+        // � STRICT INTEGRITY: REMOVED automatic orphaned entry assignment
+        // Previous logic automatically assigned orphaned entries to first available book
+        // This caused entries from deleted books to appear under new books
+        // Now entries with missing bookId will be rejected by normalizeRecord
+        console.log('🔒 [STRICT INTEGRITY] Orphaned entry recovery disabled - entries must have valid bookId');
+        
+        // 🔥 REMOVED: Orphaned entry recovery logic
+        // if (!entry.bookId || entry.bookId === 'undefined' || entry.bookId === '') {
+        //   const firstBook = db.books.where('userId').equals(currentUserId || 'user-default').first();
+        //   if (firstBook) {
+        //     entry.bookId = firstBook._id || firstBook.cid;
+        //     needsUpdate = true;
+        //     console.log('🔧 [ORPHAN RECOVERY] Assigned book to entry:', {
+        //       entryCid: entry.cid,
+        //       assignedBookId: entry.bookId,
+        //       bookName: firstBook.name
+        //     });
+        //   } else {
+        //     console.warn('⚠️ [ORPHAN RECOVERY] No books found for user, cannot assign bookId:', {
+        //       entryCid: entry.cid,
+        //       userId: currentUserId
+        //     });
+        //   }
+        // }
         
         if (needsUpdate) {
           entryHealCount++;

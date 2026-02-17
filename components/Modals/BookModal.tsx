@@ -8,6 +8,8 @@ import {
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
+import { useLocalPreview } from '@/hooks/useLocalPreview';
+import { useBookImage } from '@/hooks/useBookImage';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 
@@ -19,6 +21,39 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
+
+    // --- 🚀 INSTANT LOCAL PREVIEW & BOOK IMAGE PROCESSING ---
+    const { previewUrl, isLoading: isPreviewLoading, error: previewError } = useLocalPreview(form.image);
+    const { handleImageProcess, handleRemoveImage } = useBookImage();
+
+    // --- 🎯 IMAGE PREVIEW HELPER (Zero-Risk Refactor) ---
+    const imagePreviewContent = (() => {
+        if (!form.image) {
+            return <Camera size={26} className="text-[var(--text-muted)] opacity-30 group-hover/img:text-orange-500 transition-all" />;
+        }
+
+        if (!form.image.startsWith('cid_')) {
+            return <img src={form.image} alt="Book" className="w-full h-full object-cover" />;
+        }
+
+        if (isPreviewLoading) {
+            return (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[var(--bg-input)] to-[var(--border)]">
+                    <Loader2 size={24} className="text-orange-500 animate-spin" />
+                </div>
+            );
+        }
+
+        if (previewError) {
+            return (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[var(--bg-input)] to-[var(--border)]">
+                    <Camera size={24} className="text-red-500" />
+                </div>
+            );
+        }
+
+        return previewUrl ? <img src={previewUrl} alt="Book Preview" className="w-full h-full object-cover" /> : null;
+    })();
 
     // ১. ডিভাইস ডিটেকশন
     useEffect(() => { setIsMobile(window.innerWidth < 768); }, []);
@@ -124,20 +159,24 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                     onClick={() => fileInputRef.current?.click()}
                                     className="w-24 h-24 rounded-[35px] bg-[var(--bg-input)] border border-[var(--border)] flex items-center justify-center cursor-pointer overflow-hidden transition-all hover:border-orange-500/50 shadow-md group/img"
                                 >
-                                    {form.image ? (
-                                        <img src={form.image} alt="V" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <Camera size={26} className="text-[var(--text-muted)] opacity-30 group-hover/img:text-orange-500 transition-all" />
-                                    )}
+                                    {imagePreviewContent}
                                 </motion.div>
                                 <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute -right-1 -bottom-1 w-8 h-8 bg-orange-500 rounded-xl flex items-center justify-center text-white shadow-lg border-4 border-[var(--bg-card)] active:scale-90 transition-all"><Plus size={14} strokeWidth={3} /></button>
                             </div>
-                            <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => {
+                            <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => setForm({...form, image: reader.result as string});
-                                    reader.readAsDataURL(file);
+                                    try {
+                                        // 🚀 USE MEDIA STORE INTEGRATION
+                                        const mediaCid = await handleImageProcess(file);
+                                        setForm(prev => ({ ...prev, image: mediaCid }));
+                                    } catch (error) {
+                                        console.error('Image upload failed:', error);
+                                        // Fallback to Base64 for now (can be removed later)
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => setForm(prev => ({ ...prev, image: reader.result as string }));
+                                        reader.readAsDataURL(file);
+                                    }
                                 }
                             }} />
                             <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] mt-4 opacity-50">{t('label_visual_id')}</p>

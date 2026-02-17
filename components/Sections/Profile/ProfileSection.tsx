@@ -29,7 +29,7 @@ export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) =
     // --- 🧬 CORE LOGIC ENGINE (100% Preserved) ---
     const {
         formData, setForm, isLoading, isExporting,
-        handleImageProcess, updateProfile, exportMasterData, importMasterData, deleteAccount
+        handleImageProcess, handleRemoveImage, updateProfile, exportMasterData, importMasterData, deleteAccount
     } = useProfile(currentUser, setCurrentUser, onLogout);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +73,7 @@ export const ProfileSection = ({ currentUser, setCurrentUser, onLogout }: any) =
                         <IdentityHero 
                             formData={formData} 
                             handleImageProcess={handleImageProcess} 
+                            handleRemoveImage={handleRemoveImage}
                             setForm={setForm} 
                             currentUser={currentUser} 
                             fileInputRef={fileInputRef} 
