@@ -22,7 +22,7 @@ interface ConflictManagementListProps {
  * 8-second undo countdown and automatic server sync
  */
 export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ currentUser }) => {
-    const { openModal } = useModal();
+    const { openModal, closeModal } = useModal();
     const { 
         conflicts, 
         pendingResolutions, 
@@ -77,7 +77,7 @@ export const ConflictManagementList: React.FC<ConflictManagementListProps> = ({ 
                 
                 // Add to store's pending resolutions
                 addPendingResolution(conflictItem, resolution);
-                onClose(); // Close modal immediately
+                closeModal(); // Close modal immediately
             }
         });
     };
