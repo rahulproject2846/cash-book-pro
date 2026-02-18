@@ -13,7 +13,7 @@ import { HubHeader } from '@/components/Layout/HubHeader';
 import { EliteDropdown } from '@/components/UI/EliteDropdown';
 import { StatsGrid } from '@/components/UI/StatsGrid';
 import { useModal } from '@/context/ModalContext';
-import { useVault } from '@/hooks/useVault';
+import { useVaultStore } from '@/lib/vault/store';
 import { cn, toBn } from '@/lib/utils/helpers';
 
 // Unified UI Components
@@ -23,7 +23,7 @@ import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
 export const TimelineSection = ({ currentUser }: any) => {
     const { t, language } = useTranslation();
     const { openModal, closeModal } = useModal();
-    const { saveEntry, deleteEntry, toggleEntryStatus } = useVault(currentUser);
+    const { saveEntry, deleteEntry, toggleEntryStatus } = useVaultStore();
 
     // ১. রিঅ্যাক্টিভ ডাটা ইঞ্জিন (LiveQuery: অটো-আপডেট এনসিওর করে)
     const entries = useLiveQuery(

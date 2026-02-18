@@ -10,7 +10,7 @@ import { identityManager } from './IdentityManager';
  */
 
 // --- ১. ভার্সন কন্ট্রোল ---
-export const CURRENT_DB_VERSION = 5; // 🚨 EMERGENCY HEAL: Force field repair
+export const CURRENT_DB_VERSION = 14; // 🚨 EMERGENCY HEAL: Force field repair
 
 /**
  * 🏗️ MIGRATION MANAGER CLASS

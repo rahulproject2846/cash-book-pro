@@ -584,8 +584,10 @@ export class RealtimeCommandHandler {
       if (incoming.phone !== undefined && incoming.phone !== existing.phone) {
         merged.phone = incoming.phone;
       }
-      if (incoming.image !== undefined && incoming.image !== existing.image) {
+      if (incoming.image !== undefined && incoming.image !== null && incoming.image !== "" && incoming.image !== existing.image) {
         merged.image = incoming.image;
+      } else if (existing.image) {
+        merged.image = existing.image;
       }
     } else {
       // Entry fields: Only merge if explicitly provided and different

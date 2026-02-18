@@ -9,7 +9,7 @@ import { PusherProvider } from '@/context/PusherContext'; // 🔥 নতুন �
 import { Toaster } from 'react-hot-toast'; // 🚀 Move Toaster here for client-side logic
 import { identityManager } from '@/lib/vault/core/IdentityManager'; // 🔥 Unified Identity Management
 import { useMediaStore } from '@/lib/vault/MediaStore'; // 🚀 Media Store Integration
-import { orchestrator } from '@/lib/vault/SyncOrchestrator'; // 🔥 Sync Orchestrator Integration
+import { orchestrator } from '@/lib/vault/core/SyncOrchestrator'; // 🔥 Sync Orchestrator Integration
 
 /**
  * INTERNAL COMPONENT: THEME SYNCHRONIZER
@@ -64,7 +64,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     
     // 🚀 GLOBAL EXPOSURE: Make orchestrator and mediaStore available globally
     if (typeof window !== 'undefined') {
-      window.orchestrator = orchestrator;
+      (window as any).orchestrator = orchestrator;
       // 🚀 Use hook function directly for proper store access
       window.mediaStore = useMediaStore; 
     }

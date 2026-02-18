@@ -12,7 +12,6 @@ import { OSInput, ModalEliteDropdown } from '@/components/UI/FormComponents';
 import Keypad from '@/components/UI/Keypad';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useVault } from '@/hooks/useVault';
 
 // --- 🧠 SMART MATH ENGINE ---
 const safeCalculate = (expression: string) => {
@@ -70,7 +69,7 @@ const inputToDbTime = (timeStr: string): string => {
 
 export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
     const { t, language } = useTranslation();
-    const { checkPotentialDuplicate } = useVault(currentUser, currentBook);
+    // const { checkPotentialDuplicate } = useVault(currentUser, currentBook);
     
     // States
     const [isExpanded, setIsExpanded] = useState(false);
@@ -96,11 +95,12 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
             const finalAmount = safeCalculate(amountStr);
             if (finalAmount > 0) {
                 // 🚀 DUPLICATE ENTRY SHIELD: Check amount, type, and category within last 10 minutes
-                const isDuplicate = await checkPotentialDuplicate(
-                    finalAmount, 
-                    activeInput === 'in' ? 'income' : 'expense',
-                    form.category
-                );
+                // const isDuplicate = await checkPotentialDuplicate(
+                //     finalAmount, 
+                //     activeInput === 'in' ? 'income' : 'expense',
+                //     form.category
+                // );
+                const isDuplicate = false; // Temporarily disabled
                 setShowDuplicateWarning(!!isDuplicate);
                 if (isDuplicate) {
                     setDuplicateWarningBlink(true);

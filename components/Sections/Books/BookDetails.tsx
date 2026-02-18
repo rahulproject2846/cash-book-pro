@@ -20,24 +20,19 @@ export const BookDetails = ({
     currentBook, items, onBack, onAdd, onEdit, onDelete, onToggleStatus, 
     searchQuery, setSearchQuery, pagination, currentUser, bookStats
 }: any) => {
+    // ALL HOOKS AT THE TOP - NO CONDITIONALS BEFORE HOOKS
     const { t, language } = useTranslation();
     const params = useParams();
     const router = useRouter();
     const bookIdFromUrl = params.id as string;
     
-    // URL-FIRST: Use URL parameter, fallback to prop only if URL is empty
-    const effectiveBookId = bookIdFromUrl || (currentBook?._id || currentBook?.localId);
-    
-    // REDIRECT: If no valid ID, redirect to books list
-    if (!effectiveBookId && !bookIdFromUrl) {
-        router.push('/');
-        return null;
-    }
-    
-    // ১. ফিল্টার ও সর্ট স্টেট
+    // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন
     const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [showMobileSettings, setShowMobileSettings] = useState(false);
+    
+    // URL-FIRST: Use URL parameter, fallback to prop only if URL is empty
+    const effectiveBookId = bookIdFromUrl || (currentBook?._id || currentBook?.localId);
     
     const userCategories = ['all', ...(currentUser?.categories || [])];
     const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
@@ -67,6 +62,12 @@ export const BookDetails = ({
     }, [items, searchQuery, categoryFilter, sortConfig, effectiveBookId]);
 
     const currentItems = processedItems.slice(((pagination?.currentPage || 1) - 1) * 10, (pagination?.currentPage || 1) * 10);
+
+    // GUARD CLAUSE - AFTER ALL HOOKS BUT BEFORE JSX
+    if (!effectiveBookId && !bookIdFromUrl) {
+        router.push('/');
+        return null;
+    }
 
     if (!currentBook) {
         console.log('🔍 DEBUG: Waiting for valid currentBook ID');

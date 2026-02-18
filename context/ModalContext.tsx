@@ -22,6 +22,7 @@ type ModalView =
   | 'deleteTagConfirm' // 🔥 ফিক্স: রেড লাইন দূর করার জন্য এটি যোগ করা হয়েছে
   | 'shortcut' 
   | 'conflictResolver' // 🔥 ফিক্স: vKey mismatch conflict resolution
+  | 'actionMenu' // 🆕 Action Menu for FAB
   | 'none';
 
 interface ModalContextType {
@@ -29,7 +30,8 @@ interface ModalContextType {
   isOpen: boolean;
   data: any;
   openModal: (view: ModalView, data?: any) => void;
-  closeModal: () => void;
+  closeModal: (onClosed?: () => void) => void;
+  switchModal: (view: ModalView, data?: any) => void;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -50,7 +52,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   // ৩. মডাল ক্লোজ প্রোটোকল (Exit Animation Safety)
-  const closeModal = useCallback(() => {
+  const closeModal = useCallback((onClosed?: () => void) => {
     setIsOpen(false);
     
     // 🔥 মাস্টার ডিলে: ৩৫০ms ওয়েট করা হয় যাতে Framer Motion এর exit অ্যানিমেশন শেষ হতে পারে।
@@ -58,11 +60,22 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     setTimeout(() => {
       setView('none');
       setData(null);
+      // Execute callback after cleanup is complete
+      if (typeof onClosed === 'function') {
+        onClosed();
+      }
     }, 350); 
   }, []);
 
+  // ৪. মডাল সুইচ প্রোটোকল (No Delay - Instant Switch)
+  const switchModal = useCallback((targetView: ModalView, modalData: any = null) => {
+    setView(targetView);
+    setData(modalData);
+    if (!isOpen) setIsOpen(true);
+  }, [isOpen]);
+
   return (
-    <ModalContext.Provider value={{ view, isOpen, data, openModal, closeModal }}>
+    <ModalContext.Provider value={{ view, isOpen, data, openModal, closeModal, switchModal }}>
       {children}
     </ModalContext.Provider>
   );

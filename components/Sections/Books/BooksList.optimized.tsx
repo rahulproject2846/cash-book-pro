@@ -30,12 +30,8 @@ const useViewportSniper = (bookId: string, imageSrc: string) => {
     useEffect(() => {
         if (!elementRef.current || hasTriggered) return;
 
-        console.log('🔍 [OBSERVER] Setting up IntersectionObserver for book:', bookId, 'Image:', imageSrc);
-
         const observer = new IntersectionObserver(
             ([entry]) => {
-                console.log('🔍 [OBSERVER] Entry changed:', bookId, 'isIntersecting:', entry.isIntersecting);
-                
                 if (entry.isIntersecting) {
                     setIsVisible(true);
                     
@@ -60,9 +56,8 @@ const useViewportSniper = (bookId: string, imageSrc: string) => {
         );
 
         observer.observe(elementRef.current);
-
         return () => observer.disconnect();
-    }, [bookId]);
+    }, [bookId, imageSrc, hasTriggered]);
 
     return { elementRef, isVisible, hasTriggered };
 };
@@ -100,18 +95,17 @@ const BookListItem = React.memo<BookListItemProps>(({
     lang, 
     t 
 }) => {
-    // ✅ CRITICAL: Identity & Keys - Use reactKey priority
-    const bookId = book.reactKey || book._id || book.localId;
+    const bookId = book._id || book.localId;
     const isPositive = balance >= 0;
     
     // 🎯 VIEWPORT SNIPER TRIGGER
-    const { elementRef, isVisible, hasTriggered } = useViewportSniper(bookId, book.image || book.mediaCid);
+    const { elementRef, isVisible, hasTriggered } = useViewportSniper(bookId, book.image);
     
     // 🎯 IMAGE STATE MANAGEMENT
-    const imageState = useImageState(book.image || book.mediaCid, isVisible, hasTriggered);
+    const imageState = useImageState(book.image, isVisible, hasTriggered);
     const { previewUrl, isLoading, isLoaded, hasError, isCidImage, isHttpImage } = imageState;
 
-    // 🎨 RENDER IMAGE WITH FALLBACKS - PRESERVE CURRENT LOGIC
+    // 🎨 RENDER IMAGE WITH FALLBACKS
     const renderImage = () => {
         // HTTP Image - Direct render
         if (isHttpImage && book.image) {
@@ -225,30 +219,16 @@ const BookListItem = React.memo<BookListItemProps>(({
                 </div>
             </div>
 
-            {/* ✅ PRESERVED: Financial Stats Area with Net Asset Label */}
+            {/* Financial Stats Area */}
             <div className="mt-auto relative z-10 space-y-0.5 md:space-y-1">
-                {/* ✅ CRITICAL: Net Asset Label */}
-                <p className="text-[7px] md:text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2px] opacity-40">
-                    {t('net_asset') || "TOTAL SURPLUS"}
-                </p>
-                
-                <div className={cn(
-                    "text-[22px] md:text-3xl font-mono-finance font-black tracking-tighter flex items-baseline gap-1",
-                    isPositive ? 'text-green-500' : 'text-red-500'
-                )}>
-                    <span className="text-xs md:text-base opacity-50 font-sans font-bold">{currencySymbol}</span>
-                    <span className="leading-none">{toBn(Math.abs(balance).toLocaleString(), lang)}</span> {/* ✅ PRESERVED: toLocaleString() */}
-                </div>
-            </div>
-
-            {/* Footer Actions & Metadata */}
-            <div className="mt-4 md:mt-6 pt-4 md:pt-5 border-t border-[var(--border)]/50 flex justify-between items-center relative z-10">
-                <div className="flex flex-col gap-0.5 md:gap-1">
-                    <span className="text-[6px] md:text-[7px] font-black text-[var(--text-muted)] uppercase tracking-widest opacity-30">
-                        {t('label_last_updated')}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                        <Clock size={10} className="text-orange-500 opacity-60" />
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h4 className={cn(
+                            "text-[16px] md:text-xl font-black",
+                            isPositive ? "text-green-500" : "text-red-500"
+                        )}>
+                            {currencySymbol}{toBn(Math.abs(balance).toFixed(2), lang)}
+                        </h4>
                         <span className="text-[9px] md:text-[11px] font-black text-[var(--text-main)] uppercase tracking-wider">
                             {getTimeAgo(book.updatedAt, lang, t)}
                         </span>
@@ -277,6 +257,7 @@ BookListItem.displayName = 'BookListItem';
 
 // --- 🛰️ OPTIMIZED MASTER COMPONENT: BOOKS LIST ---
 interface BooksListProps {
+    isLoading?: boolean;
     onAddClick: () => void;
     onBookClick: (book: any) => void;
     onQuickAdd: (book: any) => void;
@@ -286,16 +267,17 @@ interface BooksListProps {
 
 // 🛡️ MEMOIZED BOOKS LIST
 const BooksList = React.memo<BooksListProps>(({ 
+    isLoading = false, 
     onAddClick, 
     onBookClick, 
     onQuickAdd, 
-    getBookBalance,
+    getBookBalance, 
     currencySymbol = "৳"
 }) => {
     const { t, language } = useTranslation();
     
     // 🎯 ZUSTAND STORE INTEGRATION
-    const { filteredBooks, isLoading: isStoreLoading } = useVaultStore();
+    const { books, isLoading: isStoreLoading } = useVaultStore();
 
     // 🛡️ STABLE EVENT HANDLERS WITH useCallback
     const handleBookClick = useCallback((book: any) => {
@@ -310,15 +292,14 @@ const BooksList = React.memo<BooksListProps>(({
         onAddClick();
     }, [onAddClick]);
 
-    // 🎯 MEMOIZED BALANCE GETTER - PRESERVE COMPLEX LOGIC
+    // 🎯 MEMOIZED BALANCE GETTER
     const getBalance = useCallback((book: any) => {
-        // ✅ PRESERVED: reactKey priority logic
-        const bookId = book.reactKey || book._id || book.localId;
+        const bookId = book._id || book.localId;
         return getBookBalance(bookId);
     }, [getBookBalance]);
 
     // 🎯 LOADING STATE
-    if (isStoreLoading) {
+    if (isLoading || isStoreLoading) {
         return (
             <div className="py-40 flex flex-col items-center justify-center gap-6 opacity-20">
                 <Loader2 className="animate-spin text-orange-500" size={48} />
@@ -332,8 +313,8 @@ const BooksList = React.memo<BooksListProps>(({
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-10 mt-2 md:mt-6 md:px-8 lg:px-10">
                 <AnimatePresence mode="popLayout">
                     
-                    {/* DYNAMIC ADD CARD LOGIC */}
-                    {(filteredBooks.length === 0 || typeof window !== 'undefined') && (
+                    {/* 🔥 DYNAMIC ADD CARD LOGIC */}
+                    {(books.length === 0 || typeof window !== 'undefined') && (
                         <motion.div 
                             initial={{ opacity: 0, scale: 0.9 }} 
                             animate={{ opacity: 1, scale: 1 }} 
@@ -343,7 +324,7 @@ const BooksList = React.memo<BooksListProps>(({
                                 "h-[210px] md:h-[280px] rounded-[35px] md:rounded-[40px] border-2 border-dashed",
                                 "border-orange-500/20 hover:border-orange-500 flex flex-col items-center justify-center",
                                 "text-orange-500 cursor-pointer hover:bg-orange-500/[0.02] transition-all group shrink-0",
-                                filteredBooks.length > 0 ? "hidden md:flex" : "flex" 
+                                books.length > 0 ? "hidden md:flex" : "flex" 
                             )}
                         >
                             <div className="w-12 h-12 md:w-20 md:h-20 rounded-[22px] md:rounded-[28px] bg-orange-500/10 flex items-center justify-center mb-5 group-hover:bg-orange-500 group-hover:text-white transition-all duration-700 shadow-2xl">
@@ -355,14 +336,14 @@ const BooksList = React.memo<BooksListProps>(({
                         </motion.div>
                     )}
 
-                    {/* 🎯 OPTIMIZED BOOK LIST RENDERING - PRESERVE KEY LOGIC */}
-                    {filteredBooks?.map((b: any) => (
+                    {/* 🎯 OPTIMIZED BOOK LIST RENDERING */}
+                    {books?.map((book: any) => (
                         <BookListItem 
-                            key={b.localId || b.reactKey || b._id} // ✅ PRESERVED: reactKey priority
-                            book={b} 
+                            key={book.localId || book._id} 
+                            book={book} 
                             onClick={handleBookClick} 
                             onQuickAdd={handleQuickAdd} 
-                            balance={getBalance(b)} // ✅ PRESERVED: Complex balance logic
+                            balance={getBalance(book)} 
                             currencySymbol={currencySymbol} 
                             lang={language}
                             t={t}
@@ -372,10 +353,12 @@ const BooksList = React.memo<BooksListProps>(({
             </div>
 
             {/* End of Hub Footer Signal */}
-            <div className="mt-16 mb-10 flex flex-col items-center opacity-5 group-hover:opacity-20 transition-all duration-1000">
-                <div className="h-px w-32 bg-gradient-to-r from-transparent via-[var(--border)] to-transparent mb-4" />
-                <ShieldCheck size={20} strokeWidth={1} />
-            </div>
+            {books.length > 2 && (
+                <div className="mt-16 mb-10 flex flex-col items-center opacity-5 group-hover:opacity-20 transition-all duration-1000">
+                    <div className="h-px w-32 bg-gradient-to-r from-transparent via-[var(--border)] to-transparent mb-4" />
+                    <ShieldCheck size={20} strokeWidth={1} />
+                </div>
+            )}
         </div>
     );
 });

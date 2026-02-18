@@ -7,6 +7,7 @@ declare global {
       initPusher: (pusher: any, userId: string) => void;
       logout: () => Promise<void>;
       performIntegrityCheck: (userId?: string) => Promise<void>;
+      hydrateSingleItem: (type: 'BOOK' | 'ENTRY', id: string) => Promise<{ success: boolean; error?: string }>;
     };
     mediaStore: any;
   }

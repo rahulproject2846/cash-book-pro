@@ -9,12 +9,14 @@ import {
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
-import { Tooltip } from '@/components/UI/Tooltip';
 import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
+import { useLocalPreview } from '@/hooks/useLocalPreview';
+import { useVaultStore } from '@/lib/vault/store/index';
+import { Tooltip } from '@/components/UI/Tooltip';
 
 export const DynamicHeader = ({ 
-    activeSection, currentUser, currentBook, collapsed, 
-    onBack, onFabClick, onLogout, theme, setTheme,
+    activeSection, currentUser, collapsed, 
+    onFabClick, onLogout, theme, setTheme,
     onEditBook, onOpenShare, onOpenExport, onOpenAnalytics, 
     onDeleteBook, setActiveSection 
 }: any) => {
@@ -22,12 +24,22 @@ export const DynamicHeader = ({
     const [showSuperMenu, setShowSuperMenu] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
 
+    // 🎯 CONNECT TO ZUSTAND STORE - HOISTED TO TOP
+    const { activeBook, setActiveBook } = useVaultStore();
+
+    // 🖼️ PROFILE IMAGE PREVIEW - HOISTED TO TOP
+    const userProfilePreview = useLocalPreview(currentUser?.image);
+
     // Optimized Menu Handler (Closes menus after action)
     const handleAction = (action: () => void) => {
         setShowSuperMenu(false); 
         setShowUserMenu(false);
         if (action) action(); 
     };
+
+    // 🎯 CONDITIONAL RENDERING LOGIC - AFTER ALL HOOKS
+    const isBookView = activeBook && activeSection === 'books';
+    const isGlobalView = !activeBook;
 
     return (
         <header 
@@ -42,7 +54,7 @@ export const DynamicHeader = ({
             {/* --- LEFT SECTION: BRANDING & TITLES --- */}
             <div className="flex items-center gap-4">
                 {/* Mobile Brand Logo */}
-                {!currentBook && (
+                {isGlobalView && (
                     <div className="md:hidden flex items-center gap-3">
                         <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/30">V</div>
                         <h1 className="text-xl font-black uppercase italic text-[var(--text-main)] tracking-tighter leading-none">
@@ -52,11 +64,11 @@ export const DynamicHeader = ({
                 )}
 
                 {/* Contextual Title Logic */}
-                {currentBook && activeSection === 'books' ? (
+                {isBookView ? (
                     <div className="flex items-center gap-4">
                         <Tooltip text={t('tt_back_dashboard')}>
                             <button 
-                                onClick={onBack} 
+                                onClick={() => setActiveBook(null)} 
                                 className="p-3 bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all active:scale-90"
                             >
                                 <ChevronLeft size={20} strokeWidth={3}/>
@@ -64,7 +76,7 @@ export const DynamicHeader = ({
                         </Tooltip>
                         <div className="min-w-0">
                             <h2 className="text-xl md:text-2xl font-black uppercase tracking-tighter italic leading-none text-[var(--text-main)] truncate max-w-[150px] md:max-w-xs">
-                                {currentBook.name}
+                                {activeBook.name}
                             </h2>
                             <div className="flex items-center gap-2 mt-1">
                                 <ShieldCheck size={12} className="text-green-500" strokeWidth={3} />
@@ -93,7 +105,7 @@ export const DynamicHeader = ({
             <div className="flex items-center gap-3 md:gap-4 shrink-0">
                 
                 {/* Primary Action Button (Add Entry/Vault) */}
-                <Tooltip text={currentBook ? t('tt_add_entry') : t('tt_initialize_ledger')} position="bottom">
+                <Tooltip text={activeBook ? t('tt_add_entry') : t('tt_initialize_ledger')} position="bottom">
                     <button 
                         onClick={onFabClick} 
                         className={cn(
@@ -103,7 +115,7 @@ export const DynamicHeader = ({
                         )}
                     >
                         <Plus size={18} strokeWidth={3.5} /> 
-                        {currentBook && activeSection === 'books' ? t('btn_new_entry') : t('btn_create_vault')}
+                        {activeBook && activeSection === 'books' ? t('btn_new_entry') : t('btn_create_vault')}
                     </button>
                 </Tooltip>
 
@@ -118,7 +130,7 @@ export const DynamicHeader = ({
                 </Tooltip>
 
                 {/* Contextual Menus */}
-                {currentBook && activeSection === 'books' ? (
+                {isBookView ? (
                     // Book Context Menu
                     <div className="relative">
                         <Tooltip text={t('tt_more_options')} position="bottom">
@@ -128,7 +140,7 @@ export const DynamicHeader = ({
                                     "p-3.5 rounded-2xl border transition-all active:scale-90 shadow-sm",
                                     showSuperMenu 
                                         ? "bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20" 
-                                        : "bg-[var(--bg-app)] border-[var(--border)] text-[var(--text-muted)] hover:text-orange-500"
+                                        : "bg-[var(--bg-app)] border border-[var(--border)] text-[var(--text-muted)] hover:text-orange-500"
                                 )}
                             >
                                 <MoreVertical size={20} strokeWidth={2.5} />
@@ -183,8 +195,8 @@ export const DynamicHeader = ({
                                     showUserMenu ? "ring-4 ring-orange-500/20 border-orange-500" : ""
                                 )}
                             >
-                                {currentUser?.image ? (
-                                    <img src={currentUser.image} alt="U" className="w-full h-full object-cover" />
+                                {userProfilePreview.previewUrl ? (
+                                    <img src={userProfilePreview.previewUrl} alt="U" className="w-full h-full object-cover" />
                                 ) : (
                                     <span className="opacity-80">{(currentUser?.username?.charAt(0) || "U").toUpperCase()}</span>
                                 )}

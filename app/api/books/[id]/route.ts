@@ -26,8 +26,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     await connectDB();
 
-    // 🔥 FOCUSED HYDRATION: Fetch single book with ALL fields (including image)
-    const book = await Book.findById(id).lean();
+    // 🔥 FOCUSED HYDRATION: Support both MongoDB _id and cid
+    const query = id.length === 24 ? { _id: id } : { cid: id };
+    const book = await Book.findOne(query).lean();
 
     if (!book) {
       return NextResponse.json({ message: "Book not found" }, { status: 404 });

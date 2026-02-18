@@ -163,3 +163,4 @@ export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
 export { BookModal } from './BookModal';
 export { EntryModal } from './EntryModal';
 export { AdvancedExportModal } from './AdvancedExportModal';
+export { ActionMenuModal } from './ActionMenuModal';

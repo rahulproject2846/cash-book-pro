@@ -15,7 +15,8 @@ import {
   BookModal, 
   EntryModal, 
   DeleteConfirmModal, 
-  AdvancedExportModal 
+  AdvancedExportModal,
+  ActionMenuModal
 } from './index';
 import { ShareModal } from './ShareModal';
 import { TerminationModal } from './TerminationModal';
@@ -33,6 +34,15 @@ export const ModalRegistry = () => {
 
   return (
     <AnimatePresence mode="popLayout">
+      {/* ০. ACTION MENU */}
+      {view === 'actionMenu' && (
+        <ActionMenuModal 
+          key="action-menu-modal"
+          isOpen={isOpen}
+          onClose={closeModal}
+        />
+      )}
+
       {/* ১. বুক ম্যানেজমেন্ট প্রোটোকল */}
       {(view === 'addBook' || view === 'editBook') && (
         <BookModal 

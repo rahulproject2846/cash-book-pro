@@ -15,6 +15,7 @@ export interface LocalUser {
   _id: string;          
   username: string;
   email: string;
+  image?: string;        // ✅ ADDED: User profile image
   preferences: {
     language: 'en' | 'bn';
     compactMode: boolean;
@@ -41,7 +42,9 @@ export interface LocalBook {
   conflicted?: 0 | 1;     // 🚨 CONFLICT TRACKING: 0 = no conflict, 1 = conflict detected
   conflictReason?: string;    // 🚨 CONFLICT REASON: "VERSION_CONFLICT", "MERGE_CONFLICT", etc.
   serverData?: any;        // 🚨 SERVER DATA: Original server data that caused conflict
+  image?: string;         // ✅ ADDED: Book cover image
   mediaCid?: string;       // 🚨 MEDIA CID: Reference to mediaStore record
+  lastSniperFetch?: number;  // 🎯 ADDED: Track when image was last fetched by sniper
 }
 
 export interface LocalEntry {
@@ -299,32 +302,17 @@ export class VaultProDB extends Dexie {
     // Added mediaCid index to books store for efficient CID clearing
     // Added mediaId index to entries store for efficient entry image operations
     this.version(12).stores({
-      books: '++localId, _id, userId, &cid, &image, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted, &mediaCid',
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
       entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
       users: '_id',
       telemetry: '++id, type, synced, timestamp',
       audits: '++id, type, level, timestamp, sessionId, userId',
       auditLogs: '++localId, cid, userId, timestamp',
-      snapshots: '++localId, cid, userId, timestamp',  // SAFETY SNAPSHOTS
-      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt'  // MEDIA STORE
+      snapshots: '++localId, cid, userId, timestamp', // SAFETY SNAPSHOTS
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt' // MEDIA STORE
     }).upgrade(async (tx) => {
-      // Add mediaCid index to books store for efficient CID clearing
-      const booksTable = tx.table('books') as any;
-      if (booksTable) {
-        booksTable.createIndex('mediaCid', 'mediaCid', { unique: false });
-      }
-      // Add image index to books store for efficient image queries
-      if (booksTable) {
-        booksTable.createIndex('image', 'image', { unique: false });
-      }
-      
-      // Add mediaId index to entries store for efficient entry image operations
-      const entriesTable = tx.table('entries') as any;
-      if (entriesTable) {
-        entriesTable.createIndex('mediaId', 'mediaId', { unique: false });
-      }
-      
-      console.log('🔧 Vault Pro: mediaCid, image, and mediaId indexes added to stores');
+      // FIXED: Indexes are already defined in .stores() - no manual creation needed
+      console.log(' Vault Pro: Version 12 indexes handled automatically by Dexie');
     });
   }
 }
