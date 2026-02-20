@@ -3,6 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { db } from '@/lib/offlineDB';
 import { identityManager } from './core/IdentityManager';
 import { mapConflictType } from './ConflictMapper';
+import { getTimestamp } from '@/lib/shared/utils';
 import toast from 'react-hot-toast';
 import { ConflictBackgroundService } from './ConflictBackgroundService';
 import { Book, FileText } from 'lucide-react';
@@ -58,7 +59,7 @@ export const useConflictStore = create<ConflictStore>()(
 
         addPendingResolution: (item: ConflictItem, resolution: 'local' | 'server') => {
             const key = `${item.type}:${item.cid}`;
-            const expiresAt = Date.now() + 8000; 
+            const expiresAt = getTimestamp() + 8000; 
             
             set(state => ({
                 pendingResolutions: {
@@ -93,7 +94,7 @@ export const useConflictStore = create<ConflictStore>()(
 
         executeExpiredResolutions: async () => {
             const { pendingResolutions } = get();
-            const now = Date.now();
+            const now = getTimestamp();
             const expiredKeys = Object.keys(pendingResolutions).filter(
                 key => pendingResolutions[key].expiresAt <= now
             );
@@ -169,7 +170,7 @@ export const useConflictStore = create<ConflictStore>()(
                     cid: item.cid,
                     type: item.type,
                     record: JSON.parse(JSON.stringify(item.record)),
-                    timestamp: Date.now(),
+                    timestamp: getTimestamp(),
                     reason: 'pre_resolution_backup',
                     userId: identityManager.getUserId() || 'unknown'
                 };
@@ -191,14 +192,14 @@ export const useConflictStore = create<ConflictStore>()(
                         synced: 0,
                         serverData: null,
                         vKey: (item.record.vKey || 0) + 1,
-                        updatedAt: Date.now()
+                        updatedAt: getTimestamp()
                     }
                     : {
                         ...item.record.serverData,
                         conflicted: 0,
                         synced: 1,
                         serverData: null,
-                        updatedAt: Date.now()
+                        updatedAt: getTimestamp()
                     };
                 
                 if (item.type === 'book') {
@@ -211,7 +212,7 @@ export const useConflictStore = create<ConflictStore>()(
                     cid: item.cid,
                     type: item.type,
                     decision: resolution,
-                    timestamp: Date.now(),
+                    timestamp: getTimestamp(),
                     userId: identityManager.getUserId() || 'unknown'
                 });
                 

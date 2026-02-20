@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     CreditCard, Layers, Info, ArrowDownLeft, ArrowUpRight, 
@@ -12,6 +12,9 @@ import { OSInput, ModalEliteDropdown } from '@/components/UI/FormComponents';
 import Keypad from '@/components/UI/Keypad';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useVaultStore } from '@/lib/vault/store';
+import { db } from '@/lib/offlineDB';
+import { fixFinancialPrecision, convertBanglaToEnglish } from '@/lib/vault/core/VaultUtils';
 
 // --- 🧠 SMART MATH ENGINE ---
 const safeCalculate = (expression: string) => {
@@ -69,7 +72,8 @@ const inputToDbTime = (timeStr: string): string => {
 
 export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
     const { t, language } = useTranslation();
-    // const { checkPotentialDuplicate } = useVault(currentUser, currentBook);
+    const vaultStore = useVaultStore();
+    const allEntries = vaultStore.allEntries;
     
     // States
     const [isExpanded, setIsExpanded] = useState(false);
@@ -89,37 +93,104 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
     const userCategories = currentUser?.categories || ['GENERAL', 'FOOD', 'TRANSPORT'];
     const amountInputRef = useRef<HTMLInputElement>(null);
 
-    // --- 🛡️ LOGIC: POTENTIAL DUPLICATE CHECK ---
+    // --- SMART SUGGESTIONS ENGINE ---
+    const smartSuggestions = useMemo(() => {
+        if (!currentUser || !allEntries.length) return { titles: [], categories: [] };
+        
+        // Get user's entries from the last 30 days
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const recentEntries = allEntries.filter((entry: any) => 
+            entry.createdAt > thirtyDaysAgo && 
+            entry.isDeleted === 0
+        );
+        
+        // Count frequency
+        const titleFrequency = new Map<string, number>();
+        const categoryFrequency = new Map<string, number>();
+        
+        recentEntries.forEach((entry: any) => {
+            if (entry.title) {
+                titleFrequency.set(entry.title, (titleFrequency.get(entry.title) || 0) + 1);
+            }
+            if (entry.category) {
+                categoryFrequency.set(entry.category, (categoryFrequency.get(entry.category) || 0) + 1);
+            }
+        });
+        
+        // Get top 5 most frequent
+        const topTitles = Array.from(titleFrequency.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([title]) => title);
+            
+        const topCategories = Array.from(categoryFrequency.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([category]) => category);
+        
+        return { titles: topTitles, categories: topCategories };
+    }, [allEntries, currentUser]);
+
+    // --- ADVANCED DUPLICATE SHIELD ---
+    const checkDuplicate = async (amountValue: number) => {
+        if (amountValue <= 0) {
+            setShowDuplicateWarning(false);
+            setDuplicateWarningBlink(false);
+            return;
+        }
+
+        try {
+            // Query Dexie for matching entries within the last 10 minutes
+            const timeWindow = 10 * 60 * 1000; // 10 minutes in milliseconds
+            const cutoff = Date.now() - timeWindow;
+            
+            const recentEntries = await db.entries
+                .where('userId')
+                .equals(currentUser?.id || '')
+                .and((entry: any) => 
+                    entry.bookId === (currentBook?._id || currentBook?.localId) &&
+                    entry.type === (activeInput === 'in' ? 'income' : 'expense') &&
+                    entry.category === form.category &&
+                    Math.abs(entry.amount - amountValue) < 0.01 && // Allow 0.01 difference
+                    entry.createdAt > cutoff
+                )
+                .toArray();
+            
+            const isDuplicate = recentEntries.length > 0;
+            setShowDuplicateWarning(!!isDuplicate);
+            
+            if (isDuplicate) {
+                setDuplicateWarningBlink(true);
+                const intervalId = setInterval(() => {
+                    setDuplicateWarningBlink(!duplicateWarningBlink);
+                }, 500);
+                return () => clearInterval(intervalId);
+            } else {
+                setDuplicateWarningBlink(false);
+            }
+        } catch (error) {
+            console.error('❌ [DUPLICATE CHECK] Failed to check duplicates:', error);
+            setShowDuplicateWarning(false);
+            setDuplicateWarningBlink(false);
+        }
+    };
+
+    // --- ADVANCED DUPLICATE CHECK ---
     useEffect(() => {
-        const checkDuplicate = async () => {
-            const finalAmount = safeCalculate(amountStr);
+        const performDuplicateCheck = async () => {
+            const finalAmount = safeCalculate(convertBanglaToEnglish(amountStr));
             if (finalAmount > 0) {
-                // 🚀 DUPLICATE ENTRY SHIELD: Check amount, type, and category within last 10 minutes
-                // const isDuplicate = await checkPotentialDuplicate(
-                //     finalAmount, 
-                //     activeInput === 'in' ? 'income' : 'expense',
-                //     form.category
-                // );
-                const isDuplicate = false; // Temporarily disabled
-                setShowDuplicateWarning(!!isDuplicate);
-                if (isDuplicate) {
-                    setDuplicateWarningBlink(true);
-                    const intervalId = setInterval(() => {
-                        setDuplicateWarningBlink(!duplicateWarningBlink);
-                    }, 500);
-                    return () => clearInterval(intervalId);
-                } else {
-                    setDuplicateWarningBlink(false);
-                }
+                // 🚀 ADVANCED DUPLICATE ENTRY SHIELD: Real-time Dexie check
+                await checkDuplicate(finalAmount);
             } else {
                 setShowDuplicateWarning(false);
                 setDuplicateWarningBlink(false);
             }
         };
 
-        const timeoutId = setTimeout(checkDuplicate, 500); // Debounce check
+        const timeoutId = setTimeout(performDuplicateCheck, 500); // Debounce check
         return () => clearTimeout(timeoutId);
-    }, [amountStr, activeInput, form.category]);
+    }, [amountStr, activeInput, form.category, currentUser, currentBook]);
 
     useEffect(() => { 
         setIsMobile(window.innerWidth < 768); 
@@ -198,9 +269,15 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
         if (isMobile) setShowKeypad(false);
     };
 
+    const handleAmountChange = (value: string) => {
+        // Apply Bangla-to-English conversion in real-time
+        const convertedAmount = fixFinancialPrecision(value);
+        setAmountStr(String(convertedAmount));
+    };
+
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        const finalAmount = safeCalculate(amountStr);
+        const finalAmount = fixFinancialPrecision(amountStr);
         if (isLoading || finalAmount <= 0) return;
         
         setIsLoading(true);
@@ -341,33 +418,77 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                         />
                     </motion.div>
 
-                    {/* 3. MAIN INPUTS */}
+                    {/* 2. MAIN INPUTS */}
                     <div className="space-y-4">
-                        <OSInput 
-                            value={form.title} 
-                            onChange={(val:any) => setForm({...form, title: val})} 
-                            placeholder={t('placeholder_entry_title')} 
-                            icon={CreditCard} 
-                            onFocus={handleTextFocus} 
-                            onKeyDown={handleKeyDown}
-                        />
-                        
-                        <button 
-                            type="button" 
-                            onClick={() => setIsExpanded(!isExpanded)} 
-                            className={cn(
-                                "w-full h-14 flex items-center justify-between px-5 rounded-2xl border-2 transition-all duration-300 active:scale-[0.98]",
-                                isExpanded 
-                                    ? "bg-orange-500/5 border-orange-500/20 text-orange-500" 
-                                    : "bg-[var(--bg-input)] border-transparent text-[var(--text-muted)] hover:bg-[var(--border)]/10"
+                        {/* Title Input with Smart Suggestions */}
+                        <div className="relative">
+                            <OSInput 
+                                value={form.title} 
+                                onChange={(val: any) => setForm({...form, title: val})} 
+                                placeholder={t('placeholder_entry_title')} 
+                                icon={CreditCard} 
+                                onFocus={handleTextFocus} 
+                                onKeyDown={handleKeyDown}
+                            />
+                            
+                            {/* Smart Title Suggestions */}
+                            {smartSuggestions.titles.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2 max-h-32 overflow-y-auto">
+                                    <div className="text-xs font-medium text-gray-600 mb-2">Recent Titles (Click to use)</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {smartSuggestions.titles.map((title, index) => (
+                                            <button
+                                                key={`title-${index}`}
+                                                onClick={() => setForm(prev => ({ ...prev, title }))}
+                                                className="px-3 py-1 bg-slate-100 text-blue-700 rounded-full text-xs hover:bg-blue-200 transition-colors"
+                                            >
+                                                {title}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
-                        >
-                            <span className="text-[11px] font-bold uppercase tracking-[2px] flex items-center gap-2.5">
-                                <SlidersHorizontal size={16} /> 
-                                {isExpanded ? 'Fewer Details' : 'More Options'}
-                            </span>
-                            <ChevronDown size={18} className={cn("transition-transform duration-300", isExpanded && "rotate-180")} />
-                        </button>
+                        </div>
+                        
+                        {/* Category Input with Smart Suggestions */}
+                        <div className="relative">
+                            <OSInput 
+                                value={form.category} 
+                                onChange={(val: any) => setForm({...form, category: val})} 
+                                placeholder={t('placeholder_category')} 
+                                icon={CreditCard} 
+                                onFocus={handleTextFocus} 
+                                onKeyDown={handleKeyDown}
+                            />
+                            
+                            {/* Smart Category Suggestions */}
+                            {smartSuggestions.categories.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2 max-h-32 overflow-y-auto">
+                                    <div className="text-xs font-medium text-gray-600 mb-2">Recent Categories (Click to use)</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {smartSuggestions.categories.map((category, index) => (
+                                            <button
+                                                key={`category-${index}`}
+                                                onClick={() => setForm(prev => ({ ...prev, category }))}
+                                                className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs hover:bg-green-200 transition-colors"
+                                            >
+                                                {category}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => setIsExpanded(!isExpanded)} 
+                                className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                            >
+                                <span className="text-xs">{isExpanded ? 'Fewer Details' : 'More Options'}</span>
+                                <ChevronDown size={18} className={cn("transition-transform duration-300", isExpanded && "rotate-180")} />
+                            </button>
+                        </div>
                         
                         <AnimatePresence>
                             {isExpanded && (
@@ -378,16 +499,16 @@ export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser
                                     className="overflow-hidden space-y-4 pt-1"
                                 >
                                     <div className="grid grid-cols-2 gap-4">
-                                        <OSInput type="date" value={form.date} onChange={(v:any) => setForm({...form, date: v})} icon={Calendar} />
-                                        <OSInput type="time" value={form.time} onChange={(v:any) => setForm({...form, time: v})} icon={Clock} />
+                                        <OSInput type="date" value={form.date} onChange={(v: any) => setForm({...form, date: v})} icon={Calendar} />
+                                        <OSInput type="time" value={form.time} onChange={(v: any) => setForm({...form, time: v})} icon={Clock} />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
-                                        <ModalEliteDropdown label={t('classification')} current={form.category} options={userCategories} onChange={(v:any) => setForm({...form, category: v})} icon={Layers} />
-                                        <ModalEliteDropdown label={t('via_protocol')} current={form.paymentMethod} options={['CASH', 'BANK', 'BKASH', 'NAGAD']} onChange={(v:any) => setForm({...form, paymentMethod: v})} icon={CreditCard} />
+                                        <ModalEliteDropdown label={t('classification')} current={form.category} options={userCategories} onChange={(v: any) => setForm({...form, category: v})} icon={Layers} />
+                                        <ModalEliteDropdown label={t('via_protocol')} current={form.paymentMethod} options={['CASH', 'BANK', 'BKASH', 'NAGAD']} onChange={(v: any) => setForm({...form, paymentMethod: v})} icon={CreditCard} />
                                     </div>
                                     
-                                    <OSInput value={form.note} onChange={(v:any) => setForm({...form, note: v})} placeholder={t('placeholder_entry_memo')} icon={Info} onFocus={handleTextFocus} />
+                                    <OSInput value={form.note} onChange={(v: any) => setForm({...form, note: v})} placeholder={t('placeholder_entry_memo')} icon={Info} onFocus={handleTextFocus} />
                                 </motion.div>
                             )}
                         </AnimatePresence>

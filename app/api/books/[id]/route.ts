@@ -3,6 +3,7 @@ import Book from "@/models/Book";
 import Entry from "@/models/Entry";
 import { NextResponse } from "next/server";
 import Pusher from 'pusher';
+import mongoose from "mongoose";
 
 const pusher = new Pusher({
   appId: process.env.PUSHER_APP_ID!,
@@ -27,7 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await connectDB();
 
     // 🔥 FOCUSED HYDRATION: Support both MongoDB _id and cid
-    const query = id.length === 24 ? { _id: id } : { cid: id };
+    const query = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { cid: id };
     const book = await Book.findOne(query).lean();
 
     if (!book) {

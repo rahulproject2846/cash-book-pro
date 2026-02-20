@@ -3,6 +3,8 @@
 import type { LocalEntry, LocalBook } from '@/lib/offlineDB';
 import { telemetry } from '../Telemetry';
 
+import { getTimestamp } from '@/lib/shared/utils';
+
 /**
  * 🛡️ VAULT PRO: SUPREME UTILITIES & NORMALIZER (V3.0)
  * ---------------------------------------------------
@@ -13,13 +15,103 @@ import { telemetry } from '../Telemetry';
 // --- ১. টাইমস্ট্যাম্প হেল্পারস (EXPORTS) ---
 
 /**
+ * 🔢 BANGLA TO ENGLISH CONVERTER - Converts Bangla numerals to English
+ */
+const BANGLA_NUMERALS = '০১২৩৪৫৬৭৮৯';
+const ENGLISH_NUMERALS = '0123456789';
+
+export const convertBanglaToEnglish = (text: string): string => {
+    return text.split('').map(char => {
+        const index = BANGLA_NUMERALS.indexOf(char);
+        return index !== -1 ? ENGLISH_NUMERALS[index] : char;
+    }).join('');
+};
+
+/**
+ * 💰 FINANCIAL PRECISION FIXER - Ensures 2 decimal places and Bangla conversion
+ */
+export const fixFinancialPrecision = (amount: any): number => {
+    if (amount === undefined || amount === null) return 0;
+    
+    // Convert Bangla numerals to English
+    const converted = convertBanglaToEnglish(String(amount));
+    
+    // Parse to float and remove non-numeric characters
+    const num = parseFloat(converted.replace(/[^\d.-]/g, ''));
+    
+    // Return 0 if invalid
+    if (isNaN(num)) return 0;
+    
+    // Ensure exactly 2 decimal places
+    return Math.round(num * 100) / 100;
+};
+
+/**
+ * 🛡️ XSS & CONTENT SANITIZER - Removes script injection and limits content
+ */
+export const sanitizeContent = (text: string): string => {
+    if (!text || typeof text !== 'string') return text;
+    
+    // Remove XSS patterns
+    const xssPatterns = [
+        /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+        /javascript:/gi,
+        /on\w+\s*=/gi,
+        /eval\s*\(/gi
+    ];
+    
+    let sanitized = text;
+    xssPatterns.forEach(pattern => {
+        sanitized = sanitized.replace(pattern, '[REMOVED]');
+    });
+    
+    // Normalize whitespace
+    sanitized = sanitized.replace(/\s+/g, ' ').trim();
+    
+    return sanitized;
+};
+
+/**
+ * ✅ COMPLETENESS VALIDATOR - Ensures mandatory fields are present
+ */
+export const validateCompleteness = (
+    record: any, 
+    type: 'book' | 'entry'
+): { isValid: boolean; missingFields: string[] } => {
+    const missingFields: string[] = [];
+    
+    if (type === 'entry') {
+        // Entry mandatory fields
+        if (!record.amount || record.amount === 0) {
+            missingFields.push('amount (must be > 0)');
+        }
+        if (!record.date || record.date === '') {
+            missingFields.push('date');
+        }
+        if (!record.title || record.title === '') {
+            missingFields.push('title');
+        }
+    } else if (type === 'book') {
+        // Book mandatory fields
+        if (!record.name || record.name === '') {
+            missingFields.push('name');
+        }
+    }
+    
+    return {
+        isValid: missingFields.length === 0,
+        missingFields
+    };
+};
+
+/**
  * যেকোনো ফরমেটের টাইমস্ট্যাম্পকে Unix Number-এ রূপান্তর করে।
  */
 export const normalizeTimestamp = (val: any): number => {
-    if (!val) return Date.now();
+    if (!val) return getTimestamp();
     if (typeof val === 'number') return val;
     const parsed = new Date(val).getTime();
-    return isNaN(parsed) ? Date.now() : parsed;
+    return isNaN(parsed) ? getTimestamp() : parsed;
 };
 
 // --- ২. ডাটা স্যানিটাইজেশন হেল্পারস (INTERNAL) ---
@@ -45,18 +137,39 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
 
     const normalized = { ...data };
 
-    // 🕵️ IDENTITY AUDIT: Track localId handling
-    console.log('🕵️ NORMALIZE IDENTITY CHECK:', { 
-        inputLocalId: normalized.localId, 
-        inputId: normalized._id, 
-        typeOfLocalId: typeof normalized.localId,
-        typeOfId: typeof normalized._id
-    });
-
     // ১. আইডি প্রোটেকশন (যদি _id এবং cid দুটোই না থাকে তবে ডাটা বাদ)
     if (!normalized._id && !normalized.cid) {
         console.warn("🚫 [NORMALIZER] Invalid record skipped:", data);
         return null;
+    }
+
+    // 🔢 FINANCIAL PRECISION: Fix amount with Bangla conversion and 2-decimal precision
+    if (normalized.amount !== undefined) {
+        normalized.amount = fixFinancialPrecision(normalized.amount);
+    }
+
+    // 🛡️ XSS SANITIZATION: Clean all string fields
+    if (normalized.title) {
+        normalized.title = sanitizeContent(normalized.title);
+    }
+    if (normalized.note) {
+        normalized.note = sanitizeContent(normalized.note);
+        // 📝 NOTE LIMIT: Trim to 200 characters max
+        if (normalized.note.length > 200) {
+            normalized.note = normalized.note.substring(0, 200);
+        }
+    }
+    if (normalized.name) {
+        normalized.name = sanitizeContent(normalized.name);
+    }
+    if (normalized.description) {
+        normalized.description = sanitizeContent(normalized.description);
+    }
+    if (normalized.category) {
+        normalized.category = sanitizeContent(normalized.category);
+    }
+    if (normalized.paymentMethod) {
+        normalized.paymentMethod = sanitizeContent(normalized.paymentMethod);
     }
 
     // ২. আইডি ইউনিফিকেশন
@@ -75,12 +188,12 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
 
     // Generate required fields if missing
     if (!normalized.vKey) {
-        // 🔥 UNIFIED VKEY STRATEGY: Use Date.now() for absolute and incremental versioning
-        normalized.vKey = Date.now();
+        // 🔥 UNIFIED VKEY STRATEGY: Use getTimestamp() for absolute and incremental versioning
+        normalized.vKey = getTimestamp();
     }
     
     if (!normalized.checksum) {
-        normalized.checksum = `checksum_${normalized.cid}_${Date.now()}`;
+        normalized.checksum = `checksum_${normalized.cid}_${getTimestamp()}`;
     }
 
     // ৩. লেগাসি রেসকিউ (CID & UserID)
@@ -107,6 +220,15 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     if (normalized.memo && !normalized.note) normalized.note = normalized.memo;
     if (normalized.via && !normalized.paymentMethod) normalized.paymentMethod = normalized.via;
     
+    // ✅ COMPLETENESS VALIDATION: Check mandatory fields before returning
+    const recordType = isBook ? 'book' : 'entry';
+    const completeness = validateCompleteness(normalized, recordType);
+    
+    if (!completeness.isValid) {
+        console.warn(`🚨 [VALIDATOR] Record incomplete: ${normalized.cid || 'unknown'}. Missing: ${completeness.missingFields.join(', ')}`);
+        return null; // Prevent saving/syncing incomplete data
+    }
+
     // 🔧 TYPE CORRECTION: Force type to lowercase and handle 'Entry' -> 'expense'
     if (normalized.type) {
         normalized.type = String(normalized.type).toLowerCase();
@@ -124,6 +246,13 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     }
     if (normalized.status !== undefined) {
         normalized.status = String(normalized.status).toLowerCase().trim();
+    }
+    
+    // 🛡️ IMAGE FIELD PRESERVATION: Never overwrite valid URLs with undefined/null
+    if (data.image !== undefined) {
+        // Only preserve image if it's explicitly provided as undefined/null
+        // This prevents accidental overwrites of valid URLs during normalization
+        normalized.image = data.image;
     }
 
     // ৬. ডাটা ইন্টিগ্রিটি (Enforced Rules)

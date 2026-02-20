@@ -1,7 +1,8 @@
 "use client";
 
-import { db } from '@/lib/offlineDB';
+import { getTimestamp } from '@/lib/shared/utils';
 import { identityManager } from '../../core/IdentityManager';
+import { db } from '@/lib/offlineDB';
 
 // 📝 ENTRY STATE INTERFACE
 export interface EntryState {
@@ -23,7 +24,7 @@ export interface EntryActions {
 export type EntryStore = EntryState & EntryActions;
 
 // 🛡️ ENTRY SLICE CREATOR FUNCTION
-export const createEntrySlice = (set: any, get: any): EntryState & EntryActions => ({
+export const createEntrySlice = (set: any, get: any, api: any): EntryState & EntryActions => ({
   // 📊 INITIAL STATE
   entries: [],
   allEntries: [],
@@ -104,12 +105,12 @@ export const createEntrySlice = (set: any, get: any): EntryState & EntryActions 
         cid: editTarget?.cid || entryData.cid || generateCID(),
         synced: 0,
         isDeleted: 0,
-        updatedAt: Date.now(),
-        vKey: Date.now(),
+        updatedAt: getTimestamp(),
+        vKey: getTimestamp(),
         syncAttempts: 0
       } as any;
 
-      if (!editTarget?.createdAt) entryPayload.createdAt = Date.now();
+      if (!editTarget?.createdAt) entryPayload.createdAt = getTimestamp();
 
       const normalized = normalizeRecord(entryPayload, userId);
       const checksum = await generateEntryChecksum({
@@ -130,7 +131,7 @@ export const createEntrySlice = (set: any, get: any): EntryState & EntryActions 
 
       const parentBookId = entryData.bookId || entryPayload.bookId;
       if (parentBookId) {
-        await db.books.update(String(parentBookId), { updatedAt: Date.now() });
+        await db.books.update(String(parentBookId), { updatedAt: getTimestamp() });
       }
 
       const { orchestrator } = await import('../../core/SyncOrchestrator');
@@ -157,13 +158,13 @@ export const createEntrySlice = (set: any, get: any): EntryState & EntryActions 
       await db.entries.update(Number(entry.localId), { 
         isDeleted: 1, 
         synced: 0, 
-        vKey: Date.now(),
-        updatedAt: Date.now()
+        vKey: getTimestamp(),
+        updatedAt: getTimestamp()
       });
       
       const parentBookId = entry.bookId;
       if (parentBookId) {
-        await db.books.update(String(parentBookId), { updatedAt: Date.now() });
+        await db.books.update(String(parentBookId), { updatedAt: getTimestamp() });
       }
       
       const { orchestrator } = await import('../../core/SyncOrchestrator');
@@ -186,8 +187,8 @@ export const createEntrySlice = (set: any, get: any): EntryState & EntryActions 
       await db.entries.update(Number(entry.localId), {
         isDeleted: 0,
         synced: 0,
-        updatedAt: Date.now(),
-        vKey: Date.now()
+        updatedAt: getTimestamp(),
+        vKey: getTimestamp()
       });
 
       const { orchestrator } = await import('../../core/SyncOrchestrator');
@@ -211,8 +212,8 @@ export const createEntrySlice = (set: any, get: any): EntryState & EntryActions 
       await db.entries.update(Number(entry.localId), {
         status: newStatus,
         synced: 0,
-        updatedAt: Date.now(),
-        vKey: Date.now()
+        updatedAt: getTimestamp(),
+        vKey: getTimestamp()
       });
 
       const { orchestrator } = await import('../../core/SyncOrchestrator');
@@ -235,8 +236,8 @@ export const createEntrySlice = (set: any, get: any): EntryState & EntryActions 
       await db.entries.update(Number(entry.localId), {
         isPinned: newPinStatus,
         synced: 0,
-        updatedAt: Date.now(),
-        vKey: Date.now()
+        updatedAt: getTimestamp(),
+        vKey: getTimestamp()
       });
 
       const { orchestrator } = await import('../../core/SyncOrchestrator');

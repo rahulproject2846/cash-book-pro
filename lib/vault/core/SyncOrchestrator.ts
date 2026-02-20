@@ -3,8 +3,10 @@
 import { PushService } from '../services/PushService';
 import { HydrationService } from '../services/HydrationService';
 import { IntegrityService } from '../services/IntegrityService';
+import { MaintenanceService } from '../services/MaintenanceService';
 import { identityManager } from '../core/IdentityManager';
 import { telemetry } from '../Telemetry';
+import { db } from '@/lib/offlineDB';
 
 /**
  * 🚀 REFACTORED SYNC ORCHESTRATOR - Clean Architecture Implementation
@@ -23,6 +25,7 @@ export class SyncOrchestratorRefactored {
   private pushService: PushService;
   private hydrationService: HydrationService;
   private integrityService: IntegrityService;
+  private maintenanceService: MaintenanceService;
   private channel: BroadcastChannel | null = null;
   private userId: string = '';
   private isInitialized = false;
@@ -32,6 +35,7 @@ export class SyncOrchestratorRefactored {
     this.pushService = new PushService();
     this.hydrationService = new HydrationService();
     this.integrityService = new IntegrityService();
+    this.maintenanceService = new MaintenanceService();
     
     this.init();
   }
@@ -86,7 +90,7 @@ export class SyncOrchestratorRefactored {
   /**
    * 👤 INITIALIZE FOR USER
    */
-  private async initializeForUser(userId: string): Promise<void> {
+  async initializeForUser(userId: string): Promise<void> {
     // 🛡️ INITIALIZATION GUARD
     if (this.isInitialized || this.isInitializing) {
       console.log('🏁 [ORCHESTRATOR] Already initialized or initializing, skipping...');
@@ -128,6 +132,14 @@ export class SyncOrchestratorRefactored {
       console.log('🏁 [REFACTORED ORCHESTRATOR] Step 4: Starting background services');
       this.integrityService.scheduleIntegrityChecks();
       
+      // 🔄 AUTO-RESUME: Check for interrupted syncs
+      console.log('🔄 [REFACTORED ORCHESTRATOR] Step 5: Auto-resume check');
+      await this.checkAndResumeInterruptedSyncs();
+      
+      // 🧹 STEP 6: Global maintenance cleanup
+      console.log('🧹 [REFACTORED ORCHESTRATOR] Step 6: Global maintenance cleanup');
+      await this.maintenanceService.performGlobalCleanup(userId);
+      
       this.isInitialized = true;
       console.log('🏁 [REFACTORED ORCHESTRATOR] Initialization complete - All systems ready');
       
@@ -148,109 +160,41 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
-   * 🚀 TRIGGER SYNC - Main sync entry point
+   * 🔄 AUTO-RESUME: Check for interrupted syncs and resume them
    */
-  async triggerSync(): Promise<{ success: boolean; itemsProcessed: number; error?: string }> {
-    if (!navigator.onLine) {
-      console.log('🔍 [REFACTORED ORCHESTRATOR] Offline, skipping sync');
-      return { success: false, itemsProcessed: 0, error: 'Offline' };
-    }
-
-    const pushStatus = this.pushService.getSyncStatus();
-    if (pushStatus.isSyncing) {
-      console.log('🔍 [REFACTORED ORCHESTRATOR] Already syncing, skipping...');
-      return { success: false, itemsProcessed: 0, error: 'Already syncing' };
-    }
-
-    console.log('🔍 [REFACTORED ORCHESTRATOR] Starting sync process...');
-    
+  private async checkAndResumeInterruptedSyncs(): Promise<void> {
     try {
-      // 🚀 PUSH PENDING DATA
-      const pushResult = await this.pushService.pushPendingData();
+      console.log('🔄 [REFACTORED ORCHESTRATOR] Checking for interrupted syncs...');
       
-      if (pushResult.success) {
-        console.log('✅ [REFACTORED ORCHESTRATOR] Sync completed successfully:', pushResult);
+      // Check for unsynced books
+      const unsyncedBooks = await db.books.where('synced').equals(0).toArray();
+      const unsyncedEntries = await db.entries.where('synced').equals(0).toArray();
+      
+      const totalUnsynced = unsyncedBooks.length + unsyncedEntries.length;
+      
+      if (totalUnsynced > 0) {
+        console.log(`🔄 [REFACTORED ORCHESTRATOR] Found ${totalUnsynced} unsynced items, resuming sync...`);
+        console.log(`📚 Books: ${unsyncedBooks.length}, 📝 Entries: ${unsyncedEntries.length}`);
         
-        // Trigger media processing if needed
-        this.triggerMediaProcessing();
+        // Trigger automatic sync to resume interrupted operations
+        const result = await this.pushService.pushPendingData();
         
-        return { success: true, itemsProcessed: pushResult.itemsProcessed };
+        if (result.success) {
+          console.log('✅ [REFACTORED ORCHESTRATOR] Auto-resume sync completed successfully');
+        } else {
+          console.error('❌ [REFACTORED ORCHESTRATOR] Auto-resume sync failed:', result.errors);
+        }
       } else {
-        console.error('❌ [REFACTORED ORCHESTRATOR] Sync failed:', pushResult.errors);
-        return { success: false, itemsProcessed: pushResult.itemsProcessed, error: pushResult.errors.join('; ') };
+        console.log('✅ [REFACTORED ORCHESTRATOR] No interrupted syncs found');
       }
       
     } catch (error) {
-      console.error('❌ [REFACTORED ORCHESTRATOR] Sync process failed:', error);
-      return { success: false, itemsProcessed: 0, error: String(error) };
+      console.error('❌ [REFACTORED ORCHESTRATOR] Auto-resume check failed:', error);
     }
   }
 
   /**
-   * 🎯 HYDRATE SINGLE ITEM
-   */
-  async hydrateSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<{ success: boolean; error?: string }> {
-    return await this.hydrationService.hydrateSingleItem(type, id);
-  }
-
-  /**
-   * 🔍 PERFORM INTEGRITY CHECK
-   */
-  async performIntegrityCheck(): Promise<{ success: boolean; issuesFound: number; issuesFixed: number; conflicts: number; error?: string }> {
-    return await this.integrityService.performIntegrityCheck();
-  }
-
-  /**
-   * 📡 BROADCAST UPDATE
-   */
-  private broadcast(): void {
-    try {
-      this.getChannel().postMessage({ type: 'FORCE_REFRESH' });
-    } catch (error) {
-      console.warn('⚠️ [ORCHESTRATOR] Broadcast failed, recreating channel...', error);
-      this.channel = null; // Force recreation on next call
-    }
-  }
-
-  /**
-   * 📢 NOTIFY UI
-   */
-  public notifyUI(): void {
-    window.dispatchEvent(new Event('vault-updated'));
-    this.broadcast();
-  }
-
-  /**
-   * 🎥 TRIGGER MEDIA PROCESSING
-   */
-  private triggerMediaProcessing(): void {
-    // This would integrate with your media processing service
-    if (typeof window !== 'undefined' && (window as any).mediaProcessor) {
-      (window as any).mediaProcessor.processPendingUploads();
-    }
-  }
-
-  /**
-   * 📊 GET ORCHESTRATOR STATUS
-   */
-  getStatus(): {
-    isInitialized: boolean;
-    userId: string;
-    pushService: any;
-    hydrationService: any;
-    integrityService: any;
-  } {
-    return {
-      isInitialized: this.isInitialized,
-      userId: this.userId,
-      pushService: this.pushService.getSyncStatus(),
-      hydrationService: this.hydrationService.getHydrationStatus(),
-      integrityService: this.integrityService.getIntegrityStatus()
-    };
-  }
-
-  /**
-   * 🔐 SET USER ID
+   * � SET USER ID
    */
   setUserId(userId: string): void {
     this.userId = String(userId);
@@ -260,37 +204,92 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
-   * 🧹 CLEANUP
+   * 🔄 GET SYNC STATUS
    */
-  cleanup(): void {
-    console.log('🧹 [REFACTORED ORCHESTRATOR] Cleaning up...');
-    
-    this.integrityService.cleanup();
-    this.hydrationService.cleanup();
-    
-    if (this.channel) {
-      this.channel.close();
-      this.channel = null; // Important: Clear reference
-    }
-    
-    this.isInitialized = false;
+  getSyncStatus(): { isInitialized: boolean; isInitializing: boolean; userId: string } {
+    return {
+      isInitialized: this.isInitialized,
+      isInitializing: this.isInitializing,
+      userId: this.userId
+    };
   }
 
   /**
-   * � HYDRATE - Main hydration entry point
+   * �🚀 TRIGGER SYNC
    */
-  async hydrate(userId: string): Promise<{ success: boolean; error?: string }> {
+  async triggerSync(): Promise<void> {
     try {
-      console.log('🚀 [REFACTORED ORCHESTRATOR] Starting hydration for user:', userId);
+      console.log('🚀 [REFACTORED ORCHESTRATOR] Manual sync triggered');
+      const result = await this.pushService.pushPendingData();
       
-      this.setUserId(userId);
-      await this.initializeForUser(userId);
+      if (result.success) {
+        console.log('✅ [REFACTORED ORCHESTRATOR] Manual sync completed successfully');
+      } else {
+        console.error('❌ [REFACTORED ORCHESTRATOR] Manual sync failed:', result.errors);
+      }
       
-      return { success: true };
+      // Notify UI of completion
+      this.notifyUI();
+      
     } catch (error) {
-      console.error('❌ [REFACTORED ORCHESTRATOR] Hydration failed:', error);
+      console.error('❌ [REFACTORED ORCHESTRATOR] Manual sync failed:', error);
+      telemetry.log({
+        type: 'ERROR',
+        level: 'ERROR',
+        message: 'Manual sync failed',
+        data: { error: String(error), userId: this.userId }
+      });
+    }
+  }
+
+  /**
+   * 📡 NOTIFY UI
+   */
+  private notifyUI(): void {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('vault-updated'));
+      this.getChannel().postMessage({ type: 'FORCE_REFRESH' });
+    }
+  }
+
+  /**
+   * 🎯 HYDRATE SINGLE ITEM - Image sniper system support
+   */
+  async hydrateSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log(`🎯 [ORCHESTRATOR] Hydrating single ${type} for ID: ${id}`);
+      
+      // Delegate to hydration service
+      const result = await this.hydrationService.hydrateSingleItem(type, id);
+      
+      if (result.success) {
+        console.log(`✅ [ORCHESTRATOR] Successfully hydrated ${type} ${id}`);
+        // Notify UI of the update
+        this.notifyUI();
+      } else {
+        console.error(`❌ [ORCHESTRATOR] Failed to hydrate ${type} ${id}:`, result.error);
+      }
+      
+      return result;
+      
+    } catch (error) {
+      console.error(`❌ [ORCHESTRATOR] Hydrate single item failed for ${type} ${id}:`, error);
       return { success: false, error: String(error) };
     }
+  }
+
+  /**
+   * 🧹 CLEANUP
+   */
+  private cleanup(): void {
+    this.isInitialized = false;
+    
+    if (this.channel) {
+      this.channel.close();
+      this.channel = null;
+    }
+    
+    console.log('🧹 [REFACTORED ORCHESTRATOR] Cleanup complete');
   }
 
   /**
@@ -315,7 +314,7 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
-   * �🔄 RESTART SERVICES
+   * 🔄 RESTART SERVICES
    */
   async restartServices(): Promise<{ success: boolean; error?: string }> {
     try {

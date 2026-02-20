@@ -3,6 +3,7 @@
 import { db } from '@/lib/offlineDB';
 import { identityManager } from '../core/IdentityManager';
 import { telemetry } from '../Telemetry';
+import { getTimestamp } from '@/lib/shared/utils';
 import toast from 'react-hot-toast';
 import type { LocalEntry, LocalBook } from '@/lib/offlineDB';
 
@@ -245,8 +246,8 @@ export class IntegrityService {
           await db.entries.update(entry.localId!, {
             isDeleted: 1,
             synced: 0,
-            updatedAt: Date.now(),
-            vKey: Date.now()
+            updatedAt: getTimestamp(),
+            vKey: getTimestamp()
           });
           
           issuesFixed++;
@@ -299,8 +300,8 @@ export class IntegrityService {
       const record = await table.get(Number(localId));
       if (record) {
         const clonedRecord = JSON.parse(JSON.stringify(record));
-        clonedRecord._shadowCacheTimestamp = Date.now();
-        clonedRecord._shadowCacheId = `${localId}_${Date.now()}`;
+        clonedRecord._shadowCacheTimestamp = getTimestamp();
+        clonedRecord._shadowCacheId = `${localId}_${getTimestamp()}`;
         this.shadowCache.set(localId, clonedRecord);
         
         setTimeout(() => this.clearShadowCacheEntry(localId), this.SHADOW_CACHE_TTL);
@@ -341,7 +342,7 @@ export class IntegrityService {
       const cachedRecord = this.shadowCache.get(localId);
       if (!cachedRecord) return false;
       
-      const cacheAge = Date.now() - cachedRecord._shadowCacheTimestamp;
+      const cacheAge = getTimestamp() - cachedRecord._shadowCacheTimestamp;
       if (cacheAge > this.SHADOW_CACHE_TTL) {
         this.clearShadowCacheEntry(localId);
         return false;
@@ -352,11 +353,11 @@ export class IntegrityService {
         ...originalRecord,
         isDeleted: 0,
         synced: 0,
-        updatedAt: Date.now(),
+        updatedAt: getTimestamp(),
         vKey: (originalRecord.vKey || 0) + 1,
         syncAttempts: 0,
         _restoredFromShadowCache: true,
-        _restoredAt: Date.now()
+        _restoredAt: getTimestamp()
       };
       
       const table = type === 'ENTRY' ? db.entries : db.books;

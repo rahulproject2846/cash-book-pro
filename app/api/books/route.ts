@@ -65,7 +65,6 @@ export async function GET(req: Request) {
 
     const books = await Book.find(query)
       .lean()
-      .select('-image') // 🔥 EMERGENCY: Exclude large image field to reduce payload
       .sort({ updatedAt: -1 })
       .limit(limit)
       .skip(page * limit);
@@ -172,7 +171,7 @@ export async function POST(req: Request) {
         userId, 
         type: String(type || 'general').toLowerCase(), 
         phone, 
-        image,
+        image: (image && image !== "") ? image : undefined, // 🛡️ SERVER GUARD: Reject empty strings
         vKey: vKey || Date.now(), // 🔥 UNIFIED VKEY STRATEGY: Use Date.now() for absolute versioning
         cid: cid || undefined // 🔥 CRITICAL: Include cid field if provided
     });
@@ -254,6 +253,7 @@ export async function PUT(req: Request) {
     }
 
     // ৪. আপডেট এক্সিকিউশন
+    const imageToSave = (image && image !== "") ? image : undefined; // SERVER GUARD: Reject empty strings
     const updatedBook = await Book.findOneAndUpdate(
       { _id, userId: userId },
       { 
@@ -262,7 +262,7 @@ export async function PUT(req: Request) {
             description, 
             type: String(type).toLowerCase(), 
             phone, 
-            image, 
+            image: imageToSave, 
             vKey: vKey, // লেটেস্ট ভার্সন কি আপডেট করা
             updatedAt: Date.now() 
         } 

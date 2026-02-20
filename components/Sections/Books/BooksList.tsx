@@ -30,12 +30,8 @@ const useViewportSniper = (bookId: string, imageSrc: string) => {
     useEffect(() => {
         if (!elementRef.current || hasTriggered) return;
 
-        console.log('🔍 [OBSERVER] Setting up IntersectionObserver for book:', bookId, 'Image:', imageSrc);
-
         const observer = new IntersectionObserver(
             ([entry]) => {
-                console.log('🔍 [OBSERVER] Entry changed:', bookId, 'isIntersecting:', entry.isIntersecting);
-                
                 if (entry.isIntersecting) {
                     setIsVisible(true);
                     
@@ -45,11 +41,9 @@ const useViewportSniper = (bookId: string, imageSrc: string) => {
                     const shouldFetch = isCid || isMissing;
                     
                     if (shouldFetch) {
-                        console.log(`🎯 [SNIPER TRIGGER] Book ${bookId} needs image (CID: ${isCid}, Missing: ${isMissing})`);
-                        useVaultStore.getState().lazyLoadImage(bookId);
+                        // 🎯 SNIPER FETCH IS NOW HANDLED BY useLocalPreview HOOK
+                        // Store is passive - no direct hydration calls
                         setHasTriggered(true);
-                    } else {
-                        console.log(`ℹ️ [SNIPER] Book ${bookId} has valid image, skipping:`, imageSrc);
                     }
                 }
             },

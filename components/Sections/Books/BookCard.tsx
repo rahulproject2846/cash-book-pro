@@ -1,15 +1,18 @@
 "use client";
 
 import React from 'react';
+import { motion } from 'framer-motion';
 import { 
     Layers, BookOpen, Calendar, Edit3, 
     MoreHorizontal, Settings, Plus, Trash2,
-    X, CheckCircle2, AlertTriangle, Clock
+    X, CheckCircle2, AlertTriangle, Clock, ImageIcon, Loader2, CloudOff
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useModal } from '@/context/ModalContext';
+import { useLocalPreview } from '@/hooks/useLocalPreview';
+import { useVaultStore } from '@/lib/vault/store';
 import { db } from '@/lib/offlineDB';
 
 interface BookCardProps {
@@ -25,7 +28,18 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
     const { t } = useTranslation();
     const { openModal } = useModal();
     
+    // 🎯 IMAGE STATE MANAGEMENT - URL FIRST PRIORITY
+    const isHttpImage = book.image?.startsWith('http');
+    const displayImage = isHttpImage ? book.image : (book.image || book.mediaCid);
+    const { previewUrl, isLoading, error: previewError } = useLocalPreview(displayImage);
+    
+    // 🎯 IMAGE STATE LOGIC
+    const isCidImage = displayImage && displayImage.startsWith('cid_');
+    const isLoaded = (isHttpImage || (isCidImage && previewUrl)) && !isLoading;
+    const hasError = previewError && isCidImage;
+    
     // 🎯 STABLE PROPS: Memoize based on stable identifiers
+    const bookId = book._id || book.localId;
     const stableProps = React.useMemo(() => ({
         bookId: book._id || book.localId,
         bookVKey: book.vKey,
@@ -72,7 +86,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         onOpen(book);
     }, [onOpen, book]);
 
-    // � CONFLICT RESOLUTION: Handle conflict modal opening
+    // 🛡️ CONFLICT RESOLUTION: Handle conflict modal opening
     const handleConflictResolution = React.useCallback(async () => {
         if (!book.conflicted) return;
         
@@ -111,7 +125,7 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         });
     }, [book, openModal]);
 
-    // �📊 ENTRY COUNT: Memoized calculation
+    // 📊 ENTRY COUNT: Memoized calculation
     const entryCountText = React.useMemo(() => {
         const count = stableProps.bookEntryCount || 0;
         return `${count} ${count === 1 ? 'entry' : 'entries'}`;
@@ -164,98 +178,95 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
     if (!book || Number(book.isDeleted) === 1) return null;
 
     return (
-        <div 
-            className={cn(
-                "bg-[#1A1A1B] p-6 rounded-[24px] border border-[#2D2D2D] shadow-sm flex flex-col gap-5",
-                "hover:shadow-md hover:shadow-lg transition-all duration-200",
-                bookColorClass.backgroundColor,
-                bookColorClass.borderColor,
-                stableProps.bookConflicted ? "cursor-pointer ring-2 ring-red-500/20" : ""
-            )}
-            style={bookColorClass}
-            onClick={stableProps.bookConflicted ? handleConflictResolution : undefined}
+        <motion.div
+            layout
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onClick={() => onOpen(book)}
+            className="group relative bg-[#1E1E1E] rounded-xl border border-white/5 hover:border-white/10 p-4 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col gap-4 overflow-hidden"
         >
-            {/* Header */}
-            <div className="flex justify-between items-start mb-4">
-                <div className="space-y-2">
-                    {/* Book Name and Status */}
-                    <div className="flex justify-between items-start">
-                        <h3 className="text-lg font-bold text-slate-900 truncate">
+            {/* 🎨 HEADER SECTION */}
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div 
+                            className="w-2 h-2 rounded-full shrink-0" 
+                            style={{ backgroundColor: book.color || '#3B82F6' }} 
+                        />
+                        <span className="text-sm font-medium text-slate-100 truncate">
                             {stableProps.bookName || t('unnamed_book')}
-                        </h3>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                            <button 
-                                onClick={stableProps.bookConflicted ? handleConflictResolution : undefined}
-                                className={cn(
-                                    "flex items-center gap-2 transition-colors",
-                                    stableProps.bookConflicted ? "cursor-pointer hover:text-red-600" : "cursor-default"
-                                )}
-                            >
-                                {statusIcon}
-                            </button>
-                            <span className="ml-2">
-                                {stableProps.bookIsDeleted ? t('book_deleted') : 
-                                 stableProps.bookConflicted ? t('book_conflicted') : 
-                                 stableProps.bookSynced ? t('book_synced') : t('book_pending')}
-                            </span>
-                        </div>
+                        </span>
                     </div>
                     
-                    {/* Entry Count */}
-                    <div className="text-sm text-slate-500">
-                        {entryCountText}
-                    </div>
+                    {/* 📝 DESCRIPTION BLOCK */}
+                    {stableProps.bookDescription && (
+                        <div className="mt-2">
+                            <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                                {stableProps.bookDescription}
+                            </p>
+                        </div>
+                    )}
                 </div>
-                
-                {/* Book Color */}
-                <div className="flex items-center gap-2">
-                    <div 
-                        className="w-8 h-8 rounded-lg border-2 border-white shadow-inner"
-                        style={bookColorClass}
+
+                {/* ⚙️ ACTIONS */}
+                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onEdit(book); }}
+                        className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
                     >
-                        <BookIcon />
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                        {stableProps.bookName || t('unnamed_book')}
-                    </span>
+                        <Edit3 size={14} />
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onDelete(book); }}
+                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                    >
+                        <Trash2 size={14} />
+                    </button>
                 </div>
             </div>
 
-            {/* Description */}
-            {stableProps.bookDescription && (
-                <div className="mt-4 p-4 bg-[#2D2D2D] rounded-lg border border-[#2D2D2D]">
-                    <p className="text-sm text-slate-600 line-clamp-2">
-                        {stableProps.bookDescription}
-                    </p>
+            {/* 🖼️ IMAGE CONTAINER (URL-First Logic) */}
+            {displayImage && (
+                <div className="relative w-full h-32 rounded-lg overflow-hidden bg-[#2D2D2D] border border-white/5 flex items-center justify-center">
+                    {isHttpImage ? (
+                        // 🚀 DIRECT URL RENDERING - No loading state, immediate display
+                        <img 
+                            src={displayImage} 
+                            alt="Book cover" 
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                    ) : (
+                        // 🔄 CID PROCESSING - Only for non-HTTP sources
+                        isLoading ? (
+                            <div className="flex flex-col items-center gap-2">
+                                <Loader2 size={16} className="text-blue-500 animate-spin" />
+                                <span className="text-[10px] text-slate-500">Loading Image...</span>
+                            </div>
+                        ) : isLoaded && previewUrl ? (
+                            <img src={previewUrl} alt="Book cover" className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="flex flex-col items-center gap-2">
+                                <ImageIcon size={16} className="text-slate-600" />
+                                <span className="text-[10px] text-slate-600">No Image</span>
+                            </div>
+                        )
+                    )}
                 </div>
             )}
 
-            {/* Actions */}
-            <div className="flex justify-between items-center mt-6 pt-4 border-t border-[#2D2D2D]">
-                <button
-                    onClick={handleOpen}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium"
-                >
-                    <Calendar className="w-4 h-4" />
-                    <span>{t('btn_open')}</span>
-                </button>
-                
-                <button
-                    onClick={handleEdit}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200 font-medium"
-                >
-                    <Edit3 className="w-4 h-4" />
-                    <span>{t('btn_edit')}</span>
-                </button>
-                
-                <button
-                    onClick={handleDelete}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 font-medium"
-                >
-                    <Trash2 className="w-4 h-4" />
-                    <span>{t('btn_delete')}</span>
-                </button>
+            {/* 📊 FOOTER STATS */}
+            <div className="flex items-center justify-between mt-auto pt-4 border-t border-white/5">
+                <span className="text-[10px] text-slate-500 font-mono">
+                    CID: {stableProps.bookId?.slice(0, 8)}...
+                </span>
+                {book.synced === 1 ? (
+                    <CheckCircle2 size={12} className="text-emerald-500/50" />
+                ) : (
+                    <CloudOff size={12} className="text-amber-500/50" />
+                )}
             </div>
-        </div>
+        </motion.div>
     );
 });

@@ -168,10 +168,18 @@ export const generateEntryChecksum = async (entry: {
 };
 
 /**
- * জেনারেট ইউনিক ক্লায়েন্ট আইডি (cid)
+ * 🔐 GENERATE CID - Secure Client ID (Native Implementation)
+ * Replaces unsafe Math.random() with cryptographically secure UUID
  */
 export const generateCID = () => {
-    return `cid_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const uuid = typeof crypto !== 'undefined' && crypto.randomUUID 
+    ? crypto.randomUUID() 
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+  return `cid_${uuid}`;
 };
 
 // --- ৩. ডাটাবেজ কনফিগারেশন ---

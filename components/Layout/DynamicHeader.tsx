@@ -132,7 +132,7 @@ export const DynamicHeader = ({
                 {/* Contextual Menus */}
                 {isBookView ? (
                     // Book Context Menu
-                    <div className="relative">
+                    <div className="relative inline-flex items-center justify-center">
                         <Tooltip text={t('tt_more_options')} position="bottom">
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setShowSuperMenu(!showSuperMenu); }} 

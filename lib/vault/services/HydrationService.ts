@@ -1,8 +1,12 @@
 "use client";
 
 import { db } from '@/lib/offlineDB';
+import { LocalBook, LocalEntry } from '@/lib/offlineDB';
 import { identityManager } from '../core/IdentityManager';
 import { normalizeRecord } from '../core/VaultUtils';
+import { generateCID } from '@/lib/offlineDB';
+import { useVaultStore } from '../store';
+import { validateBook, validateEntry } from '../core/schemas';
 
 /**
  * 💧 HYDRATION SERVICE - Handles data fetching and initial load
@@ -22,6 +26,58 @@ export class HydrationService {
   // Constants
   private readonly BOOKS_BATCH_SIZE = 10;
   private readonly ENTRIES_BATCH_SIZE = 20;
+
+  /**
+   * 🔍 DETECT BASE64 STRING
+   * Checks if a string is likely a Base64 image (not CID or URL)
+   */
+  private isBase64Image(image: string | undefined | null): boolean {
+    if (!image || typeof image !== 'string') return false;
+    
+    // Skip CID references and URLs
+    if (image.startsWith('cid_') || image.startsWith('http')) return false;
+    
+    // Check for Base64 patterns (data:image/ or long strings)
+    return image.startsWith('data:image/') || image.length > 1000;
+  }
+
+  /**
+   * 🧠 MIGRATE BASE64 TO MEDIASTORE
+   * Converts Base64 image to MediaStore CID reference
+   */
+  private async migrateBase64ToMediaStore(image: string, bookId: string): Promise<string> {
+    try {
+      console.log(`🧠 [HYDRATION] Migrating Base64 to MediaStore for book ${bookId}`);
+      
+      // 1. Generate CID
+      const mediaCid = generateCID();
+      
+      // 2. Convert Base64 to Blob
+      const response = await fetch(image);
+      const blob = await response.blob();
+      
+      // 3. Save to MediaStore
+      await db.mediaStore.add({
+        cid: mediaCid,
+        parentType: 'book',
+        parentId: bookId,
+        localStatus: 'pending_upload',
+        blobData: blob,
+        mimeType: blob.type,
+        originalSize: blob.size,
+        compressedSize: blob.size,
+        createdAt: Date.now(),
+        userId: this.userId
+      });
+      
+      console.log(`✅ [HYDRATION] Migrated Base64 to MediaStore: ${bookId} -> ${mediaCid}`);
+      return mediaCid;
+      
+    } catch (error) {
+      console.error(`❌ [HYDRATION] Failed to migrate Base64 for book ${bookId}:`, error);
+      throw error;
+    }
+  }
 
   constructor() {
     this.userId = identityManager.getUserId() || '';
@@ -60,6 +116,13 @@ export class HydrationService {
       if (booksResult.status === 'fulfilled') {
         booksCount = booksResult.value.count;
         console.log('✅ [HYDRATION SERVICE] Books hydrated:', booksCount);
+        
+        // 🆕 SILENT WATCHMAN: Trigger ghost reconciliation after successful hydration
+        if (booksResult.status === 'fulfilled') {
+          const serverBooks = await this.getServerBooks(userId);
+          const serverEntries = await this.getServerEntries(userId);
+          await this.reconcileGhosts(serverBooks, serverEntries, userId);
+        }
       } else {
         errors.push(`Books hydration failed: ${booksResult.reason}`);
         console.error('❌ [HYDRATION SERVICE] Books hydration failed:', booksResult.reason);
@@ -151,19 +214,39 @@ export class HydrationService {
             // 🔍 CHECK-BEFORE-PUT: Check if local record exists to preserve data
             const existing = await db.books.where('cid').equals(book.cid).first();
             
-            // 2. Determine image strategy
+            // 2. Determine image strategy with MediaStore migration
             // Preserve local image if server data is missing it (due to .select('-image'))
             const isServerImageEmpty = book.image === null || book.image === undefined || book.image === "";
-            const imageToPreserve = (isServerImageEmpty && existing?.image) ? existing.image : book.image;
+            let imageToPreserve = (isServerImageEmpty && existing?.image) ? existing.image : book.image;
+            
+            // 🛡️ HYDRATION SHIELD: Never overwrite valid local data with empty server data
+            if (isServerImageEmpty && existing?.image && existing.image !== "") {
+              console.log(`🛡️ [HYDRATION SHIELD] Preserving local image for book ${book.cid}: ${existing.image}`);
+              imageToPreserve = existing.image;
+            }
+            
+            // 🧠 NEW LOGIC: Migrate Base64 to MediaStore
+            if (imageToPreserve && this.isBase64Image(imageToPreserve)) {
+              console.log(`🧠 [HYDRATION] Detected Base64 image for book ${book.cid}, migrating to MediaStore`);
+              const bookId = existing?.localId || book.localId || 'temp';
+              imageToPreserve = await this.migrateBase64ToMediaStore(imageToPreserve, String(bookId));
+            }
 
-            // 3. Normalize with preserved image
+            // 3. Normalize with processed image (now CID or null)
             const normalized = normalizeRecord({
               ...book,
-              image: imageToPreserve, // ✅ PRESERVE LOCAL IMAGE
+              image: imageToPreserve, // ✅ NOW STORES CID, NOT BASE64
               userId: String(userId),
               synced: 1,
               isDeleted: book.isDeleted || 0
             }, userId);
+            
+            // 🛡️ SCHEMA GUARD: Validate normalized data before storing
+            const validationResult = validateBook(normalized);
+            if (!validationResult.success) {
+              console.error(`❌ [HYDRATION] Skipping corrupted book data after normalization: ${validationResult.error}`);
+              continue; // Skip this record but continue with batch
+            }
             
             // Preserve localId if it exists to ensure bulkPut updates the correct record
             if (existing?.localId) {
@@ -223,7 +306,7 @@ export class HydrationService {
 
         for (const entry of batch) {
           try {
-            // 🔍 CHECK-BEFORE-PUT: Check if local record exists to preserve data
+            //  CHECK-BEFORE-PUT: Check if local record exists to preserve data
             const existing = await db.entries.where('cid').equals(entry.cid).first();
             
             // Normalize and store
@@ -234,7 +317,14 @@ export class HydrationService {
               isDeleted: entry.isDeleted || 0
             }, userId);
             
-            // Preserve localId if it exists to ensure bulkPut updates the correct record
+            // 🛡️ SCHEMA GUARD: Validate normalized data before storing
+            const validationResult = validateEntry(normalized);
+            if (!validationResult.success) {
+              console.error(`❌ [HYDRATION] Skipping corrupted entry data after normalization: ${validationResult.error}`);
+              continue; // Skip this record but continue with batch
+            }
+            
+            // Preserve localId if it exists to ensure bulkPut updates correct record
             if (existing?.localId) {
               normalized.localId = existing.localId;
             }
@@ -273,7 +363,18 @@ export class HydrationService {
   private async fetchSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<void> {
     let record;
     if (type === 'BOOK') {
-      const response = await fetch(`/api/books/${id}`);
+      // 🆕 SMART IDENTITY MAPPING: Check local database for server _id
+      const localBook = await db.books.where('cid').equals(id).first();
+      let resolvedId = id;
+      
+      if (localBook?._id && localBook._id !== id) {
+        console.log(`🧠 [SMART MAP] Mapping CID ${id} → Server _id ${localBook._id}`);
+        resolvedId = localBook._id; // Use server _id instead of CID
+      }
+      
+      // 🆕 API PREFIX FIX: Strip cid_ prefix for server compatibility
+      const apiId = resolvedId.startsWith('cid_') ? resolvedId.replace('cid_', '') : resolvedId;
+      const response = await fetch(`/api/books/${apiId}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch book: ${response.statusText}`);
       }
@@ -309,6 +410,13 @@ export class HydrationService {
       isDeleted: record.isDeleted || 0
     }, this.userId);
 
+    // 🛡️ SCHEMA GUARD: Validate normalized data before storing
+    const validationResult = type === 'BOOK' ? validateBook(normalized) : validateEntry(normalized);
+    if (!validationResult.success) {
+      console.error(` [HYDRATION] Skipping corrupted ${type.toLowerCase()} data after normalization: ${validationResult.error}`);
+      return; // Skip this record entirely
+    }
+
     if (type === 'BOOK') {
       const existing = await db.books.where('cid').equals(record.cid).first();
       if (existing) {
@@ -320,6 +428,11 @@ export class HydrationService {
       } else {
         await db.books.put(normalized);
         console.log('✅ [SNIPER] New book saved to Dexie:', record.cid);
+      }
+      
+      // 🆕 CRITICAL: Notify UI that blob is available
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('vault-updated'));
       }
     } else {
       await db.entries.put(normalized);
@@ -345,6 +458,30 @@ export class HydrationService {
   }
 
   /**
+   * � GET SERVER BOOKS
+   */
+  private async getServerBooks(userId: string): Promise<any[]> {
+    const response = await fetch(`/api/books?userId=${encodeURIComponent(userId)}&limit=1000`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch server books: ${response.statusText}`);
+    }
+    const result = await response.json();
+    return result.data || result.books || [];
+  }
+
+  /**
+   * 📝 GET SERVER ENTRIES
+   */
+  private async getServerEntries(userId: string): Promise<any[]> {
+    const response = await fetch(`/api/entries?userId=${encodeURIComponent(userId)}&limit=5000`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch server entries: ${response.statusText}`);
+    }
+    const result = await response.json();
+    return result.data || result.entries || [];
+  }
+
+  /**
    * 🧹 CLEANUP
    */
   cleanup(): void {
@@ -358,5 +495,88 @@ export class HydrationService {
   private getUserId(): string {
     const id = this.userId || identityManager.getUserId();
     return String(id || '');
+  }
+
+  /**
+   * 👻 RECONCILE GHOSTS - Clean up orphaned records
+   */
+  private async reconcileGhosts(serverBooks: any[], serverEntries: any[], userId: string): Promise<void> {
+    try {
+      console.log('👻 [HYDRATION] Starting ghost reconciliation...');
+      
+      // Get all local books and entries
+      const localBooks = await db.books.where('userId').equals(userId).toArray();
+      const localEntries = await db.entries.where('userId').equals(userId).toArray();
+      
+      // Create sets of server CIDs
+      const serverBookCids = new Set(serverBooks.map((book: any) => book.cid));
+      const serverEntryCids = new Set(serverEntries.map((entry: any) => entry.cid));
+      
+      // Find ghost books (exist locally but not on server)
+      const ghostBooks = localBooks.filter((book: any) => 
+        !serverBookCids.has(book.cid) && book.synced === 1 && book.isDeleted === 0
+      );
+      
+      // Find ghost entries (exist locally but not on server)
+      const ghostEntries = localEntries.filter((entry: any) => 
+        !serverEntryCids.has(entry.cid) && entry.synced === 1 && entry.isDeleted === 0
+      );
+      
+      // Mark ghosts as unsynced so they get re-synced
+      if (ghostBooks.length > 0) {
+        const bookUpdates = ghostBooks.map((book: LocalBook) => ({
+          key: book.localId!,
+          changes: { synced: 0, updatedAt: Date.now() }
+        }));
+        await db.books.bulkUpdate(bookUpdates);
+        console.log(`👻 [HYDRATION] Marked ${ghostBooks.length} ghost books for re-sync`);
+        
+        // 🛡️ MERCY REGISTRY: Check for unsynced children and register conflicts
+        for (const ghostBook of ghostBooks) {
+          const unsyncedChildren = await db.entries
+            .where('bookId').equals(ghostBook.cid)
+            .and((entry: any) => entry.synced === 0 && entry.isDeleted === 0)
+            .toArray();
+          
+          if (unsyncedChildren.length > 0) {
+            console.log(`🛡️ [HYDRATION] Registering mercy conflict for book ${ghostBook.cid} with ${unsyncedChildren.length} unsynced children`);
+            
+            // Import vault store to register conflict
+            const { useVaultStore } = await import('../store');
+            useVaultStore.getState().registerConflict({
+              id: ghostBook.cid,
+              type: 'book',
+              cid: ghostBook.cid,
+              localId: ghostBook.localId,
+              record: {
+                ...ghostBook,
+                conflictReason: 'parent_deleted',
+                conflicted: 1
+              },
+              conflictType: 'parent_deleted'
+            });
+            
+            // 📡 TRIGGER UI REFRESH: Ensure modal pops up immediately
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('vault-updated'));
+              console.log(`📡 [HYDRATION] UI refresh triggered for mercy conflict: ${ghostBook.cid}`);
+            }
+          }
+        }
+      }
+      
+      if (ghostEntries.length > 0) {
+        const entryUpdates = ghostEntries.map((entry: LocalEntry) => ({
+          key: entry.localId!,
+          changes: { synced: 0, updatedAt: Date.now() }
+        }));
+        await db.entries.bulkUpdate(entryUpdates);
+        console.log(`👻 [HYDRATION] Marked ${ghostEntries.length} ghost entries for re-sync`);
+      }
+      
+      console.log('👻 [HYDRATION] Ghost reconciliation complete');
+    } catch (error) {
+      console.error('❌ [HYDRATION] Ghost reconciliation failed:', error);
+    }
   }
 }

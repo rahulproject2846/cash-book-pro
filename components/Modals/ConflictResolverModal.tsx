@@ -4,8 +4,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Cloud, Save, Book, FileText } from 'lucide-react';
 import { cn, toBn } from '@/lib/utils/helpers';
-import { useConflictStore } from '@/lib/vault/ConflictStore';
+import { useVaultStore } from '@/lib/vault/store';
 import { mapConflictType } from '@/lib/vault/ConflictMapper';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ConflictResolverModalProps {
   isOpen: boolean;
@@ -33,7 +34,8 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
   onResolve
 }) => {
   const [isResolving, setIsResolving] = useState(false);
-  const { addPendingResolution } = useConflictStore();
+  const { registerConflict, resolveConflict } = useVaultStore();
+  const { t } = useTranslation();
 
   if (!isOpen || !record) return null;
 
@@ -63,8 +65,21 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
   const handleResolution = async (resolution: 'local' | 'server') => {
     setIsResolving(true);
     try {
+      // 🛡️ SPECIAL HANDLING: For parent_deleted conflicts, 'local' means full resurrection
+      if (conflictType === 'parent_deleted' && resolution === 'local') {
+        console.log(`🛡️ [CONFLICT MODAL] Triggering full resurrection for book: ${record.cid}`);
+        
+        // Direct call to resurrectBookChain for atomic resurrection
+        const { resurrectBookChain } = useVaultStore.getState();
+        await resurrectBookChain(record.cid);
+        
+        onClose(); // Close modal immediately
+        return; // Skip normal conflict resolution flow
+      }
+      
       // Create conflict item using mapper
       const conflictItem = {
+        id: record.cid, // Use cid as id for syncSlice compatibility
         type: type,
         cid: record.cid,
         localId: record.localId,
@@ -73,8 +88,9 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
         icon: type === 'book' ? Book : FileText
       };
       
-      // Add to store's pending resolutions
-      addPendingResolution(conflictItem, resolution);
+      // Register conflict in store and call onResolve callback
+      registerConflict(conflictItem);
+      onResolve(resolution);
       onClose(); // Close modal immediately
     } catch (error) {
       console.error('Failed to queue resolution:', error);
@@ -244,61 +260,79 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                   </div>
 
                   <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-2xl">
-                    {/* Common Fields */}
-                    <div className="space-y-2">
-                      <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Name</label>
-                        <p className="text-white font-medium">{serverDisplay.name}</p>
-                      </div>
-
-                      {type === 'book' && (
-                        <div>
-                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Phone</label>
-                          <p className="text-white font-medium">{serverDisplay.phone || 'Not set'}</p>
+                    {/* PARENT-DELETED SPECIFIC WARNING */}
+                    {conflictType === 'parent_deleted' ? (
+                      <div className="flex flex-col items-center justify-center space-y-4 py-8 border-2 border-dashed border-red-500/30 rounded-2xl">
+                        <AlertTriangle className="w-12 h-12 text-red-400 mb-4" />
+                        <div className="text-center space-y-3">
+                          <p className="text-white font-medium">
+                            {t('conflict.parent_deleted.line1')}
+                          </p>
+                          <p className="text-white/80 text-sm">
+                            {t('conflict.parent_deleted.line2')}
+                          </p>
+                          <p className="text-white/80 text-sm">
+                            {t('conflict.parent_deleted.line3')}
+                          </p>
                         </div>
-                      )}
-
-                      {type === 'entry' && (
-                        <>
-                          <div>
-                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Type</label>
-                            <p className="text-white font-medium capitalize">{serverDisplay.type}</p>
-                          </div>
-                          <div>
-                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Amount</label>
-                            <p className="text-white font-medium">
-                              {serverDisplay.amount < 0 ? '-' : '+'}
-                              {formatAmount(serverDisplay.amount)}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Status</label>
-                            <p className="text-white font-medium capitalize">
-                              {serverDisplay.status || 'unknown'}
-                            </p>
-                          </div>
-                        </>
-                      )}
-
-                      <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Description</label>
-                        <p className="text-white/80 text-sm">
-                          {serverDisplay.description || 'No description'}
-                        </p>
                       </div>
+                    ) : (
+                      /* Common Fields */
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Name</label>
+                          <p className="text-white font-medium">{serverDisplay.name}</p>
+                        </div>
 
-                      <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Last Modified</label>
-                        <p className="text-white/60 text-sm">
-                          {formatDate(serverDisplay.updatedAt)}
-                        </p>
-                      </div>
+                        {type === 'book' && (
+                          <div>
+                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Phone</label>
+                            <p className="text-white font-medium">{serverDisplay.phone || 'Not set'}</p>
+                          </div>
+                        )}
 
-                      <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Version</label>
-                        <p className="text-white/60 text-sm font-mono">v{serverDisplay.vKey}</p>
+                        {type === 'entry' && (
+                          <>
+                            <div>
+                              <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Type</label>
+                              <p className="text-white font-medium capitalize">{serverDisplay.type}</p>
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Amount</label>
+                              <p className="text-white font-medium">
+                                {serverDisplay.amount < 0 ? '-' : '+'}
+                                {formatAmount(serverDisplay.amount)}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Status</label>
+                              <p className="text-white font-medium capitalize">
+                                {serverDisplay.status || 'unknown'}
+                              </p>
+                            </div>
+                          </>
+                        )}
+
+                        <div>
+                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Description</label>
+                          <p className="text-white/80 text-sm">
+                            {serverDisplay.description || 'No description'}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Last Modified</label>
+                          <p className="text-white/60 text-sm">
+                            {formatDate(serverDisplay.updatedAt)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Version</label>
+                          <p className="text-white/60 text-sm font-mono">v{serverDisplay.vKey}</p>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>

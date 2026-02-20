@@ -1,6 +1,7 @@
 "use client";
 
 import { db } from '@/lib/offlineDB';
+import { getTimestamp } from '@/lib/shared/utils';
 
 /**
  * 🏛️ VAULT PRO: TELEMETRY FRAMEWORK (V1.0)
@@ -30,7 +31,7 @@ export class VaultTelemetry {
   private maxLocalEvents = 1000; // Keep last 1000 events locally
   
   private constructor() {
-    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    this.sessionId = `session_${getTimestamp()}_${Math.random().toString(36).substring(2, 9)}`;
   }
   
   static getInstance(): VaultTelemetry {
@@ -47,7 +48,7 @@ export class VaultTelemetry {
   async log(event: Omit<TelemetryEvent, 'id' | 'timestamp' | 'sessionId'>): Promise<void> {
     const telemetryEvent: TelemetryEvent = {
       ...event,
-      timestamp: Date.now(),
+      timestamp: getTimestamp(),
       sessionId: this.sessionId
     };
     

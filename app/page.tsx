@@ -29,7 +29,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { usePusher } from '@/context/PusherContext';
 import { ToastCountdown } from '@/components/Modals/TerminationModal';
 import { EntryCard } from '@/components/UI/EntryCard';
-import { BookCard } from '@/components/UI/BookCard';
+import { BookCard } from '@/components/Sections/Books/BookCard';
 
 type NavSection = 'books' | 'reports' | 'timeline' | 'settings' | 'profile';
 
@@ -66,7 +66,7 @@ export default function CashBookApp() {
           if (!isHydrated) {
             orchestrator.setUserId(user._id);
             setIsHydrated(true);
-            orchestrator.hydrate(user._id).catch(err => 
+            orchestrator.initializeForUser(user._id).catch((err: any) => 
               console.warn('Background hydration failed:', err)
             );
           }
@@ -149,7 +149,7 @@ export default function CashBookApp() {
         }
         closeModal();
         toast.success(t('success_entry_secured'));
-        orchestrator.triggerSync();
+        useVaultStore.getState().triggerManualSync();
       }
     } catch (err) { toast.error(t('error_entry_protocol_fault')); }
   };
@@ -341,7 +341,7 @@ export default function CashBookApp() {
       localStorage.setItem('cashbookUser', JSON.stringify(user));
       setCurrentUser(user); 
       setIsLoggedIn(true); 
-      orchestrator.hydrate(user._id).catch(err => 
+      orchestrator.initializeForUser(user._id).catch((err: any) => 
         console.warn('Login hydration failed:', err)
       );
     }} />

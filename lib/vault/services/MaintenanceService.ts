@@ -1,0 +1,453 @@
+"use client";
+
+import { db } from '@/lib/offlineDB';
+import { identityManager } from '../core/IdentityManager';
+import { validateCompleteness } from '../core/VaultUtils';
+import { getTimestamp } from '@/lib/shared/utils';
+import { telemetry } from '../Telemetry';
+
+/**
+ * 🧹 MAINTENANCE SERVICE - Housekeeper for Dexie and MongoDB cleanup
+ * 
+ * Responsibility: Keep the database clean and optimized
+ * - Audit log cleanup (60+ days)
+ * - Metadata cleanup (syncAttempts, lastAttempt)
+ * - Completeness validation and flagging
+ * - Server signal for remote cleanup
+ */
+
+interface CleanupResult {
+  success: boolean;
+  auditLogsCleaned: number;
+  metadataCleaned: number;
+  incompleteRecordsFlagged: number;
+  serverCleanupTriggered: boolean;
+  errors: string[];
+  duration: number;
+}
+
+interface CompletenessReport {
+  totalRecords: number;
+  completeRecords: number;
+  incompleteRecords: number;
+  flaggedForDeletion: number;
+  details: Array<{
+    cid: string;
+    type: 'book' | 'entry';
+    completenessScore: number;
+    missingFields: string[];
+    age: number;
+    flagged: boolean;
+  }>;
+}
+
+export class MaintenanceService {
+  private userId: string = '';
+  private readonly AUDIT_LOG_RETENTION_DAYS = 60;
+  private readonly INCOMPLETE_RECORD_RETENTION_DAYS = 7;
+  private readonly METADATA_CLEANUP_BATCH_SIZE = 100;
+
+  constructor() {
+    this.userId = identityManager.getUserId() || '';
+  }
+
+  /**
+   * 🧹 PERFORM GLOBAL CLEANUP - Main maintenance entry point
+   */
+  async performGlobalCleanup(userId: string): Promise<CleanupResult> {
+    const startTime = Date.now();
+    const result: CleanupResult = {
+      success: false,
+      auditLogsCleaned: 0,
+      metadataCleaned: 0,
+      incompleteRecordsFlagged: 0,
+      serverCleanupTriggered: false,
+      errors: [],
+      duration: 0
+    };
+
+    try {
+      console.log('🧹 [MAINTENANCE SERVICE] Starting global cleanup for user:', userId);
+      this.userId = userId;
+
+      // STEP 1: Clean old audit logs
+      console.log('🧹 [MAINTENANCE SERVICE] Step 1: Cleaning audit logs...');
+      result.auditLogsCleaned = await this.cleanupAuditLogs(userId);
+
+      // 🧹 STEP 2: Clean metadata for synced records
+      console.log('🧹 [MAINTENANCE SERVICE] Step 2: Cleaning metadata...');
+      result.metadataCleaned = await this.cleanupMetadata(userId);
+
+      // 🛡️ STEP 3: Validate completeness and flag incomplete records
+      console.log('🛡️ [MAINTENANCE SERVICE] Step 3: Validating record completeness...');
+      const completenessReport = await this.validateRecordCompleteness(userId);
+      result.incompleteRecordsFlagged = completenessReport.flaggedForDeletion;
+
+      // 📡 STEP 4: Signal server for remote cleanup
+      console.log('📡 [MAINTENANCE SERVICE] Step 4: Signaling server cleanup...');
+      result.serverCleanupTriggered = await this.signalServerCleanup(userId);
+
+      result.success = true;
+      result.duration = Date.now() - startTime;
+
+      console.log('✅ [MAINTENANCE SERVICE] Global cleanup complete:', result);
+
+      // 📊 LOG CLEANUP STATISTICS
+      telemetry.log({
+        type: 'OPERATION',
+        level: 'INFO',
+        message: 'Global cleanup completed',
+        data: {
+          userId,
+          ...result,
+          completenessReport
+        }
+      });
+
+      return result;
+
+    } catch (error: any) {
+      console.error('[MAINTENANCE SERVICE] Global cleanup failed:', error);
+      result.errors.push(String(error));
+      result.duration = Date.now() - startTime;
+
+      telemetry.log({
+        type: 'OPERATION',
+        level: 'ERROR',
+        message: 'Global cleanup failed',
+        data: {
+          userId,
+          error: String(error),
+          result
+        }
+      });
+
+      return result;
+    }
+  }
+
+  /**
+   * CLEANUP AUDIT LOGS - Remove audit logs older than 60 days
+   */
+  private async cleanupAuditLogs(userId: string): Promise<number> {
+    try {
+      const sixtyDaysAgo = Date.now() - (this.AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+      
+      // Check if auditLogs table exists
+      if (!db.auditLogs) {
+        console.log('[MAINTENANCE SERVICE] auditLogs table not found, skipping...');
+        return 0;
+      }
+
+      // Count logs to be deleted
+      const logsToDelete = await db.auditLogs
+        .where('userId')
+        .equals(userId)
+        .and((log: any) => log.timestamp < sixtyDaysAgo)
+        .count();
+
+      if (logsToDelete === 0) {
+        console.log('[MAINTENANCE SERVICE] No old audit logs to delete');
+        return 0;
+      }
+
+      // Delete old logs in batches
+      let deletedCount = 0;
+      const oldLogs = await db.auditLogs
+        .where('userId')
+        .equals(userId)
+        .and((log: any) => log.timestamp < sixtyDaysAgo)
+        .toArray();
+
+      for (let i = 0; i < oldLogs.length; i += this.METADATA_CLEANUP_BATCH_SIZE) {
+        const batch = oldLogs.slice(i, i + this.METADATA_CLEANUP_BATCH_SIZE);
+        await db.auditLogs.bulkDelete(batch.map((log: any) => log.localId!));
+        deletedCount += batch.length;
+        
+        console.log(`[MAINTENANCE SERVICE] Deleted audit log batch ${Math.floor(i / this.METADATA_CLEANUP_BATCH_SIZE) + 1}, total: ${deletedCount}`);
+      }
+
+      console.log(`[MAINTENANCE SERVICE] Cleaned ${deletedCount} old audit logs`);
+      console.log(`🧹 [MAINTENANCE SERVICE] Cleaned ${deletedCount} old audit logs`);
+      return deletedCount;
+
+    } catch (error) {
+      console.error('[MAINTENANCE SERVICE] Audit log cleanup failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * CLEANUP METADATA - Clean sync metadata for successfully synced records
+   */
+  private async cleanupMetadata(userId: string): Promise<number> {
+    try {
+      let cleanedCount = 0;
+
+      // Clean books metadata
+      const syncedBooks = await db.books
+        .where('userId')
+        .equals(userId)
+        .and((book: any) => book.synced === 1 && (book.syncAttempts > 0 || book.lastAttempt))
+        .toArray();
+
+      if (syncedBooks.length > 0) {
+        await db.books.bulkUpdate(syncedBooks.map((book: any) => ({
+          key: book.localId!,
+          changes: { syncAttempts: 0, lastAttempt: null }
+        })));
+        cleanedCount += syncedBooks.length;
+        console.log(`[MAINTENANCE SERVICE] Cleaned metadata for ${syncedBooks.length} synced books`);
+      }
+
+      // Clean entries metadata
+      const syncedEntries = await db.entries
+        .where('userId')
+        .equals(userId)
+        .and((entry: any) => entry.synced === 1 && (entry.syncAttempts > 0 || entry.lastAttempt))
+        .toArray();
+
+      if (syncedEntries.length > 0) {
+        await db.entries.bulkUpdate(syncedEntries.map((entry: any) => ({
+          key: entry.localId!,
+          changes: { syncAttempts: 0, lastAttempt: null }
+        })));
+        cleanedCount += syncedEntries.length;
+        console.log(`[MAINTENANCE SERVICE] Cleaned metadata for ${syncedEntries.length} synced entries`);
+      }
+
+      console.log(`🧹 [MAINTENANCE SERVICE] Cleaned metadata for ${cleanedCount} total records`);
+      return cleanedCount;
+
+    } catch (error) {
+      console.error('❌ [MAINTENANCE SERVICE] Metadata cleanup failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * VALIDATE RECORD COMPLETENESS - Check and flag incomplete records
+   */
+  private async validateRecordCompleteness(userId: string): Promise<CompletenessReport> {
+    try {
+      const report: CompletenessReport = {
+        totalRecords: 0,
+        completeRecords: 0,
+        incompleteRecords: 0,
+        flaggedForDeletion: 0,
+        details: []
+      };
+
+      const sevenDaysAgo = Date.now() - (this.INCOMPLETE_RECORD_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+
+      // Validate books
+      const books = await db.books.where('userId').equals(userId).toArray();
+      report.totalRecords += books.length;
+
+      for (const book of books) {
+        const validation = validateCompleteness(book, 'book');
+        const completenessScore = validation.isValid ? 100 : (50 - validation.missingFields.length * 10);
+        const age = Date.now() - (book.createdAt || book.updatedAt || Date.now());
+        const shouldFlag = !validation.isValid && age > (sevenDaysAgo);
+
+        if (shouldFlag) {
+          report.flaggedForDeletion++;
+        }
+
+        if (!validation.isValid) {
+          report.incompleteRecords++;
+        } else {
+          report.completeRecords++;
+        }
+
+        report.details.push({
+          cid: book.cid,
+          type: 'book',
+          completenessScore,
+          missingFields: validation.missingFields,
+          age,
+          flagged: shouldFlag
+        });
+      }
+
+      // Validate entries
+      const entries = await db.entries.where('userId').equals(userId).toArray();
+      report.totalRecords += entries.length;
+
+      for (const entry of entries) {
+        const validation = validateCompleteness(entry, 'entry');
+        const completenessScore = validation.isValid ? 100 : (50 - validation.missingFields.length * 10);
+        const age = Date.now() - (entry.createdAt || entry.updatedAt || Date.now());
+        const shouldFlag = !validation.isValid && age > (sevenDaysAgo);
+
+        if (shouldFlag) {
+          report.flaggedForDeletion++;
+        }
+
+        if (!validation.isValid) {
+          report.incompleteRecords++;
+        } else {
+          report.completeRecords++;
+        }
+
+        report.details.push({
+          cid: entry.cid,
+          type: 'entry',
+          completenessScore,
+          missingFields: validation.missingFields,
+          age,
+          flagged: shouldFlag
+        });
+      }
+
+      // Flag incomplete records for deletion or review
+      const flaggedRecords = report.details.filter((detail: any) => detail.flagged);
+      if (flaggedRecords.length > 0) {
+        await this.flagIncompleteRecords(flaggedRecords);
+        console.log(` [MAINTENANCE SERVICE] Flagged ${flaggedRecords.length} incomplete records for deletion`);
+      }
+
+      console.log(` [MAINTENANCE SERVICE] Completeness validation:`, {
+        total: report.totalRecords,
+        complete: report.completeRecords,
+        incomplete: report.incompleteRecords,
+        flagged: report.flaggedForDeletion
+      });
+
+      return report;
+
+    } catch (error) {
+      console.error('❌ [MAINTENANCE SERVICE] Completeness validation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   *  SIGNAL SERVER CLEANUP - Trigger server-side maintenance
+   */
+  private async signalServerCleanup(userId: string): Promise<boolean> {
+    try {
+      console.log('📡 [MAINTENANCE SERVICE] Signaling server for cleanup...');
+
+      // NOTE: This is a hypothetical endpoint - implement when server API is ready
+      const response = await fetch('/api/vault/maintenance', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': userId
+        },
+        body: JSON.stringify({
+          userId,
+          cleanupTasks: [
+            'purgeAuditLogs',
+            'purgeTelemetry',
+            'purgeOrphanedMedia'
+          ],
+          retentionDays: this.AUDIT_LOG_RETENTION_DAYS
+        })
+      });
+
+      if (response.ok) {
+        console.log('✅ [MAINTENANCE SERVICE] Server cleanup triggered successfully');
+        return true;
+      } else {
+        console.warn('⚠️ [MAINTENANCE SERVICE] Server cleanup endpoint not available, skipping...');
+        return false;
+      }
+
+    } catch (error) {
+      console.warn('⚠️ [MAINTENANCE SERVICE] Server cleanup signal failed (endpoint may not exist):', error);
+      return false;
+    }
+  }
+
+  /**
+   * 🔐 SET USER ID
+   */
+  setUserId(userId: string): void {
+    this.userId = String(userId);
+  }
+
+  /**
+   * 📊 GET CLEANUP STATISTICS
+   */
+  async getCleanupStatistics(userId: string): Promise<{
+    auditLogCount: number;
+    oldAuditLogCount: number;
+    syncedBooksWithMetadata: number;
+    syncedEntriesWithMetadata: number;
+    incompleteRecordCount: number;
+  }> {
+    try {
+      const sixtyDaysAgo = Date.now() - (this.AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+
+      const [auditLogCount, oldAuditLogCount, syncedBooksWithMetadata, syncedEntriesWithMetadata] = await Promise.all([
+        db.auditLogs?.where('userId').equals(userId).count() || Promise.resolve(0),
+        db.auditLogs?.where('userId').equals(userId).and((log: any) => log.timestamp < sixtyDaysAgo).count() || Promise.resolve(0),
+        db.books.where('userId').equals(userId).and((book: any) => book.synced === 1 && (book.syncAttempts > 0 || book.lastAttempt)).count(),
+        db.entries.where('userId').equals(userId).and((entry: any) => entry.synced === 1 && (entry.syncAttempts > 0 || entry.lastAttempt)).count()
+      ]);
+
+      // Count incomplete records
+      const books: any[] = await db.books.where('userId').equals(userId).toArray();
+      const entries: any[] = await db.entries.where('userId').equals(userId).toArray();
+      
+      let incompleteRecordCount = 0;
+      [...books, ...entries].forEach((record: any) => {
+        const type = 'book' in record ? 'book' : 'entry';
+        const validation = validateCompleteness(record, type);
+        if (!validation.isValid) incompleteRecordCount++;
+      });
+
+      return {
+        auditLogCount,
+        oldAuditLogCount,
+        syncedBooksWithMetadata,
+        syncedEntriesWithMetadata,
+        incompleteRecordCount
+      };
+
+    } catch (error) {
+      console.error('❌ [MAINTENANCE SERVICE] Failed to get cleanup statistics:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🚩 FLAG INCOMPLETE RECORDS - Mark records for user review or deletion
+   */
+  private async flagIncompleteRecords(flaggedRecords: any[]): Promise<void> {
+    try {
+      const updates: any[] = flaggedRecords.map((record: any) => {
+        const isBook = record.type === 'book';
+        const table = isBook ? db.books : db.entries;
+        
+        return {
+          key: record.cid,
+          changes: {
+            completenessScore: record.completenessScore,
+            flaggedForReview: true,
+            flaggedAt: Date.now(),
+            flagReason: `Incomplete: ${record.missingFields.join(', ')}`
+          }
+        };
+      });
+
+      // Update books
+      const bookUpdates: any[] = updates.filter((u: any) => flaggedRecords.some((r: any) => r.cid === u.key && r.type === 'book'));
+      if (bookUpdates.length > 0) {
+        await db.books.bulkUpdate(bookUpdates);
+      }
+
+      // Update entries
+      const entryUpdates: any[] = updates.filter((u: any) => flaggedRecords.some((r: any) => r.cid === u.key && r.type === 'entry'));
+      if (entryUpdates.length > 0) {
+        await db.entries.bulkUpdate(entryUpdates);
+      }
+
+    } catch (error) {
+      console.error('❌ [MAINTENANCE SERVICE] Failed to flag incomplete records:', error);
+      throw error;
+    }
+  }
+}

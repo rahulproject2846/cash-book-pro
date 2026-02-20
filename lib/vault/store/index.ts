@@ -2,14 +2,16 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
 import { identityManager } from '../core/IdentityManager';
 import { db } from '@/lib/offlineDB';
 import { clearSessionCache } from './sessionGuard';
 import { createBookSlice, BookState, BookActions } from './slices/bookSlice';
 import { createEntrySlice, EntryState, EntryActions } from './slices/entrySlice';
+import { createSyncSlice, SyncState, SyncActions } from './slices/syncSlice';
 
 // 🚀 UNIFIED VAULT STORE TYPE
-export interface VaultStore extends BookState, BookActions, EntryState, EntryActions {
+export interface VaultStore extends BookState, BookActions, EntryState, EntryActions, SyncState, SyncActions {
   // 📊 Stats state
   globalStats: {
     totalIncome: number;
@@ -43,15 +45,17 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
 
 // 🛡️ MAIN VAULT STORE - COMBINES ALL SLICES
 export const useVaultStore = create<VaultStore>()(
-  subscribeWithSelector((...args) => {
-    const [set, get] = args;
-    
-    return {
-      // 📚 BOOK SLICE
-      ...createBookSlice(set, get),
-      
-      // 📝 ENTRY SLICE  
-      ...createEntrySlice(set, get),
+  immer(
+    subscribeWithSelector((set, get, api) => {
+      return {
+        // 📚 BOOK SLICE
+        ...createBookSlice(set, get, api),
+        
+        // 📝 ENTRY SLICE  
+        ...createEntrySlice(set, get, api),
+        
+        // 🔄 SYNC SLICE
+        ...createSyncSlice(set, get, api),
       
       // 📊 STATS STATE
       globalStats: {
@@ -65,19 +69,19 @@ export const useVaultStore = create<VaultStore>()(
       conflictedCount: 0,
       hasConflicts: false,
       
-      // 🚀 Cross-cutting state
+      // Cross-cutting state
       userId: '',
       isLoading: false,
       activeSection: 'books',
       nextAction: null,
 
-      // 🔄 CROSS-CUTTING ACTIONS
+      // CROSS-CUTTING ACTIONS
       refreshData: async () => {
         const userId = identityManager.getUserId();
-        console.log('🚀 [MAIN STORE] Starting refresh for user:', userId);
+        console.log(' [MAIN STORE] Starting refresh for user:', userId);
         
         if (!userId) {
-          console.warn('🚨 [MAIN STORE] No userId found, skipping refresh');
+          console.warn(' [MAIN STORE] No userId found, skipping refresh');
           set({ isLoading: false });
           return;
         }
@@ -85,7 +89,7 @@ export const useVaultStore = create<VaultStore>()(
         set({ isLoading: true, userId: String(userId) });
         
         try {
-          console.log('🔄 [MAIN STORE] Starting coordinated data refresh...');
+          console.log(' [MAIN STORE] Starting coordinated data refresh...');
           
           const [books, allEntries] = await Promise.all([
             db.books
@@ -110,7 +114,7 @@ export const useVaultStore = create<VaultStore>()(
             ? allEntries.filter((entry: any) => String(entry.bookId || '') === String(activeBookId))
             : [];
 
-          console.log('✅ [MAIN STORE] Coordinated refresh complete:', {
+          console.log(' [MAIN STORE] Coordinated refresh complete:', {
             booksCount: books.length,
             entriesCount: entries.length,
             allEntriesCount: allEntries.length,
@@ -130,17 +134,17 @@ export const useVaultStore = create<VaultStore>()(
           get().refreshCounters();
 
         } catch (error) {
-          console.error('❌ [MAIN STORE] Refresh failed:', error);
+          console.error(' [MAIN STORE] Refresh failed:', error);
           set({ isLoading: false });
         }
       },
 
       forceRefresh: async () => {
-        console.log('🔄 [MAIN STORE] Force refresh triggered');
+        console.log(' [MAIN STORE] Force refresh triggered');
         await get().refreshData();
       },
 
-      // 📊 STATS ACTIONS
+      // STATS ACTIONS
       refreshCounters: async () => {
         set({ isLoading: true });
         
@@ -163,9 +167,9 @@ export const useVaultStore = create<VaultStore>()(
             isLoading: false
           });
 
-          console.log('📊 [MAIN STORE] Counters refreshed:', { conflictedCount });
+          console.log(' [MAIN STORE] Counters refreshed:', { conflictedCount });
         } catch (error) {
-          console.error('❌ [MAIN STORE] Counters refresh failed:', error);
+          console.error(' [MAIN STORE] Counters refresh failed:', error);
           set({ isLoading: false });
         }
       },
@@ -185,7 +189,7 @@ export const useVaultStore = create<VaultStore>()(
         
         set({ globalStats });
         
-        console.log('📊 [MAIN STORE] Global stats calculated:', globalStats);
+        console.log(' [MAIN STORE] Global stats calculated:', globalStats);
       },
 
       checkForNewConflicts: async (): Promise<void> => {
@@ -223,9 +227,9 @@ export const useVaultStore = create<VaultStore>()(
               duration: 8000,
             });
             
-            console.log(`🚨 [MAIN STORE] Found ${totalConflicts} conflicts and updated global store`);
+            console.log(` [MAIN STORE] Found ${totalConflicts} conflicts and updated global store`);
           } else {
-            console.log('✅ [MAIN STORE] No conflicts found');
+            console.log(' [MAIN STORE] No conflicts found');
           }
 
           set({
@@ -235,39 +239,60 @@ export const useVaultStore = create<VaultStore>()(
             hasConflicts: totalConflicts > 0
           });
         } catch (error) {
-          console.error('🚨 [MAIN STORE] Failed to check for conflicts:', error);
+          console.error(' [MAIN STORE] Failed to check for conflicts:', error);
         }
       },
 
       setActiveSection: (section: string) => {
-        console.log('🎯 [MAIN STORE] Active section set:', section);
+        console.log(' [MAIN STORE] Active section set:', section);
         set({ activeSection: section });
       },
 
       setNextAction: (action: string | null) => {
-        console.log('🎯 [MAIN STORE] Next action set:', action);
+        console.log(' [MAIN STORE] Next action set:', action);
         set({ nextAction: action });
       },
 
-      // 🔥 SESSION MANAGEMENT: Clear session cache on logout
+      // SESSION MANAGEMENT: Clear session cache on logout
       clearSessionCache: () => {
-        console.log('🧹 [SESSION GUARD] Clearing session cache');
+        console.log(' [SESSION GUARD] Clearing session cache');
         clearSessionCache();
       }
     };
   })
-);
+));
 
 // 🎯 INITIAL DATA LOAD
 if (typeof window !== 'undefined') {
+  // 🧠 ACTIVATE MEDIA ENGINE: Background Base64 cleanup
+  import('../services/MediaMigrator').then(({ mediaMigrator }) => {
+    mediaMigrator.migrateLegacyImages().catch(error => {
+      console.error('🧠 [MIGRATION] Background cleanup failed:', error);
+    });
+  }).catch(error => {
+    console.error('🧠 [MIGRATION] Failed to load MediaMigrator:', error);
+  });
+
   // Load data on first mount
   setTimeout(() => {
     useVaultStore.getState().refreshData();
   }, 100);
 
+  // 🆕 DEBOUNCE: Prevent multiple rapid refreshes
+  let lastRefreshTime = 0;
+  const REFRESH_DEBOUNCE_MS = 2000; // 2 seconds
+
   // Listen for vault update events
   window.addEventListener('vault-updated', () => {
     console.log('📡 [MAIN STORE] Vault update event received');
+    
+    const now = Date.now();
+    if (now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
+      console.log(`🛡️ [MAIN STORE] Debouncing refresh (${now - lastRefreshTime}ms ago)`);
+      return;
+    }
+    
+    lastRefreshTime = now;
     useVaultStore.getState().refreshData();
   });
 
@@ -278,4 +303,5 @@ if (typeof window !== 'undefined') {
       useVaultStore.getState().refreshData();
     });
   }
-}
+
+  }

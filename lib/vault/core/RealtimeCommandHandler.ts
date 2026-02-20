@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/offlineDB';
 import { normalizeRecord, normalizeTimestamp } from './VaultUtils';
+import { getTimestamp } from '@/lib/shared/utils';
 
 /**
  * 🎯 REALTIME COMMAND HANDLER (V1.0 - Command Center Pattern)
@@ -139,7 +140,7 @@ export class RealtimeCommandHandler {
         await db.books.where('cid').equals(payload.cid).first() : null;
 
       const data = normalizeRecord(payload, this.userId);
-      const ts = normalizeTimestamp(data.updatedAt || Date.now());
+      const ts = normalizeTimestamp(data.updatedAt || getTimestamp());
 
       console.log(` [BOOK CREATED] Normalized data name: "${data.name}"`);
       console.log(` [BOOK CREATED] About to save to Dexie with name: "${data.name}"`);
@@ -158,7 +159,7 @@ export class RealtimeCommandHandler {
         }
         
         // Case 2: Existing Record - Update if newer or on fresh login
-        const isFreshLogin = !existingBook.updatedAt || (Date.now() - existingBook.updatedAt.getTime()) < 5000;
+        const isFreshLogin = !existingBook.updatedAt || (getTimestamp() - existingBook.updatedAt.getTime()) < 5000;
         const shouldUpdate = data.vKey > existingBook.vKey || isFreshLogin;
         
         if (shouldUpdate) {
@@ -373,7 +374,7 @@ export class RealtimeCommandHandler {
         await db.entries.where('cid').equals(payload.cid).first() : null;
 
       const data = normalizeRecord(payload, this.userId);
-      const ts = normalizeTimestamp(data.updatedAt || Date.now());
+      const ts = normalizeTimestamp(data.updatedAt || getTimestamp());
 
       // 📡 [REALTIME GUARD] Smart Hydration Logic
       if (!existing) {
@@ -383,7 +384,7 @@ export class RealtimeCommandHandler {
         this.notifyUI();
       } else {
         // Case 2: Existing Record - Update if newer or on fresh login
-        const isFreshLogin = !existing.updatedAt || (Date.now() - existing.updatedAt.getTime()) < 5000;
+        const isFreshLogin = !existing.updatedAt || (getTimestamp() - existing.updatedAt.getTime()) < 5000;
         const shouldUpdate = data.vKey > existing.vKey || isFreshLogin;
         
         if (shouldUpdate) {
@@ -633,6 +634,6 @@ export class RealtimeCommandHandler {
    */
   private async generateLocalId(): Promise<number> {
     // Generate a unique local ID for resurrection
-    return Date.now() + Math.floor(Math.random() * 1000);
+    return getTimestamp() + Math.floor(Math.random() * 1000);
   }
 }

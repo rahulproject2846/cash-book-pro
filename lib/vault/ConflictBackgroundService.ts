@@ -1,3 +1,6 @@
+"use client";
+
+import { getTimestamp } from '@/lib/shared/utils';
 import { useConflictStore } from './ConflictStore';
 
 /**
@@ -53,7 +56,7 @@ export class ConflictBackgroundService {
         const expiresAt = this.executionQueue.get(key);
         if (!expiresAt) return 0;
         
-        const remaining = expiresAt - Date.now();
+        const remaining = expiresAt - getTimestamp();
         return Math.max(0, Math.ceil(remaining / 1000));  // 🚨 ACCURATE SECONDS
     }
     
@@ -71,7 +74,7 @@ export class ConflictBackgroundService {
      * 🚨 CHECK AND EXECUTE EXPIRED RESOLUTIONS
      */
     private async checkAndExecuteExpired() {
-        const now = Date.now();
+        const now = getTimestamp();
         const expiredKeys: string[] = [];
         
         // 🚨 FIND EXPIRED RESOLUTIONS
@@ -120,7 +123,7 @@ export class ConflictBackgroundService {
             const stored = localStorage.getItem('conflictExecutionQueue');
             if (stored) {
                 const queueArray = JSON.parse(stored);
-                const now = Date.now();
+                const now = getTimestamp();
                 
                 // 🚨 RESTORE ONLY FUTURE EXECUTIONS
                 queueArray.forEach(([key, expiresAt]: [string, number]) => {

@@ -18,6 +18,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
     const [form, setForm] = useState({ name: '', description: '', type: 'general', phone: '', image: '' });
     const [isLoading, setIsLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [localPreview, setLocalPreview] = useState<string | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
@@ -28,6 +29,11 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
 
     // --- 🎯 IMAGE PREVIEW HELPER (Zero-Risk Refactor) ---
     const imagePreviewContent = (() => {
+        // 🆕 PRIORITY 1: Instant local preview from file selection
+        if (localPreview) {
+            return <img src={localPreview} alt="Book Preview" className="w-full h-full object-cover" />;
+        }
+        
         if (!form.image) {
             return <Camera size={26} className="text-[var(--text-muted)] opacity-30 group-hover/img:text-orange-500 transition-all" />;
         }
@@ -73,12 +79,25 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                 setForm({ name: '', description: '', type: 'general', phone: '', image: '' });
             }
             
+            // 🆕 CLEANUP: Clear local preview when modal opens/closes
+            setLocalPreview(null);
+            
             // 🔥 ফিক্স: মডাল খোলার সাথে সাথে নামে ফোকাস হবে (ডেস্কটপে)
             setTimeout(() => {
                 if (!isMobile) nameInputRef.current?.focus();
             }, 100);
         }
     }, [initialData, isOpen, isMobile]);
+    
+    // 🆕 CLEANUP: Revoke object URL when modal closes or component unmounts
+    useEffect(() => {
+        return () => {
+            if (localPreview) {
+                URL.revokeObjectURL(localPreview);
+                console.log(`🧹 [BOOK MODAL] Cleaned up local preview: ${localPreview}`);
+            }
+        };
+    }, [localPreview]);
 
     // ৩. অ্যাকশন হ্যান্ডলার (এন্টার বাটন সাপোর্ট)
     const handleAction = async (e?: React.FormEvent) => {
@@ -167,6 +186,10 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
                                     try {
+                                        // 🆕 INSTANT PREVIEW: Create temporary object URL
+                                        const tempUrl = URL.createObjectURL(file);
+                                        setLocalPreview(tempUrl);
+                                        
                                         // 🚀 USE MEDIA STORE INTEGRATION
                                         const mediaCid = await handleImageProcess(file);
                                         setForm(prev => ({ ...prev, image: mediaCid }));

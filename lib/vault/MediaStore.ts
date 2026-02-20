@@ -87,30 +87,68 @@ export const useMediaStore = create<MediaStoreState>()(
                 const mediaRecord = await db.mediaStore.where('cid').equals(mediaCid).first();
                 if (!mediaRecord) return;
 
+                // 🆕 SAFE CLEANUP: Verify sync completion before blob deletion
+                let isParentSynced = false;
+                if (mediaRecord.parentType === 'book') {
+                    const parentBook = await db.books.where('localId').equals(mediaRecord.parentId).first();
+                    isParentSynced = parentBook?.synced === 1;
+                }
+
+                const shouldDeleteBlob = url && url.startsWith('http') && isParentSynced;
+
                 // 🔄 UPDATE DEXIE RECORD
                 await db.mediaStore.where('cid').equals(mediaCid).modify({
                     localStatus: 'uploaded',
                     cloudinaryUrl: url,
                     cloudinaryPublicId: publicId,
                     uploadedAt: Date.now(),
-                    blobData: undefined // 🧹 Clean up local blob to save space AFTER sync completes
+                    blobData: shouldDeleteBlob ? undefined : mediaRecord.blobData // 🛡️ Conditional cleanup
                 });
+                
+                if (shouldDeleteBlob) {
+                    console.log(`🧹 [SAFE CLEANUP] Deleted blob for ${mediaCid} - Cloudinary URL confirmed and parent synced`);
+                } else {
+                    console.log(`🛡️ [SAFE CLEANUP] Preserved blob for ${mediaCid} - Parent not synced or URL invalid`);
+                }
 
                 // 🔗 UPDATE PARENT RECORD WITH VKEY INCREMENT
                 if (mediaRecord.parentType === 'book') {
                     const existingBook = await db.books.where('localId').equals(mediaRecord.parentId).first();
                     if (existingBook) {
+                        // 🟢 [FORENSIC AUDIT] Log Dexie update with Cloudinary URL
+                        console.log(`🟢 [MEDIA STORE] Updating Dexie book with URL:`, url);
+                        
                         await db.books.update(mediaRecord.parentId, { 
-                            image: url,
-                            mediaCid: null,
-                            vKey: existingBook.vKey + 1, // 🚨 CRITICAL: Increment vKey to trigger sync
-                            synced: 0 // 🚨 CRITICAL: Mark as unsynced
+                            image: url, // The Cloudinary URL
+                            mediaCid: mediaCid, // Keep CID for reference
+                            updatedAt: Date.now(),
+                            synced: 0 // Ensure it's marked for pushing to server
                         });
                         
                         // 🚀 FORCE UI REFRESH: Trigger vault update event
                         if (typeof window !== 'undefined') {
                             window.dispatchEvent(new Event('vault-updated'));
                         }
+                        
+                        // 🆕 CRITICAL: Check if book has server _id before sync
+                        if (!existingBook._id) {
+                            console.log(`⚠️ [MEDIA SYNC] Book ${existingBook.cid} missing server _id, waiting for initial sync...`);
+                        }
+                        
+                        // 🆕 EXPLICIT SYNC: Trigger immediate background sync
+                        const { orchestrator } = await import('./core/SyncOrchestrator');
+                        orchestrator.triggerSync();
+                        
+                        // 🆕 MANUAL SYNC: Force vault store sync for immediate propagation
+                        if (typeof window !== 'undefined' && (window as any).useVaultStore) {
+                            const vaultStore = (window as any).useVaultStore.getState();
+                            if (vaultStore.triggerManualSync) {
+                                vaultStore.triggerManualSync();
+                                console.log(`🚀 [MEDIA SYNC] Manual vault sync triggered for book ${existingBook.cid}`);
+                            }
+                        }
+                        
+                        console.log(`🚀 [MEDIA SYNC] Cloudinary URL pushed to server for book ${existingBook.cid}`);
                     }
                 } else if (mediaRecord.parentType === 'entry') {
                     const existingEntry = await db.entries.where('localId').equals(mediaRecord.parentId).first();
