@@ -10,7 +10,7 @@ import { Toaster } from 'react-hot-toast'; // 🚀 Move Toaster here for client-
 import { identityManager } from '@/lib/vault/core/IdentityManager'; // 🔥 Unified Identity Management
 import { useMediaStore } from '@/lib/vault/MediaStore'; // 🚀 Media Store Integration
 import { orchestrator } from '@/lib/vault/core/SyncOrchestrator'; // 🔥 Sync Orchestrator Integration
-import { useVaultStore } from '@/lib/vault/store'; // 🔄 Vault Store Integration
+import { getVaultStore } from '@/lib/vault/store/storeHelper'; // 🔄 Vault Store Integration
 
 /**
  * INTERNAL COMPONENT: THEME SYNCHRONIZER
@@ -76,7 +76,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       const userId = customEvent.detail?.userId;
       if (userId && window.orchestrator) {
         console.log('🔄 [GLOBAL EVENT] Sync requested for user:', userId);
-        useVaultStore.getState().triggerManualSync();
+        getVaultStore().triggerManualSync();
       }
     };
 

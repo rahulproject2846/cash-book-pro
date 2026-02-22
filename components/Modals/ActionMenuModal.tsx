@@ -3,7 +3,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Zap, Book, PlusCircle } from 'lucide-react';
 import { useModal } from '@/context/ModalContext';
-import { useVaultStore } from '@/lib/vault/store';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils/helpers';
 import { ModalLayout } from './index';
@@ -11,7 +11,7 @@ import { ModalLayout } from './index';
 export const ActionMenuModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
   const { t } = useTranslation();
   const { openModal, closeModal, switchModal } = useModal();
-  const { books, saveBook, setActiveBook, setNextAction } = useVaultStore();
+  const { books, saveBook, setActiveBook, setNextAction } = getVaultStore();
 
   const handleCreateBook = () => {
     closeModal(() => {

@@ -1,0 +1,5 @@
+# Hydration Middleware
+# This directory will contain:
+# - Base64Migration.ts - Base64 to MediaStore migration
+# - GhostMercyRegistry.ts - Orphaned record handling
+# - FinancialPrecision.ts - Amount precision handling

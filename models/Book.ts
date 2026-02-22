@@ -24,6 +24,7 @@ export interface IBook extends Document {
   isDeleted?: number;
   createdAt: Date;
   updatedAt: Date; // কেবল একবার রাখা হয়েছে
+  mediaCid?: string; // ✅ ADDED: Cloudinary URL reference
 }
 
 const BookSchema = new Schema<IBook>({
@@ -93,6 +94,11 @@ const BookSchema = new Schema<IBook>({
   image: { 
     type: String, 
     default: "" 
+  },
+  mediaCid: {  // ✅ ADDED: Cloudinary URL reference
+    type: String,
+    default: "",
+    index: true  // For faster lookup
   },
   isDeleted: {
     type: Number,

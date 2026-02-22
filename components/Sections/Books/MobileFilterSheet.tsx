@@ -2,7 +2,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowUpDown, BarChart3, Download, LayoutGrid, Zap } from 'lucide-react';
-import CustomSelect from '@/components/UI/CustomSelect'; // তোর গ্লোবাল ফিক্সড কম্পোনেন্ট
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
@@ -90,16 +89,20 @@ export const MobileFilterSheet = ({
                             </div>
                             
                             <div className="space-y-5">
-                                {/* 1. CATEGORY SELECTOR (Layered for Z-Index) */}
+                                {/* 1. CATEGORY SELECTOR (Simple Native Select) */}
                                 <div className="relative z-50">
-                                    <CustomSelect 
-                                        label={t('classification')} 
+                                    <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] ml-1 block mb-2">
+                                        {t('classification')}
+                                    </label>
+                                    <select 
                                         value={categoryFilter} 
-                                        options={userCategories} 
-                                        onChange={setCategoryFilter} 
-                                        icon={LayoutGrid} 
-                                        ttKey="tt_filter_category"
-                                    />
+                                        onChange={(e) => setCategoryFilter(e.target.value)}
+                                        className="w-full h-12 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl px-4 text-[11px] font-black uppercase tracking-widest text-[var(--text-main)] outline-none focus:border-orange-500/40"
+                                    >
+                                        {userCategories.map((cat: string) => (
+                                            <option key={cat} value={cat}>{cat}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 
                                 {/* 2. SORT TOGGLE (Elite Button) */}

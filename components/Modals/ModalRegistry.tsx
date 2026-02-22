@@ -14,23 +14,22 @@ import {
   ModalLayout, 
   BookModal, 
   EntryModal, 
-  DeleteConfirmModal, 
   AdvancedExportModal,
   ActionMenuModal
 } from './index';
 import { ShareModal } from './ShareModal';
 import { TerminationModal } from './TerminationModal';
 import { ConflictResolverModal } from './ConflictResolverModal';
-import { AnalyticsChart } from '@/components/AnalyticsChart'; // পাথ সিঙ্ক করা হয়েছে
+import { AnalyticsChart } from '@/components/AnalyticsChart';
 
 /**
- * VAULT PRO: MASTER MODAL REGISTRY (V12.0 ELITE)
+ * VAULT PRO: MASTER MODAL REGISTRY (V12.0 ELITE - POLISHED)
  * -----------------------------------------------
- * Status: Final Polish, Safe Lifecycle, Multi-type Payload Handling.
+ * Changes: Removed redundant onSubmit props to support direct Store-to-Modal sync.
  */
 export const ModalRegistry = () => {
   const { view, isOpen, data, closeModal } = useModal();
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
 
   return (
     <AnimatePresence mode="popLayout">
@@ -43,19 +42,16 @@ export const ModalRegistry = () => {
         />
       )}
 
-      {/* ১. বুক ম্যানেজমেন্ট প্রোটোকল */}
-      {(view === 'addBook' || view === 'editBook') && (
-        <BookModal 
-          key="book-modal"
-          isOpen={isOpen}
-          onClose={closeModal}
-          initialData={data?.currentBook || data?.book || null}
-          currentUser={data?.currentUser}
-          onSubmit={data?.onSubmit}
-        />
-      )}
+      {/* ১. বুক ম্যানেজমেন্ট প্রোটোকল - সরাসরি স্টোর অ্যাকশন ব্যবহার করবে */}
+      <BookModal 
+        key="book-modal"
+        isOpen={isOpen && (view === 'addBook' || view === 'editBook')}
+        onClose={closeModal}
+        initialData={data?.currentBook || data?.book || null}
+        currentUser={data?.currentUser}
+      />
 
-      {/* ২. এন্ট্রি ম্যানেজমেন্ট প্রোটোকল */}
+      {/* ২. এন্ট্রি ম্যানেজমেন্ট প্রোটোকল - সরাসরি স্টোর অ্যাকশন ব্যবহার করবে */}
       {(view === 'addEntry' || view === 'editEntry') && (
         <EntryModal 
           key="entry-modal"
@@ -64,7 +60,6 @@ export const ModalRegistry = () => {
           currentUser={data?.currentUser}
           currentBook={data?.currentBook || data?.book}
           initialData={data?.entry || data?.initialData || null}
-          onSubmit={data?.onSubmit}
         />
       )}
 

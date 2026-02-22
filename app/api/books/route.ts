@@ -112,7 +112,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const data = await req.json();
-    const { name, description, userId, type, phone, image, vKey, cid } = data;
+    const { name, description, userId, type, phone, image, vKey, cid, mediaCid } = data;
 
     // 🔥 API LOGGING: Show received payload for debugging (SILENCED)
     // console.log('📦 [API-BOOKS] Received Payload:', JSON.stringify(data));
@@ -172,6 +172,7 @@ export async function POST(req: Request) {
         type: String(type || 'general').toLowerCase(), 
         phone, 
         image: (image && image !== "") ? image : undefined, // 🛡️ SERVER GUARD: Reject empty strings
+        mediaCid: mediaCid || undefined, // ✅ ADDED: Store mediaCid
         vKey: vKey || Date.now(), // 🔥 UNIFIED VKEY STRATEGY: Use Date.now() for absolute versioning
         cid: cid || undefined // 🔥 CRITICAL: Include cid field if provided
     });
@@ -207,7 +208,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const data = await req.json();
-    const { _id, name, description, userId, type, phone, image, vKey } = data;
+    const { _id, name, description, userId, type, phone, image, vKey, mediaCid } = data;
 
     if (!_id || !userId) {
       return NextResponse.json({ message: "Auth/Book ID missing" }, { status: 400 });
@@ -263,6 +264,7 @@ export async function PUT(req: Request) {
             type: String(type).toLowerCase(), 
             phone, 
             image: imageToSave, 
+            mediaCid: mediaCid || undefined, // ✅ ADDED: Store mediaCid
             vKey: vKey, // লেটেস্ট ভার্সন কি আপডেট করা
             updatedAt: Date.now() 
         } 

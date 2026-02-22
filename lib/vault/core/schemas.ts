@@ -1,12 +1,12 @@
 "use client";
 
-import { z } from 'zod';
+import { z, ZodRecord } from 'zod';
 
 /**
  * 🛡️ TOTAL SCHEMA GUARD - Zod Validation Schemas
  * 
  * Prevents legacy data corruption and malformed records from entering
- * the database or being sent to the server.
+ * database or being sent to the server.
  */
 
 // Book Schema with strict validation
@@ -20,7 +20,7 @@ export const BookSchema = z.object({
   synced: z.union([z.number(), z.boolean()]).transform(val => (val === true || val === 1) ? 1 : 0),
   isDeleted: z.union([z.number(), z.boolean()]).transform(val => (val === true || val === 1) ? 1 : 0),
   vKey: z.coerce.number(),
-  syncAttempts: z.coerce.number(),
+  syncAttempts: z.coerce.number().default(0),
   lastAttempt: z.coerce.number().optional(),
   isPinned: z.coerce.number().optional(),
   userId: z.string().min(1, "User ID is required"),
@@ -30,6 +30,20 @@ export const BookSchema = z.object({
   image: z.string().optional(),
   mediaCid: z.string().optional(),
   lastSniperFetch: z.coerce.number().optional(),
+});
+
+// User Schema with strict validation
+export const UserSchema = z.object({
+  _id: z.string().optional(),
+  username: z.string(),
+  email: z.string().email(),
+  image: z.string().optional(),
+  plan: z.enum(['free', 'pro']).default('free'),
+  offlineExpiry: z.number().default(0),
+  riskScore: z.number().default(0),
+  receiptId: z.string().nullable().optional(),
+  preferences: z.record(z.string(), z.any()).optional(),
+  updatedAt: z.number().optional()
 });
 
 // Entry Schema with strict validation
@@ -54,7 +68,7 @@ export const EntrySchema = z.object({
   updatedAt: z.coerce.number(),
   vKey: z.coerce.number(),
   checksum: z.string().min(1, "Checksum is required"),
-  syncAttempts: z.coerce.number(),
+  syncAttempts: z.coerce.number().default(0),
   lastAttempt: z.coerce.number().optional(),
   _emergencyFlushed: z.boolean().optional(),
   _emergencyFlushAt: z.coerce.number().optional(),
@@ -74,11 +88,11 @@ export const EntrySchema = z.object({
  * @param typeName Type name for error logging
  * @returns { success: boolean, data?: any, error?: string }
  */
-export function validateRecord(
-  schema: z.ZodSchema, 
+export function validateRecord<T>(
+  schema: z.Schema<T>, 
   data: any, 
   typeName: string
-): { success: boolean; data?: any; error?: string } {
+): { success: boolean; data?: T; error?: string } {
   const result = schema.safeParse(data);
   
   if (result.success) {
@@ -107,4 +121,11 @@ export function validateBook(data: any): { success: boolean; data?: any; error?:
  */
 export function validateEntry(data: any): { success: boolean; data?: any; error?: string } {
   return validateRecord(EntrySchema, data, `Entry ID: ${data?.cid || 'unknown'}`);
+}
+
+/**
+ * 🎯 VALIDATE USER - Specialized user validator
+ */
+export function validateUser(data: any): { success: boolean; data?: any; error?: string } {
+  return validateRecord(UserSchema, data, `User ID: ${data?._id || 'unknown'}`);
 }

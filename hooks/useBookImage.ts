@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { db, generateCID } from '@/lib/offlineDB';
 import { processMedia } from '@/lib/utils/mediaProcessor';
 import { useMediaStore } from '@/lib/vault/MediaStore';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import toast from 'react-hot-toast';
 
 /**
@@ -19,11 +20,19 @@ export interface UseBookImageResult {
 
 export const useBookImage = (): UseBookImageResult => {
   const isLoading = false; // Can be expanded with loading state if needed
+  const { userId } = getVaultStore(); // 🆕 Get actual user ID
 
   const handleImageProcess = useCallback(async (file: File, bookId?: string) => {
     try {
-      // 🔍 TRACE POINT A: Input File Details
-      console.log('� [TRACE A] File Input Details:', {
+      // � SIZE GUARD: Reject oversized images
+      const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+      if (file.size > MAX_SIZE) {
+        toast.error(`Image too large. Maximum size is 2MB, got ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+        throw new Error(`Image size exceeds 2MB limit`);
+      }
+      
+      // �🔍 TRACE POINT A: Input File Details
+      console.log('🔍 [TRACE A] File Input Details:', {
         name: file.name,
         size: file.size,
         sizeKB: `${(file.size / 1024).toFixed(2)} KB`,
@@ -65,7 +74,7 @@ export const useBookImage = (): UseBookImageResult => {
         originalSize: file.size,
         compressedSize: blob.size,
         createdAt: Date.now(),
-        userId: 'current' // Will be updated with actual user ID
+        userId: userId || 'current' // 🆕 Use actual user ID with fallback
       });
       
       // 📤 ADD TO UPLOAD QUEUE

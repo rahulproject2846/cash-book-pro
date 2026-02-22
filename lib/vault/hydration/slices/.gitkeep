@@ -1,0 +1,7 @@
+# Hydration Slices
+# This directory will contain:
+# - BulkSlice.ts - Books/Entries bulk hydration
+# - RealtimeSlice.ts - Pusher event handling  
+# - SniperSlice.ts - Single item hydration
+# - IdentitySlice.ts - User profile hydration
+# - RecoverySlice.ts - Ghost reconciliation

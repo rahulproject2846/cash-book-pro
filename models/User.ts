@@ -20,6 +20,7 @@ export interface IUser extends Document {
   authProvider: 'credentials' | 'google';
   image?: string;
   isCustomImage: boolean; // ম্যানুয়াল আপলোড ফ্ল্যাগ
+  mediaCid?: string; // ✅ ADDED: Cloudinary URL reference
   
   // Security & Verification
   isVerified: boolean; // OTP বা Google Login এর মাধ্যমে ভেরিফাইড কি না
@@ -35,6 +36,12 @@ export interface IUser extends Document {
     weeklyReports: boolean;
     highExpenseAlert: boolean;
   };
+  
+  // 🔐 LICENSE & SECURITY FIELDS
+  plan: { type: String, enum: ['free', 'pro'], default: 'free' };
+  offlineExpiry: { type: Number, default: 0 };
+  riskScore: { type: Number, default: 0 };
+  receiptId: { type: String, default: null };
   
   createdAt: Date;
   updatedAt: Date;
@@ -82,6 +89,11 @@ const UserSchema = new Schema<IUser>({
     type: Boolean,
     default: false // ম্যানুয়ালি আপলোড করলে এটি true হবে, তখন আর গুগল সিঙ্ক হবে না
   },
+  mediaCid: {  
+    type: String,
+    default: "",
+    index: true  
+  },
 
   // --- ওটিপি ও ভেরিফিকেশন ---
   isVerified: {
@@ -116,7 +128,11 @@ const UserSchema = new Schema<IUser>({
     dailyReminder: { type: Boolean, default: false },
     weeklyReports: { type: Boolean, default: false },
     highExpenseAlert: { type: Boolean, default: false }
-  }
+  },
+  plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+  offlineExpiry: { type: Number, default: 0 },
+  riskScore: { type: Number, default: 0 },
+  receiptId: { type: String, default: null }
 }, { 
   timestamps: true,
   versionKey: false 

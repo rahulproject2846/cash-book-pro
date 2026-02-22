@@ -1,13 +1,18 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, ChevronLeft, ChevronRight, Inbox, Zap, GitCommit, ShieldCheck, Activity } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 // Sub Components
 import { StatsGrid } from '@/components/UI/StatsGrid'; 
 import { TransactionTable } from './TransactionTable';
-import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
+import { useVaultState, useBootStatus, getVaultStore } from '@/lib/vault/store/storeHelper';
+
+// 🚀 MEMOIZED TRANSACTION TABLE FOR 100k PERFORMANCE
+const MemoizedTransactionTable = React.memo(TransactionTable);
+
+import { Pagination } from '@/components/UI/Pagination';
 import { DetailsToolbar } from './DetailsToolbar';
 import { MobileFilterSheet } from './MobileFilterSheet';
 
@@ -16,65 +21,100 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 import { Tooltip } from '@/components/UI/Tooltip';
 
+// Interface for BookDetails props
+interface BookDetailsProps {
+    bookId?: string;
+    currentBook?: any;
+    onBack?: () => void;
+    onAdd?: (data: any) => void;
+    onEdit?: (data: any) => void;
+    onDelete?: (data: any) => void;
+    onToggleStatus?: (data: any) => void;
+    onTogglePin?: (data: any) => void;
+    currentUser?: any;
+    bookStats?: any;
+}
+
 export const BookDetails = ({ 
-    currentBook, items, onBack, onAdd, onEdit, onDelete, onToggleStatus, 
-    searchQuery, setSearchQuery, pagination, currentUser, bookStats
-}: any) => {
+    bookId, currentBook, onBack, onAdd, onEdit, onDelete, onToggleStatus, onTogglePin,
+    currentUser, bookStats
+}: BookDetailsProps) => {
     // ALL HOOKS AT THE TOP - NO CONDITIONALS BEFORE HOOKS
     const { t, language } = useTranslation();
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const bookIdFromUrl = params.id as string;
     
-    // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন
-    const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
-    const [categoryFilter, setCategoryFilter] = useState('all');
-    const [showMobileSettings, setShowMobileSettings] = useState(false);
+    // 🚀 REACTIVE STORE CONNECTION & BOOT STATUS
+    const {
+        books, entrySortConfig, entryCategoryFilter, entrySearchQuery,
+        processedEntries, entryPagination, setEntryPage, setActiveBook,
+        entries
+    } = useVaultState();
     
-    // URL-FIRST: Use URL parameter, fallback to prop only if URL is empty
-    const effectiveBookId = bookIdFromUrl || (currentBook?._id || currentBook?.localId);
+    const { isSystemReady } = useBootStatus();
+    
+    // ID-CENTRIC: Calculate effective book ID from multiple sources
+    const effectiveBookId = bookId || bookIdFromUrl || searchParams.get('id') || (currentBook?._id || currentBook?.localId);
+    
+    // Derive the book object locally from store or prop
+    const book = currentBook || books?.find(b => String(b._id || b.localId) === String(effectiveBookId));
+    
+    // 🔄 STORE SYNC: When book is found via ID, sync with global store
+    useEffect(() => {
+        if (book && effectiveBookId) {
+            setActiveBook(book);
+        }
+    }, [book, effectiveBookId, setActiveBook]);
     
     const userCategories = ['all', ...(currentUser?.categories || [])];
     const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
-    // --- ২. মাস্টার সর্টিং ও ফিল্টারিং ইঞ্জিন (V11.5 Standard) ---
-    const processedItems = useMemo(() => {
-        if (!items) return [];
-
-        let list = items.filter((item: any) => {
-            const matchesSearch = (item.title || "").toLowerCase().includes(searchQuery.toLowerCase());
-            const currentBookId = String(effectiveBookId);
-            const entryBookId = String(item.bookId);
-            return matchesSearch && currentBookId === entryBookId;
-        });
+    // 🚀 SMART CACHE LOGIC: Direct DB access with pagination
+    const currentItems = entries;
+    
+    // Background sync trigger when local data is insufficient
+    const isDataInsufficient = currentItems.length < (isSystemReady ? (window.innerWidth < 768 ? 16 : 15) : 10);
+    
+    // 🛡️ CIRCUIT BREAKER: Prevent infinite refresh loop
+    const hasInitialRefreshed = useRef(false);
+    
+    useEffect(() => {
+        console.log('🔄 [BOOK DETAILS] Effect Triggered:', { isDataInsufficient, isSystemReady, effectiveBookId });
         
-        if (categoryFilter !== 'all') {
-            list = list.filter((item: any) => (item.category || "").toLowerCase() === categoryFilter.toLowerCase());
+        // 🛡️ FALLBACK: Ensure data flows even if boot status is delayed
+        if (isDataInsufficient && (isSystemReady || effectiveBookId) && !hasInitialRefreshed.current) {
+            // Trigger background sync for more data
+            const { refreshEntries } = getVaultStore();
+            console.log('🔗 Action Check:', typeof refreshEntries);
+            refreshEntries?.();
+            hasInitialRefreshed.current = true;
         }
+    }, [isDataInsufficient, isSystemReady, effectiveBookId]);
 
-        list.sort((a: any, b: any) => {
-            const valA = a[sortConfig.key] || 0;
-            const valB = b[sortConfig.key] || 0;
-            return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
-        });
-
-        return list;
-    }, [items, searchQuery, categoryFilter, sortConfig, effectiveBookId]);
-
-    const currentItems = processedItems.slice(((pagination?.currentPage || 1) - 1) * 10, (pagination?.currentPage || 1) * 10);
-
-    // GUARD CLAUSE - AFTER ALL HOOKS BUT BEFORE JSX
-    if (!effectiveBookId && !bookIdFromUrl) {
-        router.push('/');
-        return null;
-    }
-
-    if (!currentBook) {
-        console.log('🔍 DEBUG: Waiting for valid currentBook ID');
+    // 🛡️ GUARD CLAUSE: Check for effective book ID
+    if (!effectiveBookId) {
         return (
             <div className="flex items-center justify-center py-20">
                 <div className="text-center">
-                    <div className="w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center text-white animate-spin"></div>
+                    <div className="w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center text-orange-500 animate-spin">
+                        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                    <p className="mt-4 text-[var(--text-muted)]">No book selected</p>
+                </div>
+            </div>
+        );
+    }
+
+    // 🍎 APPLE-STYLE LOADING: Show loading while book data is being fetched
+    if (!book) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <div className="text-center">
+                    <div className="w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center text-orange-500 animate-spin">
+                        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
                     <p className="mt-4 text-[var(--text-muted)]">Loading book details...</p>
                 </div>
             </div>
@@ -83,11 +123,14 @@ export const BookDetails = ({
 
     return (
         <motion.div 
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            layoutId={`book-hero-${book._id || book.localId}`}
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
             className="w-full px-[var(--app-padding,1.25rem)] md:px-[var(--app-padding,2.5rem)] pb-36 transition-all duration-500"
         >
             <div className="md:px-8 lg:px-10 space-y-10 mt-2">
-                
+
                 {/* --- ১. DYNAMIC STATS GRID --- */}
                 <StatsGrid 
                     income={bookStats?.stats?.inflow || 0} 
@@ -99,20 +142,8 @@ export const BookDetails = ({
 
                 {/* --- ২. CONTROL HUB (Search & Filter) --- */}
                 <div className="space-y-6">
-                    <DetailsToolbar 
-                        searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-                        sortConfig={sortConfig} setSortConfig={setSortConfig}
-                        categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter}
-                        userCategories={userCategories}
-                        onMobileToggle={() => setShowMobileSettings(true)}
-                    />
-
-                    <MobileFilterSheet 
-                        isOpen={showMobileSettings} onClose={() => setShowMobileSettings(false)}
-                        categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter}
-                        userCategories={userCategories}
-                        sortConfig={sortConfig} setSortConfig={setSortConfig}
-                    />
+                    <DetailsToolbar />
+                    <MobileFilterSheet />
                 </div>
 
                 {/* --- ৩. MAIN LEDGER VIEW (The Apple Metal Container) --- */}
@@ -128,26 +159,22 @@ export const BookDetails = ({
                             </div>
                             <span className="text-[10px] font-black uppercase tracking-[4px] text-[var(--text-main)]">{t('ledger_live_feed')}</span>
                         </div>
-                        <div className="flex items-center gap-2 opacity-30">
-                            <ShieldCheck size={14} className="text-green-500" />
-                            <span className="text-[8px] font-black uppercase tracking-[2px]">Encrypted Stream Active</span>
-                        </div>
                     </div>
 
                     {/* Table View (Desktop) */}
-                    <TransactionTable items={currentItems} onEdit={onEdit} onDelete={onDelete} onToggleStatus={onToggleStatus} currencySymbol={currencySymbol} />
+                    <MemoizedTransactionTable />
                     
-                    {/* Card View (Mobile) - Using the New Unified Ledger Cards */}
+                    {/* Card View (Mobile) - Using TransactionTable for mobile */}
                     <div className="md:hidden">
-                        <MobileLedgerCards 
-                            isGrouped={false}
-                            items={currentItems} 
-                            onEdit={onEdit}
-                            onDelete={onDelete} 
-                            onToggleStatus={onToggleStatus}
-                            currencySymbol={currencySymbol}
-                        />
+                        <MemoizedTransactionTable />
                     </div>
+                    
+                    {/* Debug State Verification */}
+                    {processedEntries.length === 0 && (
+                        <div className="text-red-500 text-xs p-2 border border-red-500/20 bg-red-500/10 rounded">
+                            Debug: State is Empty (processedEntries.length = {processedEntries.length})
+                        </div>
+                    )}
                     
                     {/* Empty State Overlay */}
                     <AnimatePresence>
@@ -174,31 +201,13 @@ export const BookDetails = ({
                         </div>
                     </div>
 
-                    <div className="flex gap-4 items-center">
-                        <Tooltip text={t('tt_prev_page')} position="bottom">
-                            <button 
-                                disabled={pagination?.currentPage === 1} 
-                                onClick={() => pagination?.setPage(pagination.currentPage - 1)} 
-                                className="w-14 h-14 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border)] rounded-[22px] disabled:opacity-20 hover:border-orange-500 transition-all active:scale-90 shadow-xl"
-                            >
-                                <ChevronLeft size={28} strokeWidth={3}/>
-                            </button>
-                        </Tooltip>
-
-                        <div className="px-10 py-4 bg-orange-500 text-white rounded-[24px] text-[13px] font-black uppercase tracking-[4px] shadow-2xl shadow-orange-500/30">
-                            {toBn(pagination?.currentPage, language)} <span className="opacity-40 mx-1">/</span> {toBn(pagination?.totalPages, language)}
-                        </div>
-
-                        <Tooltip text={t('tt_next_page')} position="bottom">
-                            <button 
-                                disabled={pagination?.currentPage === pagination?.totalPages} 
-                                onClick={() => pagination?.setPage(pagination.currentPage + 1)} 
-                                className="w-14 h-14 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border)] rounded-[22px] disabled:opacity-20 hover:border-orange-500 transition-all active:scale-90 shadow-xl"
-                            >
-                                <ChevronRight size={28} strokeWidth={3}/>
-                            </button>
-                        </Tooltip>
-                    </div>
+                    {/* 🎯 APPLE NATIVE PAGINATION */}
+                    <Pagination 
+                        currentPage={entryPagination?.currentPage || 1}
+                        totalPages={entryPagination?.totalPages || 1}
+                        onPageChange={setEntryPage}
+                        itemsPerPage={window.innerWidth < 768 ? 16 : 15}
+                    />
                 </div>
             </div>
         </motion.div>

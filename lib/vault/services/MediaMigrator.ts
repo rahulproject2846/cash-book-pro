@@ -104,11 +104,11 @@ export class MediaMigrator {
       const legacyBooks = await db.books
         .where('image')
         .notEqual(null)
-        .and((book: BookRecord) => 
-          book.image && 
-          !book.image.startsWith('cid_') && 
-          book.image.startsWith('data:image/')
-        )
+        .and((book: BookRecord) => {
+          return book.image && 
+                 !book.image.startsWith('cid_') && 
+                 book.image.startsWith('data:image/');
+        })
         .toArray();
       
       // Found ${legacyBooks.length} books with legacy Base64

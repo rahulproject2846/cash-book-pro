@@ -76,11 +76,19 @@ export const sanitizeContent = (text: string): string => {
  */
 export const validateCompleteness = (
     record: any, 
-    type: 'book' | 'entry'
+    type: 'book' | 'entry' | 'user'
 ): { isValid: boolean; missingFields: string[] } => {
     const missingFields: string[] = [];
     
-    if (type === 'entry') {
+    if (type === 'user') {
+        // User mandatory fields
+        if (!record.username || record.username === '') {
+            missingFields.push('username');
+        }
+        if (!record.email || record.email === '') {
+            missingFields.push('email');
+        }
+    } else if (type === 'entry') {
         // Entry mandatory fields
         if (!record.amount || record.amount === 0) {
             missingFields.push('amount (must be > 0)');
@@ -127,6 +135,73 @@ const sanitizeId = (id: any): string => {
 };
 
 // --- ৩. মাস্টার রেকর্ড নরমলাইজার (EXPORT) ---
+
+/**
+ * 🧑 USER NORMALIZER - Dedicated user profile processing
+ * Separates user normalization from entry/book validation
+ */
+export const normalizeUser = (user: any, currentUserId?: string): any => {
+    if (!user || typeof user !== 'object') return null;
+
+    const normalized = { ...user };
+
+    // ১. আইডি প্রোটেকশন (যদি _id এবং userId দুটোই না থাকে তবে ডাটা বাদ)
+    if (!normalized._id) {
+        console.warn("🚫 [USER NORMALIZER] Invalid user record - missing _id:", user);
+        return null;
+    }
+
+    // ২. আইডি ইউনিফিকেশন
+    normalized._id = sanitizeId(normalized._id);
+    normalized.userId = sanitizeId(currentUserId);
+
+    // ৩. টাইমস্ট্যাম্প ইউনিফিকেশন
+    normalized.updatedAt = normalizeTimestamp(normalized.updatedAt);
+
+    // 🛡️ XSS SANITIZATION: Clean user string fields
+    if (normalized.username) {
+        normalized.username = sanitizeContent(normalized.username);
+    }
+    if (normalized.email) {
+        normalized.email = sanitizeContent(normalized.email);
+    }
+
+    // 🔐 LICENSE & SECURITY FIELDS (V6.2 Compatibility)
+    if (normalized.plan !== undefined) {
+        normalized.plan = String(normalized.plan).toLowerCase();
+    }
+    if (normalized.riskScore !== undefined) {
+        normalized.riskScore = Number(normalized.riskScore);
+    }
+    if (normalized.offlineExpiry !== undefined) {
+        normalized.offlineExpiry = Number(normalized.offlineExpiry);
+    }
+
+    // Generate missing fields if needed
+    if (!normalized.updatedAt) {
+        normalized.updatedAt = getTimestamp();
+    }
+
+    // Ensure V6.2 security fields have defaults
+    if (normalized.plan === undefined) {
+        normalized.plan = 'free';
+    }
+    if (normalized.riskScore === undefined) {
+        normalized.riskScore = 0;
+    }
+    if (normalized.offlineExpiry === undefined) {
+        normalized.offlineExpiry = 0;
+    }
+    if (normalized.receiptId === undefined) {
+        normalized.receiptId = null;
+    }
+    if (normalized.licenseSignature === undefined) {
+        normalized.licenseSignature = null;
+    }
+
+    console.log('🧑 [USER NORMALIZER] User record processed successfully');
+    return normalized;
+};
 
 /**
  * ডাটাবেজে ঢোকার আগে রেকর্ডকে সলিড ফরমেটে নিয়ে আসে।
@@ -177,11 +252,13 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     normalized.userId = sanitizeId(normalized.userId);
     normalized.bookId = sanitizeId(normalized.bookId);
 
-    // 🔍 RECORD TYPE DETECTION: Books have name field, Entries have title field
+    // 🔍 RECORD TYPE DETECTION: User, Book, or Entry
+    const isUser = !!normalized.username && !!normalized.email; // User has username and email
     const isBook = !!normalized.name; // Books use name, Entries use title
+    const isEntry = !!normalized.title; // Entries have title field
 
     // 🔴 ORPHAN RESCUE: Rescue entries with missing bookId instead of rejecting
-    if (!isBook && (!normalized.bookId || normalized.bookId === 'undefined' || normalized.bookId === '')) {
+    if (isEntry && (!normalized.bookId || normalized.bookId === 'undefined' || normalized.bookId === '')) {
         console.warn(`⚠️ [ORPHAN RESCUE] Assigning fallback ID to entry CID: ${normalized.cid} - Missing bookId`);
         normalized.bookId = data.bookId || 'orphaned-data';
     }
@@ -196,8 +273,8 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
         normalized.checksum = `checksum_${normalized.cid}_${getTimestamp()}`;
     }
 
-    // ৩. লেগাসি রেসকিউ (CID & UserID)
-    if (!normalized.cid || String(normalized.cid).trim() === '') {
+    // ৩. লেগাসি রেসকিউ (CID & UserID) - Only for entries, not users
+    if (!isUser && (!normalized.cid || String(normalized.cid).trim() === '')) {
         normalized.cid = `cid_legacy_${normalized._id}`;
     }
 
@@ -221,7 +298,15 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     if (normalized.via && !normalized.paymentMethod) normalized.paymentMethod = normalized.via;
     
     // ✅ COMPLETENESS VALIDATION: Check mandatory fields before returning
-    const recordType = isBook ? 'book' : 'entry';
+    let recordType: 'book' | 'entry' | 'user';
+    if (isUser) {
+        recordType = 'user';
+    } else if (isBook) {
+        recordType = 'book';
+    } else {
+        recordType = 'entry';
+    }
+    
     const completeness = validateCompleteness(normalized, recordType);
     
     if (!completeness.isValid) {
@@ -266,6 +351,13 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     } else {
       // Default to unsynced for new local records
       normalized.synced = 0;
+    }
+    
+    // RULE: ENSURE syncAttempts IS ALWAYS A NUMBER
+    if (data.syncAttempts !== undefined) {
+      normalized.syncAttempts = isNaN(Number(data.syncAttempts)) ? 0 : Number(data.syncAttempts);
+    } else {
+      normalized.syncAttempts = 0; // Default for new records
     }
     
     // RULE: FORCE Boolean to Number conversion

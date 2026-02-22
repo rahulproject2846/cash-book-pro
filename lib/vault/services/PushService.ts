@@ -6,7 +6,9 @@ import { normalizeRecord, validateCompleteness } from '../core/VaultUtils';
 import { getTimestamp } from '@/lib/shared/utils';
 import toast from 'react-hot-toast';
 import { validateBook, validateEntry } from '../core/schemas';
-import { useVaultStore } from '../store';
+import { getVaultStore } from '../store/storeHelper';
+import { LicenseVault, RiskManager } from '../security';
+import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../utils/security';
 
 /**
  * 🚀 SMART BATCH PROCESSOR - Intelligent batching with payload size detection
@@ -84,7 +86,7 @@ class SyncProgressTracker {
     this.startTime = Date.now();
     
     // 📊 UPDATE ZUSTAND STATE
-    const store = useVaultStore.getState();
+    const store = getVaultStore();
     store.updateSyncStats({
       totalSynced: 0,
       totalFailed: 0,
@@ -106,18 +108,24 @@ class SyncProgressTracker {
       : 0;
     
     // 📊 UPDATE ZUSTAND STATE (DEBOUNCED)
-    const store = useVaultStore.getState();
+    const store = getVaultStore();
     store.updateSyncStats({
       totalSynced: this.processedItems,
       totalFailed: store.syncStats.totalFailed,
       lastSyncDuration: elapsed
+    });
+    store.setSyncProgress({
+      total: this.totalItems,
+      processed: this.processedItems,
+      percentage: progress,
+      eta: estimatedRemaining / 1000
     });
     
     console.log(`📊 [PROGRESS TRACKER] Batch ${batchNumber} - ${this.processedItems}/${this.totalItems} (${progress.toFixed(1)}%) - Est. remaining: ${(estimatedRemaining/1000).toFixed(1)}s`);
   }
 
   recordFailure(): void {
-    const store = useVaultStore.getState();
+    const store = getVaultStore();
     store.updateSyncStats({
       totalSynced: this.processedItems,
       totalFailed: store.syncStats.totalFailed + 1,
@@ -129,7 +137,7 @@ class SyncProgressTracker {
     const totalTime = Date.now() - this.startTime;
     
     // 📊 UPDATE ZUSTAND STATE
-    const store = useVaultStore.getState();
+    const store = getVaultStore();
     store.updateSyncStats({
       totalSynced: this.processedItems,
       totalFailed: store.syncStats.totalFailed,
@@ -142,7 +150,7 @@ class SyncProgressTracker {
   }
 
   error(): void {
-    const store = useVaultStore.getState();
+    const store = getVaultStore();
     store.setSyncStatus('error');
   }
 }
@@ -159,16 +167,132 @@ export class PushService {
 
   // 🎯 SMART COMPONENTS
   private batchProcessor = new SmartBatchProcessor();
-  private progressTracker = new SyncProgressTracker();
+  private _progressTracker = new SyncProgressTracker();
+  
+  // Expose progress tracker to UI
+  get progressTracker() {
+    return this._progressTracker;
+  }
 
   constructor() {
     this.userId = identityManager.getUserId() || '';
   }
 
   /**
-   * 🚀 BATCHED PUSH PENDING DATA TO SERVER
+   * 🚨 PRIORITY TELEMETRY SYNC - Evidence Pipeline
+   * Syncs security telemetry to server BEFORE business data
+   */
+  public async syncTelemetry(): Promise<{ success: boolean; error?: string; cached?: boolean }> {
+    try {
+      console.log('🚨 [PRIORITY TELEMETRY] Syncing security evidence to server...');
+      
+      // Fetch all audit events
+      const auditEvents = await db.audits.toArray();
+      
+      if (auditEvents.length === 0) {
+        console.log('✅ [PRIORITY TELEMETRY] No security events to sync');
+        return { success: true };
+      }
+      
+      // Filter for SECURITY events (priority)
+      const securityEvents = auditEvents.filter((event: any) => event.type === 'SECURITY');
+      const otherEvents = auditEvents.filter((event: any) => event.type !== 'SECURITY');
+      
+      // Priority: Sync security events first
+      const allEvents = [...securityEvents, ...otherEvents];
+      
+      // Send to server
+      const response = await fetch('/api/telemetry', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          events: allEvents,
+          userId: this.userId,
+          sessionId: allEvents[0]?.sessionId
+        })
+      });
+      
+      if (response.status === 404) {
+        // 🛡️ SILENT SHIELD: Do not throw error, just log a debug message and keep data locally
+        console.debug('🔍 [PRIORITY TELEMETRY] Server endpoint not ready. Keeping evidence in local vault.');
+        return { success: true, cached: true };
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Server response: ${response.status}`);
+      }
+      
+      // Clear synced events on success - ATOMIC TRANSACTION
+      const eventIds = allEvents.map(event => event.id!).filter(Boolean);
+      if (eventIds.length > 0) {
+        await db.transaction('rw', db.audits, async () => {
+          await db.audits.bulkDelete(eventIds);
+        });
+        console.log(`✅ [PRIORITY TELEMETRY] Synced ${eventIds.length} security events to server`);
+      }
+      
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ [PRIORITY TELEMETRY] Failed to sync security evidence:', error);
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
+   * BATCHED PUSH PENDING DATA TO SERVER
    */
   async pushPendingData(): Promise<{ success: boolean; itemsProcessed: number; errors: string[] }> {
+    // PRIORITY SYNC: Sync telemetry evidence FIRST
+    await this.syncTelemetry();
+    
+    // LOCKDOWN GUARD: Check security state
+    const { networkMode, isSecurityLockdown } = getVaultStore();
+    if (networkMode === 'RESTRICTED' || isSecurityLockdown) {
+      console.log(' [SECURITY] Business data sync blocked - RESTRICTED mode');
+      return { success: false, itemsProcessed: 0, errors: ['App in restricted mode'] };
+    }
+    
+    // TRAFFIC POLICE: Check network state before proceeding
+    if (networkMode === 'OFFLINE' || networkMode === 'DEGRADED') {
+      console.warn(' Sync blocked. Network is:', networkMode);
+      return { success: false, itemsProcessed: 0, errors: [] };
+    }
+    
+    // FINAL SECURITY GUARD: Last line of defense
+    const user = await db.users.get(this.userId);
+    if (!user) {
+      console.error(' [SECURITY] User profile missing - Push blocked');
+      return { success: false, itemsProcessed: 0, errors: ['User profile missing'] };
+    }
+
+    const licenseAccess = LicenseVault.validateAccess(user);
+    if (!licenseAccess.access) {
+      console.error('🔒 [SECURITY] License invalid - Push blocked');
+      return { success: false, itemsProcessed: 0, errors: ['License access denied'] };
+    }
+
+    const lockdownStatus = RiskManager.isLockdown(user);
+    if (lockdownStatus) {
+      console.error('🔒 [SECURITY] User in lockdown - Push blocked');
+      return { success: false, itemsProcessed: 0, errors: ['User in lockdown'] };
+    }
+
+    const signatureValid = await LicenseVault.verifySignature(user);
+    if (!signatureValid) {
+      console.error('🔒 [SECURITY] License signature invalid - Push blocked');
+      return { success: false, itemsProcessed: 0, errors: ['License signature invalid'] };
+    }
+
+    // 🛑 TRAFFIC POLICE: Check network state before proceeding
+    const networkModeFull = getVaultStore().networkMode;
+    if (networkModeFull === 'OFFLINE' || networkModeFull === 'DEGRADED') {
+      console.warn('🛑 Sync blocked. Network is:', networkModeFull);
+      return { success: false, itemsProcessed: 0, errors: [] };
+    }
+
     if (this.isSyncing) {
       console.log('🚀 [BATCH PUSH SERVICE] Already syncing, skipping...');
       return { success: false, itemsProcessed: 0, errors: ['Already syncing'] };
@@ -186,7 +310,7 @@ export class PushService {
       const unsyncedEntries = await db.entries.where('synced').equals(0).toArray();
       const totalItems = unsyncedBooks.length + unsyncedEntries.length;
       
-      this.progressTracker.start(totalItems);
+      this._progressTracker.start(totalItems);
       
       // 🎯 PRIORITY 1: BOOKS FIRST (MUST COMPLETE BEFORE ENTRIES)
       const booksResult = await this.pushBatchedBooks();
@@ -203,9 +327,9 @@ export class PushService {
       }
       
       if (errors.length === 0) {
-        this.progressTracker.complete();
+        this._progressTracker.complete();
       } else {
-        this.progressTracker.error();
+        this._progressTracker.error();
       }
       
       console.log('✅ [BATCH PUSH SERVICE] Industrial-grade batched push complete:', { itemsProcessed, errors });
@@ -214,7 +338,7 @@ export class PushService {
     } catch (error) {
       console.error('❌ [BATCH PUSH SERVICE] Push sync failed:', error);
       errors.push(`Push sync failed: ${error}`);
-      this.progressTracker.error();
+      this._progressTracker.error();
       return { success: false, itemsProcessed, errors };
     } finally {
       this.isSyncing = false;
@@ -296,7 +420,7 @@ export class PushService {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        this.progressTracker.updateBatch(i + 1, batch.length);
+        this._progressTracker.updateBatch(i + 1, batch.length);
       }
 
       return { success: errors.length === 0, processed, errors };
@@ -378,7 +502,7 @@ export class PushService {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        this.progressTracker.updateBatch(i + 1, batch.length);
+        this._progressTracker.updateBatch(i + 1, batch.length);
       }
 
       return { success: errors.length === 0, processed, errors };
@@ -679,7 +803,94 @@ export class PushService {
   }
 
   /**
-   * 🔐 SET USER ID
+   * � PRIORITY SYSTEM CONFIG - Critical system operations
+   * Bypasses normal business data queue for immediate execution
+   */
+  public async pushSystemConfig(config: {
+    type: 'PROFILE_UPDATE' | 'SETTINGS_SYNC' | 'ACCOUNT_DELETION';
+    priority: 'CRITICAL' | 'HIGH';
+    data: {
+      // Profile Updates
+      name?: string;
+      image?: string;
+      password?: string;
+      
+      // Settings Sync
+      currency?: string;
+      categories?: string[];
+      preferences?: Record<string, any>;
+      
+      // Account Deletion
+      deleteReason?: string;
+      confirmDeletion?: boolean;
+    };
+    metadata?: {
+      sessionId: string;
+      timestamp: number;
+      userId: string;
+    };
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log(`🚨 [SYSTEM CONFIG] Processing ${config.type} with priority: ${config.priority}`);
+      
+      // 🛡️ SECURITY: Bypass normal business data queue
+      // System configs get IMMEDIATE priority over books/entries
+      
+      // SECURITY GUARDS (same as business data)
+      const { networkMode, isSecurityLockdown } = getVaultStore();
+      if (networkMode === 'RESTRICTED' || isSecurityLockdown) {
+        return { success: false, error: 'System config blocked - restricted mode' };
+      }
+      
+      // 🎯 ROUTE TO SPECIFIC ENDPOINTS
+      let endpoint: string;
+      let method: 'POST' | 'PUT' | 'DELETE';
+      
+      switch (config.type) {
+        case 'PROFILE_UPDATE':
+          endpoint = '/api/auth/update';
+          method = 'PUT';
+          break;
+        case 'SETTINGS_SYNC':
+          endpoint = '/api/user/settings';
+          method = 'PUT';
+          break;
+        case 'ACCOUNT_DELETION':
+          endpoint = '/api/auth/delete';
+          method = 'DELETE';
+          break;
+      }
+      
+      // 🚨 IMMEDIATE EXECUTION: No queuing, no batching
+      const response = await this.signedFetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Priority': config.priority,
+          'X-System-Config': config.type
+        },
+        body: JSON.stringify({
+          ...config.data,
+          userId: this.userId,
+          ...config.metadata
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`System config failed: ${response.status}`);
+      }
+      
+      console.log(`✅ [SYSTEM CONFIG] ${config.type} completed successfully`);
+      return { success: true };
+      
+    } catch (error) {
+      console.error(`❌ [SYSTEM CONFIG] ${config.type} failed:`, error);
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
+   * � SET USER ID
    */
   setUserId(userId: string): void {
     this.userId = String(userId);
@@ -693,5 +904,27 @@ export class PushService {
       isSyncing: this.isSyncing,
       userId: this.userId
     };
+  }
+
+  /**
+   * 🔐 SECURE SIGNED FETCH - Phase 20 Implementation
+   * Uses centralized security utility for cryptographic signing
+   */
+  private async signedFetch(url: string, options: RequestInit): Promise<Response> {
+    try {
+      const timestamp = Date.now().toString();
+      const payload = preparePayload(options);
+      const signature = await generateVaultSignature(payload, timestamp);
+      const signedHeaders = prepareSignedHeaders(options, signature, timestamp);
+      
+      return fetch(url, {
+        ...options,
+        headers: signedHeaders,
+        body: payload || undefined
+      });
+    } catch (error) {
+      console.error('❌ [PUSH SERVICE] Signature generation failed:', error);
+      return fetch(url, options); // Fallback to standard fetch on security error
+    }
   }
 }

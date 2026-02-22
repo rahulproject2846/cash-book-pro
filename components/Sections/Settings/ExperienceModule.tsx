@@ -14,10 +14,16 @@ export const ExperienceModule = ({ preferences, updatePreference }: any) => {
 
     const ToggleItem = ({ active, onClick, icon: Icon, label, ttKey, colorClass }: any) => (
         <Tooltip text={preferences.showTooltips !== false ? t(ttKey) : ""}>
-            <div className={cn(
-                "group flex items-center justify-between p-4 bg-[var(--bg-app)]/40 backdrop-blur-sm rounded-[24px] border border-[var(--border)] transition-all duration-500 hover:border-orange-500/30 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)]",
-                active && "border-orange-500/20 bg-orange-500/[0.03]"
-            )}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                whileTap={{ scale: 0.97 }}
+                className={cn(
+                    "group flex items-center justify-between p-4 apple-card rounded-[32px] border border-[var(--border)] transition-all duration-500 hover:border-orange-500/30 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)]",
+                    active && "border-orange-500/20 bg-orange-500/[0.03]"
+                )}
+            >
                 <div className="flex items-center gap-3.5">
                     <div className={cn(
                         "w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-inner border border-transparent",
@@ -26,12 +32,12 @@ export const ExperienceModule = ({ preferences, updatePreference }: any) => {
                         <Icon size={19} strokeWidth={active ? 2.5 : 2} />
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase text-[var(--text-main)] tracking-[1.5px] leading-tight">
+                        <span className="text-[10px] font-medium text-[var(--text-main)] leading-tight">
                             {label}
                         </span>
                         <div className="flex items-center gap-1.5 mt-1.5">
                             <div className={cn("w-1 h-1 rounded-full animate-pulse", active ? "bg-green-500" : "bg-zinc-600")} />
-                            <span className="text-[7px] font-black text-[var(--text-muted)] uppercase tracking-[1.2px] opacity-50">
+                            <span className="text-[7px] font-medium text-[var(--text-muted)] opacity-50">
                                 {active ? 'Protocol Active' : 'Standby Mode'}
                             </span>
                         </div>
@@ -51,13 +57,13 @@ export const ExperienceModule = ({ preferences, updatePreference }: any) => {
                         className="w-4 h-4 bg-white rounded-full shadow-xl"
                     />
                 </button>
-            </div>
+            </motion.div>
         </Tooltip>
     );
 
     return (
         <div className={cn(
-            "relative bg-[var(--bg-card)] rounded-[48px] border border-[var(--border)]",
+            "relative apple-card apple-glass rounded-[40px] border border-[var(--border)]",
             "p-8 md:p-12 overflow-hidden shadow-2xl transition-all duration-700 group/module"
         )}>
             {/* 🌌 High-Tech Background Decor */}
@@ -72,12 +78,12 @@ export const ExperienceModule = ({ preferences, updatePreference }: any) => {
                     <Zap size={26} strokeWidth={2.5} className="animate-pulse" />
                 </div>
                 <div>
-                    <h4 className="text-lg font-black text-[var(--text-main)] uppercase tracking-[4px] italic leading-none">
+                    <h4 className="text-lg font-medium text-[var(--text-main)] leading-none">
                         {t('interface_engine') || "INTERFACE ENGINE"}
                     </h4>
                     <div className="flex items-center gap-2 mt-2.5">
                         <span className="h-[1px] w-6 bg-purple-500/40" />
-                        <p className="text-[9px] font-black text-purple-500/70 uppercase tracking-[2px]">Core Optimization Protocol</p>
+                        <p className="text-[9px] font-medium text-purple-500/70">Core Optimization Protocol</p>
                     </div>
                 </div>
             </div>

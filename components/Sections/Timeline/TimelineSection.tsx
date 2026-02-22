@@ -10,10 +10,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { HubHeader } from '@/components/Layout/HubHeader';
-import { EliteDropdown } from '@/components/UI/EliteDropdown';
 import { StatsGrid } from '@/components/UI/StatsGrid';
 import { useModal } from '@/context/ModalContext';
-import { useVaultStore } from '@/lib/vault/store';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { cn, toBn } from '@/lib/utils/helpers';
 
 // Unified UI Components
@@ -23,7 +22,7 @@ import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
 export const TimelineSection = ({ currentUser }: any) => {
     const { t, language } = useTranslation();
     const { openModal, closeModal } = useModal();
-    const { saveEntry, deleteEntry, toggleEntryStatus } = useVaultStore();
+    const { saveEntry, deleteEntry, toggleEntryStatus } = getVaultStore();
 
     // ১. রিঅ্যাক্টিভ ডাটা ইঞ্জিন (LiveQuery: অটো-আপডেট এনসিওর করে)
     const entries = useLiveQuery(
@@ -148,22 +147,6 @@ export const TimelineSection = ({ currentUser }: any) => {
                 searchQuery={searchQuery}
                 onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
             >
-                <div className="flex items-center gap-3">
-                    <EliteDropdown 
-                        label={t('sort_by')}
-                        current={sortOption}
-                        options={['date', 'amount', 'title']}
-                        onChange={setSortOption}
-                        icon={ArrowDownUp}
-                    />
-                    <EliteDropdown 
-                        label={t('filter_type')}
-                        current={filterType}
-                        options={['all', 'income', 'expense']}
-                        onChange={setFilterType}
-                        icon={Filter}
-                    />
-                </div>
             </HubHeader>
 
             <div className={cn(

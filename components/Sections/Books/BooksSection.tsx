@@ -13,7 +13,6 @@ import toast from 'react-hot-toast';
 // Global Engine Hooks & Components
 import { useModal } from '@/context/ModalContext';
 import { useTranslation } from '@/hooks/useTranslation';
-import { SortDropdown } from '@/components/UI/SortDropdown';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { HubHeader } from '@/components/Layout/HubHeader';
 import { cn, toBn } from '@/lib/utils/helpers';
@@ -24,7 +23,8 @@ import { BooksList } from './BooksList';
 import ConflictManagementList from '@/components/UI/ConflictManagementList'; 
 
 // Core Logic Engine
-import { useVaultStore } from '@/lib/vault/store/index'; 
+import { getVaultStore } from '@/lib/vault/store/storeHelper'; 
+import { useVaultStore } from '@/lib/vault/store';
 import { identityManager } from '@/lib/vault/core/IdentityManager'; 
 
 /**
@@ -34,8 +34,7 @@ import { identityManager } from '@/lib/vault/core/IdentityManager';
  * 🚀 Performance Optimized with React.memo and useMemo
  */
 const BooksSection = memo(({ 
-    currentUser, onGlobalSaveBook ,
-    onSaveEntry, onDeleteEntry
+    currentUser
 }: any) => {
     
     // 🎯 ALL HOOKS AT THE TOP - NO CONDITIONALS BEFORE HOOKS
@@ -47,19 +46,27 @@ const BooksSection = memo(({
     const [detailsPage, setDetailsPage] = useState(1);
     const [showConflictList, setShowConflictList] = useState(false); 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const lastRefreshedUserRef = useRef<string | null>(null);
+    const refreshLock = useRef(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const bootStatus = useVaultStore((s) => s.bootStatus);
     
     // 🎯 GET ACTIVE BOOK FROM ZUSTAND STORE
-    const { activeBook, setActiveBook } = useVaultStore();
+    const { activeBook, setActiveBook } = getVaultStore();
     
     // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন (Direct Connection to Zustand Store)
     const {
         books, globalStats, isLoading,
-        saveEntry, deleteEntry, toggleEntryStatus, togglePin, 
+        saveBook, saveEntry, deleteEntry, toggleEntryStatus, togglePin, 
         conflictedCount,    // CONFLICT TRACKING: Total conflicted items count
         hasConflicts,       // CONFLICT TRACKING: Boolean flag for any conflicts
         searchQuery, sortOption, filteredBooks, setSearchQuery, setSortOption, 
         isLoading: isStoreLoading, entries, allEntries
-    } = useVaultStore();
+    } = getVaultStore();
 
     // ৪. UNSYNCED COUNT QUERY
     const unsyncedCount = useLiveQuery(
@@ -84,31 +91,56 @@ const BooksSection = memo(({
 
     const getBookBalance = useCallback((id: any) => {
         // Calculate balance from Zustand store
-        const { getBookBalance } = useVaultStore.getState();
+        const { getBookBalance } = getVaultStore();
         return getBookBalance(String(id));
     }, []);
     
-    // 🚀 IDENTITY & STORE TRIGGER
+    // 🚀 IDENTITY & STORE TRIGGER - ATOMIC LOCK GUARD
     useEffect(() => {
+        console.log('🔄 [BOOKS SECTION] Current State:', { booksCount: books.length, isLoading, isRefreshing: getVaultStore().isRefreshing });
         const userId = currentUser?._id || identityManager.getUserId();
-        if (userId && mounted) {
-            console.log('🚀 [BOOKS SECTION] Triggering store refresh for user:', userId);
-            useVaultStore.getState().refreshData();
-        }
-    }, [currentUser?._id, mounted]);
+        if (!userId || !mounted || refreshLock.current) return;
+
+        console.log('🚀 [BOOKS SECTION] Atomic Trigger: One-time refresh for user:', userId);
+        refreshLock.current = true; // Lock it immediately
+        
+        getVaultStore().refreshData().finally(() => {
+            // Unlock after delay to prevent rapid re-triggers
+            setTimeout(() => { refreshLock.current = false; }, 5000);
+        });
+    }, [currentUser?._id, mounted]); // ONLY these two dependencies
     
     // 🎯 SYNC ACTIVE BOOK WITH STORE
     useEffect(() => {
         if (activeBook) {
             console.log('🎯 [BOOKS SECTION] Setting active book in store:', activeBook._id || activeBook.localId);
-            useVaultStore.getState().setActiveBook(activeBook);
+            getVaultStore().setActiveBook(activeBook);
         }
     }, [activeBook]);
     
-    // 🎯 MOUNT EFFECT
+    // 🎯 SCROLL RESTORATION EFFECT
     useEffect(() => {
-        setMounted(true);
-    }, []);
+        const { lastScrollPosition } = getVaultStore();
+        if (lastScrollPosition > 0 && mounted) {
+            // Use a double requestAnimationFrame to ensure the grid has rendered
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const scrollEl = document.querySelector('main');
+                    if (scrollEl) {
+                        scrollEl.scrollTo({ top: lastScrollPosition, behavior: 'auto' });
+                        console.log('⚓ [SCROLL] Restored to:', lastScrollPosition);
+                        getVaultStore().setLastScrollPosition(0); // Clear after restore
+                    }
+                });
+            });
+        }
+    }, [mounted]); // Only run when activeBook changes
+
+    useEffect(() => {
+        if (bootStatus === 'READY') {
+            setShowConflictList(false);
+        }
+    }, [bootStatus]);
     
     // 🎯 CALCULATIONS AFTER ALL HOOKS
     const combinedLoading = isLoading || isStoreLoading;
@@ -135,11 +167,6 @@ const BooksSection = memo(({
                             searchQuery={searchQuery}
                             onSearchChange={setSearchQuery}
                         >
-                            <SortDropdown 
-                                current={sortOption} 
-                                options={[t('sort_activity'), t('sort_name'), t('sort_balance_high'), t('sort_balance_low')]} 
-                                onChange={setSortOption} 
-                            />
                             <Tooltip text={t('tt_import_ledger') || "Import Registry Backup"}>
                                 <button onClick={handleImportClick} className="h-11 w-11 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border)] rounded-[20px] text-[var(--text-muted)] hover:text-green-500 transition-all active:scale-90 shadow-sm outline-none">
                                     <FileUp size={20} />
@@ -254,43 +281,46 @@ const BooksSection = memo(({
                         )}
                     </AnimatePresence>
 
-                    {/* --- BOOKS LIST VIEW --- */}
-                    {!activeBook && (
-                        <BooksList 
-                            onAddClick={() => openModal('addBook', { onSubmit: onGlobalSaveBook, currentUser })}
-                            onBookClick={(b: any) => { setActiveBook(b); setDetailsPage(1); }} 
-                            onQuickAdd={(b: any) => { 
-                                setActiveBook(b); 
-                                setTimeout(() => openModal('addEntry', { currentUser, currentBook: b, onSubmit: onSaveEntry }), 300); 
-                            }}
-                            getBookBalance={getBookBalance}
-                            currencySymbol={getCurrencySymbol()}
-                        />
-                    )}
-
-                    {/* --- BOOK DETAILS VIEW --- */}
-                    {activeBook && (
-                        <motion.div key="details" initial={{ opacity: 0, scale: 0.98, x: 30 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: 30 }} transition={{ type: "spring", damping: 30, stiffness: 350 }}>
-                            <BookDetails 
-                                currentBook={activeBook} 
-                                items={entries} 
-                                stats={globalStats} 
-                                currentUser={currentUser} 
-                                onBack={() => setActiveBook(null)}
-                                onAdd={() => openModal('addEntry', { currentUser, currentBook: activeBook, onSubmit: onSaveEntry })}
-                                onEdit={(e: any) => openModal('addEntry', { entry: e, currentBook: activeBook, currentUser, onSubmit: onSaveEntry })}
-                                onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => onDeleteEntry(e) })}
-                                onToggleStatus={toggleEntryStatus}
-                                
-                                // 🔥 পিন ফাংশন পাস করা হলো (এন্ট্রির জন্য)
-                                onTogglePin={togglePin}
-
-                                searchQuery={detailsSearchQuery} 
-                                setSearchQuery={setDetailsSearchQuery}
-                                pagination={{ currentPage: detailsPage, totalPages: Math.ceil(entries.length / 10) || 1, setPage: setDetailsPage }}
-                            />
-                        </motion.div>
-                    )}
+                    {/* --- BOOKS LIST & DETAILS VIEW WITH MORPHIC TRANSITIONS --- */}
+                    <AnimatePresence mode="popLayout">
+                        {!activeBook ? (
+                            <motion.div key="list-view" layoutId="main-container">
+                                <BooksList 
+                                    onAddClick={() => openModal('addBook', { onSubmit: (data: any) => saveBook(data), currentUser })}
+                                    onBookClick={(b: any) => { setActiveBook(b); setDetailsPage(1); }} 
+                                    onQuickAdd={(b: any) => { 
+                                        setActiveBook(b); 
+                                        setTimeout(() => openModal('addEntry', { currentUser, currentBook: b, onSubmit: (data: any) => saveEntry(data) }), 300); 
+                                    }}
+                                    getBookBalance={getBookBalance}
+                                    currencySymbol={getCurrencySymbol()}
+                                />
+                            </motion.div>
+                        ) : (
+                            <motion.div 
+                                key="details-view" 
+                                layoutId="main-container"
+                                initial={{ opacity: 0, scale: 0.98, x: 30 }} 
+                                animate={{ opacity: 1, scale: 1, x: 0 }} 
+                                exit={{ opacity: 0, x: 30 }} 
+                                transition={{ type: "spring", damping: 30, stiffness: 350 }}
+                            >
+                                <BookDetails 
+                                    currentBook={activeBook} 
+                                    bookStats={globalStats} 
+                                    currentUser={currentUser} 
+                                    onBack={() => getVaultStore().setActiveBook(null)}
+                                    onAdd={() => openModal('addEntry', { currentUser, currentBook: activeBook, onSubmit: (data: any) => saveEntry(data) })}
+                                    onEdit={(e: any) => openModal('addEntry', { entry: e, currentBook: activeBook, currentUser, onSubmit: (data: any) => saveEntry(data) })}
+                                    onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => deleteEntry(e) })}
+                                    onToggleStatus={toggleEntryStatus}
+                                    
+                                    // 🔥 পিন ফাংশন পাস করা হলো (এন্ট্রির জন্য)
+                                    onTogglePin={togglePin}
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" />
                 </>

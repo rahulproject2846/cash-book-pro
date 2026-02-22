@@ -5,6 +5,7 @@ import { identityManager } from '../core/IdentityManager';
 import { validateCompleteness } from '../core/VaultUtils';
 import { getTimestamp } from '@/lib/shared/utils';
 import { telemetry } from '../Telemetry';
+import { mediaGarbageCollector } from './MediaStoreUtils';
 
 /**
  * 🧹 MAINTENANCE SERVICE - Housekeeper for Dexie and MongoDB cleanup
@@ -87,6 +88,11 @@ export class MaintenanceService {
       console.log('📡 [MAINTENANCE SERVICE] Step 4: Signaling server cleanup...');
       result.serverCleanupTriggered = await this.signalServerCleanup(userId);
 
+      // 🧹 STEP 5: Media garbage collection
+      console.log('🧹 [MAINTENANCE SERVICE] Step 5: Running media garbage collection...');
+      const mediaCleanupResult = await mediaGarbageCollector.runFullCleanup();
+      console.log(`🧹 [MAINTENANCE SERVICE] Media cleanup: ${mediaCleanupResult.totalCleaned} blobs freed, ${(mediaCleanupResult.totalFreedSpace / 1024 / 1024).toFixed(2)}MB recovered`);
+
       result.success = true;
       result.duration = Date.now() - startTime;
 
@@ -151,24 +157,54 @@ export class MaintenanceService {
         return 0;
       }
 
-      // Delete old logs in batches
-      let deletedCount = 0;
+      // Get old logs before deletion
       const oldLogs = await db.auditLogs
         .where('userId')
         .equals(userId)
         .and((log: any) => log.timestamp < sixtyDaysAgo)
         .toArray();
+      
+      // 🧹 STORAGE LEAK FIX: Find and delete orphaned mediaStore blobs
+      const logIds = oldLogs.map((log: any) => log.localId!);
+      let orphanedMediaDeleted = 0;
+      
+      if (db.mediaStore && logIds.length > 0) {
+        try {
+          // Find mediaStore records that reference these audit logs
+          const orphanedMedia = await db.mediaStore
+            .where('parentId')
+            .anyOf(logIds.map((id: number) => String(id)))
+            .and((media: any) => media.parentType === 'audit')
+            .toArray();
+          
+          if (orphanedMedia.length > 0) {
+            console.log(`🧹 [MAINTENANCE SERVICE] Found ${orphanedMedia.length} orphaned media blobs to cleanup`);
+            
+            // Delete orphaned media blobs first
+            await db.mediaStore.bulkDelete(orphanedMedia.map((media: any) => media.localId!));
+            orphanedMediaDeleted = orphanedMedia.length;
+            
+            console.log(`🧹 [MAINTENANCE SERVICE] Deleted ${orphanedMediaDeleted} orphaned media blobs`);
+          }
+        } catch (mediaError) {
+          console.warn('⚠️ [MAINTENANCE SERVICE] Media cleanup failed:', mediaError);
+        }
+      }
 
+      // Delete old logs in batches - ATOMIC TRANSACTION
+      let deletedCount = 0;
       for (let i = 0; i < oldLogs.length; i += this.METADATA_CLEANUP_BATCH_SIZE) {
         const batch = oldLogs.slice(i, i + this.METADATA_CLEANUP_BATCH_SIZE);
-        await db.auditLogs.bulkDelete(batch.map((log: any) => log.localId!));
+        await db.transaction('rw', db.auditLogs, async () => {
+          await db.auditLogs.bulkDelete(batch.map((log: any) => log.localId!));
+        });
         deletedCount += batch.length;
         
         console.log(`[MAINTENANCE SERVICE] Deleted audit log batch ${Math.floor(i / this.METADATA_CLEANUP_BATCH_SIZE) + 1}, total: ${deletedCount}`);
       }
 
       console.log(`[MAINTENANCE SERVICE] Cleaned ${deletedCount} old audit logs`);
-      console.log(`🧹 [MAINTENANCE SERVICE] Cleaned ${deletedCount} old audit logs`);
+      console.log(`🧹 [MAINTENANCE SERVICE] Cleaned ${deletedCount} old audit logs and ${orphanedMediaDeleted} orphaned media blobs`);
       return deletedCount;
 
     } catch (error) {
@@ -184,34 +220,38 @@ export class MaintenanceService {
     try {
       let cleanedCount = 0;
 
-      // Clean books metadata
+      // Update books metadata - ATOMIC TRANSACTION
       const syncedBooks = await db.books
         .where('userId')
         .equals(userId)
         .and((book: any) => book.synced === 1 && (book.syncAttempts > 0 || book.lastAttempt))
         .toArray();
-
+      
       if (syncedBooks.length > 0) {
-        await db.books.bulkUpdate(syncedBooks.map((book: any) => ({
-          key: book.localId!,
-          changes: { syncAttempts: 0, lastAttempt: null }
-        })));
+        await db.transaction('rw', db.books, async () => {
+          await db.books.bulkUpdate(syncedBooks.map((book: any) => ({
+            key: book.localId!,
+            changes: { syncAttempts: 0, lastAttempt: null }
+          })));
+        });
         cleanedCount += syncedBooks.length;
         console.log(`[MAINTENANCE SERVICE] Cleaned metadata for ${syncedBooks.length} synced books`);
       }
 
-      // Clean entries metadata
+      // Clean entries metadata - ATOMIC TRANSACTION
       const syncedEntries = await db.entries
         .where('userId')
         .equals(userId)
         .and((entry: any) => entry.synced === 1 && (entry.syncAttempts > 0 || entry.lastAttempt))
         .toArray();
-
+      
       if (syncedEntries.length > 0) {
-        await db.entries.bulkUpdate(syncedEntries.map((entry: any) => ({
-          key: entry.localId!,
-          changes: { syncAttempts: 0, lastAttempt: null }
-        })));
+        await db.transaction('rw', db.entries, async () => {
+          await db.entries.bulkUpdate(syncedEntries.map((entry: any) => ({
+            key: entry.localId!,
+            changes: { syncAttempts: 0, lastAttempt: null }
+          })));
+        });
         cleanedCount += syncedEntries.length;
         console.log(`[MAINTENANCE SERVICE] Cleaned metadata for ${syncedEntries.length} synced entries`);
       }
@@ -350,8 +390,11 @@ export class MaintenanceService {
       if (response.ok) {
         console.log('✅ [MAINTENANCE SERVICE] Server cleanup triggered successfully');
         return true;
+      } else if (response.status === 404) {
+        console.debug('🔍 [MAINTENANCE SERVICE] Server cleanup endpoint not available, skipping...');
+        return false;
       } else {
-        console.warn('⚠️ [MAINTENANCE SERVICE] Server cleanup endpoint not available, skipping...');
+        console.warn('⚠️ [MAINTENANCE SERVICE] Server cleanup failed:', response.statusText);
         return false;
       }
 
@@ -433,16 +476,20 @@ export class MaintenanceService {
         };
       });
 
-      // Update books
+      // Update books - ATOMIC TRANSACTION
       const bookUpdates: any[] = updates.filter((u: any) => flaggedRecords.some((r: any) => r.cid === u.key && r.type === 'book'));
       if (bookUpdates.length > 0) {
-        await db.books.bulkUpdate(bookUpdates);
+        await db.transaction('rw', db.books, async () => {
+          await db.books.bulkUpdate(bookUpdates);
+        });
       }
-
-      // Update entries
+      
+      // Update entries - ATOMIC TRANSACTION
       const entryUpdates: any[] = updates.filter((u: any) => flaggedRecords.some((r: any) => r.cid === u.key && r.type === 'entry'));
       if (entryUpdates.length > 0) {
-        await db.entries.bulkUpdate(entryUpdates);
+        await db.transaction('rw', db.entries, async () => {
+          await db.entries.bulkUpdate(entryUpdates);
+        });
       }
 
     } catch (error) {

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "npx tsc --noEmit --project tsconfig.json --skipLibCheck",
+    "fix-syntax": "npx tsc --noEmit --project tsconfig.json --skipLibCheck"
   },
   "dependencies": {
     "@next/bundle-analyzer": "^16.1.6",

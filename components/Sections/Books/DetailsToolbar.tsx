@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowDownUp, Tag, X } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { EliteDropdown } from '@/components/UI/EliteDropdown'; // ✅ গ্লোবাল ইম্পোর্ট
+import { useVaultState } from '@/lib/vault/store/storeHelper';
+import { AppleMenu } from '@/components/UI/AppleMenu'; // ✅ UNIFIED APPLE MENU
 import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
 
 // --- 🛠️ Master Transition Config ---
@@ -13,12 +14,15 @@ const fastTransition = {
     duration: 0.3
 } as const;
 
-export const DetailsToolbar = ({ 
-    searchQuery, setSearchQuery, sortConfig, setSortConfig, 
-    categoryFilter, setCategoryFilter, userCategories 
-}: any) => {
+export const DetailsToolbar = () => {
     const { t } = useTranslation();
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
+    // AUTONOMOUS STORE ACCESS - NO PROPS
+    const {
+        entrySortConfig, entryCategoryFilter, entrySearchQuery,
+        setEntrySortConfig, setEntryCategoryFilter, setEntrySearchQuery
+    } = useVaultState();
 
     // ডাইনামিক প্যাডিং ফিক্স (Elite Spacing)
     const appPaddingX = 'px-[var(--app-padding,1.25rem)] md:px-[var(--app-padding,2.5rem)]';
@@ -46,9 +50,9 @@ export const DetailsToolbar = ({
                         </div>
                         <input 
                             onFocus={() => setIsSearchExpanded(true)}
-                            onBlur={() => { if (!searchQuery) setIsSearchExpanded(false); }}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onBlur={() => { if (!entrySearchQuery) setIsSearchExpanded(false); }}
+                            value={entrySearchQuery}
+                            onChange={(e) => setEntrySearchQuery(e.target.value)}
                             placeholder={t('search_placeholder') || "Search records..."}
                             className={cn(
                                 "w-full h-11 bg-[var(--bg-card)] border border-[var(--border)] rounded-[22px]",
@@ -58,12 +62,12 @@ export const DetailsToolbar = ({
                             )}
                         />
                         <AnimatePresence>
-                            {(isSearchExpanded || searchQuery) && (
+                            {(isSearchExpanded || entrySearchQuery) && (
                                 <motion.button 
                                     initial={{ opacity: 0, scale: 0.8 }} 
                                     animate={{ opacity: 1, scale: 1 }} 
                                     exit={{ opacity: 0, scale: 0.8 }}
-                                    onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }}
+                                    onClick={() => { setIsSearchExpanded(false); setEntrySearchQuery(''); }}
                                     className="absolute right-3 p-1.5 bg-[var(--bg-app)] border border-[var(--border)] rounded-full text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90"
                                 >
                                     <X size={14} strokeWidth={3} />
@@ -72,7 +76,7 @@ export const DetailsToolbar = ({
                         </AnimatePresence>
                     </motion.div>
 
-                    {/* --- ২. ফিল্টার বাটনসমূহ (Using EliteDropdown) --- */}
+                    {/* --- ২. ফিল্টার বাটনসমূহ (Using Unified AppleMenu) --- */}
                     <motion.div 
                         layout
                         transition={fastTransition}
@@ -81,23 +85,91 @@ export const DetailsToolbar = ({
                             isSearchExpanded && window.innerWidth < 768 ? 'hidden' : 'flex'
                         )}
                     >
-                        <EliteDropdown 
-                            label={t('sort_by')}
-                            current={sortConfig.key} 
-                            options={['createdAt', 'amount', 'title']} // ফিক্স: ডাটাবেজ ফিল্ড নেম ব্যবহার করা হলো
-                            onChange={(val: string) => setSortConfig({ key: val, direction: 'desc' })} 
-                            icon={ArrowDownUp}
-                            ttKey="tt_change_sort_order"
-                        />
+                        <AppleMenu
+                            trigger={
+                                <button 
+                                    className={cn(
+                                        "h-11 px-4 rounded-2xl bg-(--bg-card) border border-(--border)",
+                                        "flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all",
+                                        "active:scale-95 shadow-sm hover:border-orange-500/30 outline-none",
+                                        "text-(--text-main)"
+                                    )}
+                                >
+                                    <ArrowDownUp size={16} strokeWidth={2.5} className="text-(--text-muted) opacity-60" />
+                                    <span className="hidden lg:block truncate max-w-25">
+                                        {t('sort_by')}
+                                    </span>
+                                </button>
+                            }
+                            headerText="SORT BY"
+                            width="w-60"
+                        >
+                            {['createdAt', 'amount', 'title'].map((opt) => {
+                                const isSelected = entrySortConfig.key === opt;
+                                return (
+                                    <button
+                                        key={opt}
+                                        onClick={() => setEntrySortConfig({ key: opt, direction: 'desc' })}
+                                        className={cn(
+                                            "w-full flex items-center justify-between px-5 py-3.5 rounded-2xl transition-all mb-1 last:mb-0",
+                                            "text-[10px] font-black uppercase tracking-widest",
+                                            isSelected 
+                                                ? "text-orange-500 bg-orange-500/10 shadow-sm" 
+                                                : "text-(--text-muted) hover:bg-(--bg-app) hover:text-(--text-main)"
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {isSelected && <div className="w-1 h-1 rounded-full bg-orange-500 animate-pulse" />}
+                                            {opt === 'createdAt' ? 'Date' : opt === 'amount' ? 'Amount' : 'Title'}
+                                        </div>
+                                        {isSelected && <div className="w-2 h-2 rounded-full bg-orange-500" />}
+                                    </button>
+                                );
+                            })}
+                        </AppleMenu>
 
-                        <EliteDropdown 
-                            label={t('classification')}
-                            current={categoryFilter} 
-                            options={userCategories} 
-                            onChange={setCategoryFilter} 
-                            icon={Tag}
-                            ttKey="tt_filter_category"
-                        />
+                        <AppleMenu
+                            trigger={
+                                <button 
+                                    className={cn(
+                                        "h-11 px-4 rounded-2xl bg-(--bg-card) border border-(--border)",
+                                        "flex items-center gap-3 text-[10px] font-black uppercase tracking-widest transition-all",
+                                        "active:scale-95 shadow-sm hover:border-orange-500/30 outline-none",
+                                        "text-(--text-main)"
+                                    )}
+                                >
+                                    <Tag size={16} strokeWidth={2.5} className="text-(--text-muted) opacity-60" />
+                                    <span className="hidden lg:block truncate max-w-25">
+                                        {t('classification')}
+                                    </span>
+                                </button>
+                            }
+                            headerText="CLASSIFICATION"
+                            width="w-60"
+                        >
+                            {(['all', ...[]] as string[]).map((opt: string) => {
+                                const isSelected = entryCategoryFilter === opt;
+                                return (
+                                    <button
+                                        key={opt}
+                                        onClick={() => setEntryCategoryFilter(opt)}
+                                        className={cn(
+                                            "w-full flex items-center justify-between px-5 py-3.5 rounded-2xl transition-all mb-1 last:mb-0",
+                                            "text-[10px] font-black uppercase tracking-widest",
+                                            isSelected 
+                                                ? "text-orange-500 bg-orange-500/10 shadow-sm" 
+                                                : "text-(--text-muted) hover:bg-(--bg-app) hover:text-(--text-main)"
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {isSelected && <div className="w-1 h-1 rounded-full bg-orange-500 animate-pulse" />}
+                                            {opt}
+                                        </div>
+                                        {isSelected && <div className="w-2 h-2 rounded-full bg-orange-500" />}
+                                    </button>
+                                );
+                            })}
+                        </AppleMenu>
                     </motion.div>
 
                 </motion.div>

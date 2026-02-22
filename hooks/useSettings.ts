@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
+import { PushService } from '@/lib/vault/services/PushService';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 
 /**
  * VAULT PRO: SETTINGS ENGINE (V25.0 - TURBO OPTIMIZED)
@@ -66,26 +68,45 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
 
     useEffect(() => { calculateStorage(); }, [calculateStorage]);
 
-    // ৪. সলিড সিঙ্ক ইঞ্জিন (Debounced Sync for performance)
+    // ৪. সলিড সিঙ্ক ইঞ্জিন (Secure Sync Gateway)
     const performServerSync = useCallback(async (updatedUser: any) => {
         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
 
         syncTimeoutRef.current = setTimeout(async () => {
             try {
-                const res = await fetch('/api/user/settings', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        userId: updatedUser._id, 
-                        categories: updatedUser.categories, 
-                        currency: updatedUser.currency, 
-                        preferences: updatedUser.preferences 
-                    }),
+                // 🚀 SECURE GATEWAY: Use PushService instead of direct fetch
+                const pushService = new PushService();
+                const userId = currentUser._id || currentUser.userId || '';
+                
+                if (!userId) {
+                    console.warn("Settings Sync Failed: No user ID available");
+                    return;
+                }
+                
+                pushService.setUserId(userId);
+                
+                const result = await pushService.pushSystemConfig({
+                    type: 'SETTINGS_SYNC',
+                    data: {
+                        categories: updatedUser.categories,
+                        currency: updatedUser.currency,
+                        preferences: updatedUser.preferences
+                    },
+                    priority: 'HIGH',
+                    metadata: {
+                        timestamp: Date.now(),
+                        sessionId: 'settings_hook',
+                        userId: userId
+                    }
                 });
-                if (!res.ok) throw new Error("Sync failed");
-                console.log("📡 Settings: Cloud Registry Synchronized.");
+                
+                if (result.success) {
+                    console.log("📡 Settings: Cloud Registry Synchronized via secure gateway.");
+                } else {
+                    console.warn("Settings Sync Failed via secure gateway:", result.error);
+                }
             } catch (error) {
-                console.warn("Settings Sync Pending (Network/Server)");
+                console.warn("Settings Sync Pending (Network/Server)", error);
             }
         }, 1000);
     }, []);
@@ -110,7 +131,7 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
     };
 
     const addCategory = (tag: string) => {
-        const trimmed = tag.trim().toUpperCase();
+        const trimmed = tag.trim();
         if (!trimmed || categories.includes(trimmed)) return;
         masterUpdate({ categories: [...categories, trimmed] });
     };

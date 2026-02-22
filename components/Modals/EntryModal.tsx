@@ -1,584 +1,302 @@
 "use client";
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     CreditCard, Layers, Info, ArrowDownLeft, ArrowUpRight, 
-    Calendar, Clock, X, PlusCircle, Calculator, 
-    SlidersHorizontal, ChevronDown, CheckCircle2, AlertTriangle 
+    Calendar, Clock, X, Calculator, SlidersHorizontal, 
+    ChevronDown, CheckCircle2, AlertTriangle, TrendingUp 
 } from 'lucide-react';
 
 // Components & Utils
 import { OSInput, ModalEliteDropdown } from '@/components/UI/FormComponents';
 import Keypad from '@/components/UI/Keypad';
-import { cn, toBn } from '@/lib/utils/helpers';
+import { Tooltip } from '@/components/UI/Tooltip';
+import { SafeButton } from '@/components/UI/SafeButton';
+import { cn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useVaultStore } from '@/lib/vault/store';
+import { useVaultStore } from '@/lib/vault/store/index';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { db } from '@/lib/offlineDB';
 import { fixFinancialPrecision, convertBanglaToEnglish } from '@/lib/vault/core/VaultUtils';
+import { useLocalPreview } from '@/hooks/useLocalPreview';
+
+// --- 🎯 SPRING CONFIG ---
+const spring = { type: "spring" as const, damping: 30, stiffness: 400 };
 
 // --- 🧠 SMART MATH ENGINE ---
 const safeCalculate = (expression: string) => {
     try {
         const sanitized = expression.replace(/[^0-9+\-*/.]/g, '');
-        if (!sanitized) return 0;
-        return new Function('return ' + sanitized)();
+        return sanitized ? new Function('return ' + sanitized)() : 0;
     } catch { return 0; }
 };
 
-// --- 🕐 TIME FORMATTING HELPERS ---
-// Convert database time format ("08:05 pm") to HTML input format ("20:05")
-const dbToInputTime = (timeStr: string): string => {
-    if (!timeStr) return '';
+export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentBook }: any) => {
+    const { t } = useTranslation();
+    const { saveEntry } = useVaultStore();
+    const allEntries = getVaultStore().allEntries;
     
-    // If already in 24h format, return as-is
-    if (/^\d{1,2}:\d{2}$/.test(timeStr)) return timeStr;
-    
-    // Convert 12h format to 24h format
-    const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
-    if (!match) return timeStr;
-    
-    let [, hours, minutes, period] = match;
-    let hoursNum = parseInt(hours);
-    
-    if (period.toUpperCase() === 'PM' && hoursNum !== 12) {
-        hoursNum += 12;
-    } else if (period.toUpperCase() === 'AM' && hoursNum === 12) {
-        hoursNum = 0;
-    }
-    
-    return `${hoursNum.toString().padStart(2, '0')}:${minutes.padStart(2, '0')}`;
-};
-
-// Convert HTML input format ("20:05") to database format ("08:05 pm")
-const inputToDbTime = (timeStr: string): string => {
-    if (!timeStr) return '';
-    
-    // If already in 12h format, return as-is
-    if (/:\d{2}\s*(am|pm)/i.test(timeStr)) return timeStr.toLowerCase();
-    
-    // Convert 24h format to 12h format
-    const match = timeStr.match(/(\d{1,2}):(\d{2})/);
-    if (!match) return timeStr;
-    
-    let [, hours, minutes] = match;
-    let hoursNum = parseInt(hours);
-    
-    const period = hoursNum >= 12 ? 'pm' : 'am';
-    if (hoursNum > 12) hoursNum -= 12;
-    if (hoursNum === 0) hoursNum = 12;
-    
-    return `${hoursNum.toString().padStart(2, '0')}:${minutes} ${period}`;
-};
-
-export const EntryModal = ({ isOpen, onClose, onSubmit, initialData, currentUser, currentBook }: any) => {
-    const { t, language } = useTranslation();
-    const vaultStore = useVaultStore();
-    const allEntries = vaultStore.allEntries;
-    
-    // States
+    // Core States
     const [isExpanded, setIsExpanded] = useState(false);
     const [amountStr, setAmountStr] = useState('');
-    const [activeInput, setActiveInput] = useState<'in' | 'out'>('out');
-    const [isMobile, setIsMobile] = useState(false);
+    const [activeInput, setActiveInput] = useState<'income' | 'expense'>('expense');
     const [isLoading, setIsLoading] = useState(false);
     const [showKeypad, setShowKeypad] = useState(false);
-    const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-    const [duplicateWarningBlink, setDuplicateWarningBlink] = useState(false);
-
+    const [showDuplicate, setShowDuplicate] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
+    
     const [form, setForm] = useState({ 
         title: '', category: 'GENERAL', paymentMethod: 'CASH', 
-        note: '', status: 'completed', date: '', time: '' 
+        note: '', status: 'completed', date: '', time: '', isPinned: false
     });
 
-    const userCategories = currentUser?.categories || ['GENERAL', 'FOOD', 'TRANSPORT'];
-    const amountInputRef = useRef<HTMLInputElement>(null);
+    // Header Image Preview
+    const { previewUrl } = useLocalPreview(currentBook?.image);
 
-    // --- SMART SUGGESTIONS ENGINE ---
-    const smartSuggestions = useMemo(() => {
-        if (!currentUser || !allEntries.length) return { titles: [], categories: [] };
-        
-        // Get user's entries from the last 30 days
-        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-        const recentEntries = allEntries.filter((entry: any) => 
-            entry.createdAt > thirtyDaysAgo && 
-            entry.isDeleted === 0
-        );
-        
-        // Count frequency
-        const titleFrequency = new Map<string, number>();
-        const categoryFrequency = new Map<string, number>();
-        
-        recentEntries.forEach((entry: any) => {
-            if (entry.title) {
-                titleFrequency.set(entry.title, (titleFrequency.get(entry.title) || 0) + 1);
+    // --- 📊 AUTO-PILOT INITIALIZATION ---
+    useEffect(() => {
+        if (!isOpen) return;
+        const now = new Date();
+        const d = now.toISOString().split('T')[0];
+        const tt = now.toTimeString().slice(0, 5);
+        const isMobileDevice = window.innerWidth < 768;
+        setIsMobile(isMobileDevice);
+
+        if (initialData) {
+            setAmountStr(initialData.amount.toString());
+            setActiveInput(initialData.type);
+            setForm({ ...initialData, category: initialData.category?.toUpperCase() || 'GENERAL' });
+            setIsExpanded(true);
+        } else {
+            setAmountStr('');
+            setActiveInput('expense');
+            setForm(p => ({ ...p, date: d, time: tt, category: 'GENERAL', paymentMethod: 'CASH', isPinned: false }));
+            // 📱 Mobile-only keypad activation
+            if (isMobileDevice) {
+                setShowKeypad(true);
+            } else {
+                setShowKeypad(false);
             }
-            if (entry.category) {
-                categoryFrequency.set(entry.category, (categoryFrequency.get(entry.category) || 0) + 1);
-            }
+        }
+    }, [isOpen, initialData]);
+
+    // --- 🛡️ DUPLICATE SHIELD (Real-time) ---
+    useEffect(() => {
+        const check = async () => {
+            const amt = safeCalculate(convertBanglaToEnglish(amountStr));
+            if (amt <= 0) return setShowDuplicate(false);
+            const exists = await db.entries.where('userId').equals(currentUser?.id || '').and((entry: any) => 
+                entry.bookId === (currentBook?._id || currentBook?.localId) && 
+                entry.amount === amt && (Date.now() - entry.createdAt < 600000)
+            ).count();
+            setShowDuplicate(exists > 0);
+        };
+        const timer = setTimeout(check, 500);
+        return () => clearTimeout(timer);
+    }, [amountStr, activeInput, form.category]);
+
+    const handleSave = async () => {
+        const amt = fixFinancialPrecision(amountStr);
+        
+        // 🔍 ENHANCED ID RETRIEVAL: Extract from store first, then fallback to props
+        const { userId: storeUserId } = getVaultStore();
+        const finalUserId = storeUserId || currentUser?._id || currentUser?.id;
+        
+        // 🆕 UNIQUE ACTION ID: Prevent duplicate blocking
+        const actionId = 'save-entry-' + Date.now();
+        
+        // 🔍 FORENSIC LOG: Debug save attempt
+        console.log('🔍 [SAVE ATTEMPT]', {
+            userId: finalUserId,
+            bookId: currentBook?._id || currentBook?.localId,
+            amount: amt,
+            activeInput,
+            form,
+            actionId
         });
         
-        // Get top 5 most frequent
-        const topTitles = Array.from(titleFrequency.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([title]) => title);
-            
-        const topCategories = Array.from(categoryFrequency.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([category]) => category);
-        
-        return { titles: topTitles, categories: topCategories };
-    }, [allEntries, currentUser]);
-
-    // --- ADVANCED DUPLICATE SHIELD ---
-    const checkDuplicate = async (amountValue: number) => {
-        if (amountValue <= 0) {
-            setShowDuplicateWarning(false);
-            setDuplicateWarningBlink(false);
+        // 🛑 CRITICAL VALIDATION: Check prerequisites before save
+        if (!finalUserId) {
+            console.error('❌ [ENTRY MODAL] Critical Error: Identity not found in Store or Props');
             return;
         }
-
-        try {
-            // Query Dexie for matching entries within the last 10 minutes
-            const timeWindow = 10 * 60 * 1000; // 10 minutes in milliseconds
-            const cutoff = Date.now() - timeWindow;
-            
-            const recentEntries = await db.entries
-                .where('userId')
-                .equals(currentUser?.id || '')
-                .and((entry: any) => 
-                    entry.bookId === (currentBook?._id || currentBook?.localId) &&
-                    entry.type === (activeInput === 'in' ? 'income' : 'expense') &&
-                    entry.category === form.category &&
-                    Math.abs(entry.amount - amountValue) < 0.01 && // Allow 0.01 difference
-                    entry.createdAt > cutoff
-                )
-                .toArray();
-            
-            const isDuplicate = recentEntries.length > 0;
-            setShowDuplicateWarning(!!isDuplicate);
-            
-            if (isDuplicate) {
-                setDuplicateWarningBlink(true);
-                const intervalId = setInterval(() => {
-                    setDuplicateWarningBlink(!duplicateWarningBlink);
-                }, 500);
-                return () => clearInterval(intervalId);
-            } else {
-                setDuplicateWarningBlink(false);
-            }
-        } catch (error) {
-            console.error('❌ [DUPLICATE CHECK] Failed to check duplicates:', error);
-            setShowDuplicateWarning(false);
-            setDuplicateWarningBlink(false);
-        }
-    };
-
-    // --- ADVANCED DUPLICATE CHECK ---
-    useEffect(() => {
-        const performDuplicateCheck = async () => {
-            const finalAmount = safeCalculate(convertBanglaToEnglish(amountStr));
-            if (finalAmount > 0) {
-                // 🚀 ADVANCED DUPLICATE ENTRY SHIELD: Real-time Dexie check
-                await checkDuplicate(finalAmount);
-            } else {
-                setShowDuplicateWarning(false);
-                setDuplicateWarningBlink(false);
-            }
-        };
-
-        const timeoutId = setTimeout(performDuplicateCheck, 500); // Debounce check
-        return () => clearTimeout(timeoutId);
-    }, [amountStr, activeInput, form.category, currentUser, currentBook]);
-
-    useEffect(() => { 
-        setIsMobile(window.innerWidth < 768); 
-    }, []);
-
-    // --- INITIALIZATION ---
-    useEffect(() => {
-        if (isOpen) {
-            const now = new Date();
-            const localDate = now.toISOString().split('T')[0];
-            const localTime = now.toTimeString().slice(0, 5);  // 24h format: "20:30"
-            
-            if (initialData) {
-                const isIncome = initialData.type === 'income';
-                setAmountStr(initialData.amount.toString());
-                setActiveInput(isIncome ? 'in' : 'out');
-                
-                // 🔒 CRITICAL FIX: Proper date hydration for editEntry mode
-                // Convert entry timestamp to HTML date/time input format
-                let entryDate = localDate;
-                let entryTime = localTime;
-                
-                if (initialData.date) {
-                    try {
-                        // Handle various date formats from the database
-                        const entryDateTime = new Date(initialData.date);
-                        if (!isNaN(entryDateTime.getTime())) {
-                            entryDate = entryDateTime.toISOString().split('T')[0];
-                            entryTime = entryDateTime.toTimeString().slice(0, 5);  // 24h format: "20:05"
-                        }
-                    } catch (err) {
-                        console.warn('Date conversion failed, using current time:', err);
-                    }
-                }
-                
-                // 🚨 TIME FIELD RESTORATION: Use existing time field if available
-                if (initialData.time && typeof initialData.time === 'string') {
-                    entryTime = dbToInputTime(initialData.time);  // Convert to 24h format for HTML input
-                }
-                
-                // Preserve all existing data including vKey, localId, _id, checksum
-                // Only override date/time fields with properly formatted values
-                setForm({ 
-                    ...initialData, 
-                    category: initialData.category?.toUpperCase() || 'GENERAL',
-                    date: entryDate,
-                    time: entryTime
-                });
-                setTimeout(() => setIsExpanded(true), 200);
-            } else {
-                setAmountStr('');
-                setActiveInput('out');
-                setForm(prev => ({ 
-                    ...prev, title: '', note: '', status: 'completed', 
-                    date: localDate, time: localTime,
-                    category: 'GENERAL', paymentMethod: 'CASH', type: 'expense' 
-                }));
-                setIsExpanded(false);
-                if (window.innerWidth < 768) setShowKeypad(true);
-            }
-
-            setTimeout(() => {
-                if (window.innerWidth >= 768) amountInputRef.current?.focus();
-            }, 300);
-        }
-    }, [initialData, isOpen]);
-
-    const handleAmountFocus = () => {
-        if (isMobile) {
-            setShowKeypad(true);
-            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-        }
-    };
-
-    const handleTextFocus = () => {
-        if (isMobile) setShowKeypad(false);
-    };
-
-    const handleAmountChange = (value: string) => {
-        // Apply Bangla-to-English conversion in real-time
-        const convertedAmount = fixFinancialPrecision(value);
-        setAmountStr(String(convertedAmount));
-    };
-
-    const handleSubmit = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        const finalAmount = fixFinancialPrecision(amountStr);
-        if (isLoading || finalAmount <= 0) return;
         
+        if (!currentBook?._id && !currentBook?.localId) {
+            console.error('❌ [ENTRY MODAL] Cannot save: Book ID missing');
+            return;
+        }
+        
+        if (isLoading || amt <= 0) return;
         setIsLoading(true);
         try {
-            const finalData = {
-                ...form, 
-                amount: finalAmount, 
-                type: activeInput === 'in' ? 'income' : 'expense',
-                time: inputToDbTime(form.time),  // Convert 24h to 12h format for storage
-                bookId: initialData?.bookId || currentBook?._id || currentBook?.localId  // 🚨 ADD bookId
-            };
-            await onSubmit(finalData, initialData);
-            setShowKeypad(false);
-        } finally {
+            const res = await saveEntry({
+                ...form, amount: amt, type: activeInput,
+                bookId: initialData?.bookId || currentBook?._id || currentBook?.localId,
+                userId: finalUserId
+            }, initialData, actionId);
+            if (res.success) onClose();
+        } finally { 
             setIsLoading(false);
+            console.log('🔓 [ENTRY MODAL] Loading state cleared');
         }
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSubmit();
-        }
-    };
-
-    const getFontSize = (str: string) => {
-        const len = str.length;
-        if (len > 12) return 'text-3xl';
-        if (len > 8) return 'text-4xl';
-        return 'text-5xl';
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[5000] flex items-end md:items-center justify-center p-0 md:p-4">
-            <motion.div 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                exit={{ opacity: 0 }} 
-                onClick={onClose} 
-                className="fixed inset-0 bg-black/70 backdrop-blur-md" 
-            />
+        <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center overflow-hidden bg-black/60 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0" />
             
             <motion.div 
-                initial={isMobile ? { y: "100%" } : { scale: 0.95, opacity: 0, y: 20 }} 
-                animate={isMobile ? { y: 0 } : { scale: 1, opacity: 1, y: 0 }} 
-                exit={isMobile ? { y: "100%" } : { scale: 0.95, opacity: 0, y: 20 }} 
-                transition={{ type: "spring", damping: 30, stiffness: 400 }}
-                className="bg-[var(--bg-card)] w-full md:max-w-lg h-[92vh] md:h-auto rounded-t-[32px] md:rounded-[32px] border-t md:border border-[var(--border)] shadow-2xl relative z-10 flex flex-col overflow-hidden"
+                initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={spring}
+                className="w-full md:max-w-lg max-h-[90vh] md:min-h-[600px] rounded-t-[32px] md:rounded-[32px] bg-[var(--bg-app)] border border-[var(--border)] shadow-2xl relative z-10 flex flex-col"
             >
                 {/* Visual Handle for Mobile */}
-                <div className="md:hidden w-12 h-1.5 bg-[var(--border)]/60 rounded-full mx-auto mt-3 shrink-0" />
+                <div className="md:hidden w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 shrink-0" />
                 
-                {/* Header Section */}
-                <div className="px-6 py-5 flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-3.5">
-                        <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20 text-orange-500 shadow-inner overflow-hidden">
-                            {currentBook?.image ? 
-                                <img src={currentBook.image} alt="V" className="w-full h-full object-cover" /> : 
-                                <PlusCircle size={24} strokeWidth={2.5} />
-                            }
+                {/* Header: Identity */}
+                <div className="px-6 py-3 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20">
+                            {previewUrl ? <img src={previewUrl} className="w-full h-full object-cover rounded-2xl" /> : <Calculator size={22} />}
                         </div>
                         <div>
-                            <h2 className="text-[11px] font-black text-[var(--text-muted)] uppercase tracking-[2.5px] mb-0.5 leading-none">
-                                {currentBook?.name || "NEW ENTRY"}
-                            </h2>
-                            <p className={cn(
-                                "text-[13px] font-bold uppercase tracking-[1px]",
-                                activeInput === 'in' ? "text-green-500" : "text-orange-500"
-                            )}>
-                                {activeInput === 'in' ? 'Income Stream' : 'Expense Record'}
-                            </p>
+                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[3px] mb-0.5">{currentBook?.name || "LEDGER ENTRY"}</p>
+                            <p className="text-[13px] font-bold text-[var(--text-main)]">{activeInput === 'income' ? 'Cash Inflow' : 'Cash Outflow'}</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={onClose} 
-                        className="w-10 h-10 rounded-full bg-[var(--bg-input)] flex items-center justify-center text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                    >
-                        <X size={20} strokeWidth={2.5} />
-                    </button>
+                    <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-[var(--text-muted)] hover:text-white"><X size={18} /></button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto no-scrollbar px-6 pt-2 pb-32 md:pb-8">
+                <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-24 md:pb-8">
                     
-                    {/* 1. TYPE TOGGLE */}
-                    <div className="grid grid-cols-2 gap-3 mb-6">
-                        <button 
-                            onClick={() => { setActiveInput('out'); handleAmountFocus(); }} 
-                            className={cn(
-                                "h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 active:scale-95", 
-                                activeInput === 'out' 
-                                ? "bg-red-500/10 border-red-500/50 text-red-500 shadow-[0_8px_20px_-6px_rgba(239,68,68,0.3)]" 
-                                : "bg-[var(--bg-input)] border-transparent opacity-60"
-                            )}
-                        >
-                            <ArrowDownLeft size={20} strokeWidth={3} />
-                            <span className="text-[11px] font-bold uppercase tracking-[1.5px]">Expense</span>
-                        </button>
-                        <button 
-                            onClick={() => { setActiveInput('in'); handleAmountFocus(); }} 
-                            className={cn(
-                                "h-16 rounded-2xl border-2 transition-all flex items-center justify-center gap-3 active:scale-95", 
-                                activeInput === 'in' 
-                                ? "bg-green-500/10 border-green-500/50 text-green-500 shadow-[0_8px_20px_-6px_rgba(34,197,94,0.3)]" 
-                                : "bg-[var(--bg-input)] border-transparent opacity-60"
-                            )}
-                        >
-                            <ArrowUpRight size={20} strokeWidth={3} />
-                            <span className="text-[11px] font-bold uppercase tracking-[1.5px]">Income</span>
-                        </button>
+                    {/* 🎯 POINT 1 & 2: THE LIVING CARDS (Desktop Input + Mobile Keypad) */}
+                    <div className="grid grid-cols-2 gap-4 h-20 mb-4">
+                        {['expense', 'income'].map((type) => (
+                            <motion.button
+                                key={type} onClick={() => { setActiveInput(type as any); if (isMobile) setShowKeypad(true); }}
+                                whileTap={{ scale: 0.96 }}
+                                className={cn(
+                                    "relative flex flex-col justify-center px-6 rounded-[28px] border-2 transition-all duration-300",
+                                    activeInput === type 
+                                    ? (type === 'expense' ? "bg-red-500/20 border-red-500 shadow-[0_0_25px_-5px_rgba(239,68,68,0.5)]" : "bg-green-500/20 border-green-500 shadow-[0_0_25px_-5px_rgba(34,197,94,0.5)]")
+                                    : "bg-[var(--bg-input)] border-transparent opacity-40"
+                                )}
+                            >
+                                <span className="absolute top-3 right-4 text-[9px] font-black uppercase tracking-widest opacity-60">{type}</span>
+                                {type === 'expense' ? <ArrowDownLeft size={16} className="text-red-400 mb-1" /> : <ArrowUpRight size={16} className="text-green-400 mb-1" />}
+                                {activeInput === type && !isMobile ? (
+                                    <input
+                                        type="text"
+                                        value={amountStr}
+                                        onChange={(e) => setAmountStr(e.target.value)}
+                                        className="font-mono-finance font-black text-2xl bg-transparent text-[var(--text-main)] outline-none truncate w-full text-center"
+                                        placeholder="0.00"
+                                        autoFocus
+                                    />
+                                ) : (
+                                    <div className={cn("font-mono-finance font-black text-2xl truncate", activeInput === type ? "text-[var(--text-main)]" : "text-[var(--text-muted)]")}>
+                                        {activeInput === type ? (amountStr || "0.00") : "---"}
+                                    </div>
+                                )}
+                            </motion.button>
+                        ))}
                     </div>
 
-                    {/* 2. AMOUNT DISPLAY - Apple Haptic Look */}
-                    <motion.div 
-                        onClick={handleAmountFocus} 
-                        animate={showKeypad ? { scale: [1, 1.02, 1] } : {}}
-                        className={cn(
-                            "w-full h-24 mb-6 rounded-3xl bg-[var(--bg-app)] border-2 flex flex-col justify-center px-6 relative transition-all duration-300", 
-                            showKeypad ? "border-orange-500 shadow-[0_0_25px_-5px_rgba(249,115,22,0.2)]" : "border-[var(--border)]"
-                        )}
-                    >
-                        <div className="flex items-center gap-2 mb-1">
-                            <Calculator size={12} className="text-orange-500" />
-                            <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[1.5px]">Entry Amount</span>
-                        </div>
-                        <input
-                            ref={amountInputRef}
-                            value={amountStr}
-                            onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9+\-*/.]/g, ''))}
-                            onFocus={handleAmountFocus}
-                            readOnly={isMobile}
-                            placeholder="0.00"
-                            className={cn(
-                                "w-full bg-transparent text-right outline-none font-mono-finance font-black text-[var(--text-main)] placeholder:text-[var(--text-muted)]/20", 
-                                getFontSize(amountStr)
-                            )}
-                        />
-                    </motion.div>
-
-                    {/* 2. MAIN INPUTS */}
+                    {/* 🎯 POINT 4 & 5: STEALTH INPUTS (No labels) */}
                     <div className="space-y-4">
-                        {/* Title Input with Smart Suggestions */}
-                        <div className="relative">
-                            <OSInput 
-                                value={form.title} 
-                                onChange={(val: any) => setForm({...form, title: val})} 
-                                placeholder={t('placeholder_entry_title')} 
-                                icon={CreditCard} 
-                                onFocus={handleTextFocus} 
-                                onKeyDown={handleKeyDown}
-                            />
-                            
-                            {/* Smart Title Suggestions */}
-                            {smartSuggestions.titles.length > 0 && (
-                                <div className="absolute top-full left-0 right-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2 max-h-32 overflow-y-auto">
-                                    <div className="text-xs font-medium text-gray-600 mb-2">Recent Titles (Click to use)</div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {smartSuggestions.titles.map((title, index) => (
-                                            <button
-                                                key={`title-${index}`}
-                                                onClick={() => setForm(prev => ({ ...prev, title }))}
-                                                className="px-3 py-1 bg-slate-100 text-blue-700 rounded-full text-xs hover:bg-blue-200 transition-colors"
-                                            >
-                                                {title}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* Category Input with Smart Suggestions */}
-                        <div className="relative">
-                            <OSInput 
-                                value={form.category} 
-                                onChange={(val: any) => setForm({...form, category: val})} 
-                                placeholder={t('placeholder_category')} 
-                                icon={CreditCard} 
-                                onFocus={handleTextFocus} 
-                                onKeyDown={handleKeyDown}
-                            />
-                            
-                            {/* Smart Category Suggestions */}
-                            {smartSuggestions.categories.length > 0 && (
-                                <div className="absolute top-full left-0 right-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2 max-h-32 overflow-y-auto">
-                                    <div className="text-xs font-medium text-gray-600 mb-2">Recent Categories (Click to use)</div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {smartSuggestions.categories.map((category, index) => (
-                                            <button
-                                                key={`category-${index}`}
-                                                onClick={() => setForm(prev => ({ ...prev, category }))}
-                                                className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs hover:bg-green-200 transition-colors"
-                                            >
-                                                {category}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                            <button 
-                                onClick={() => setIsExpanded(!isExpanded)} 
-                                className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-                            >
-                                <span className="text-xs">{isExpanded ? 'Fewer Details' : 'More Options'}</span>
-                                <ChevronDown size={18} className={cn("transition-transform duration-300", isExpanded && "rotate-180")} />
-                            </button>
-                        </div>
-                        
+                        <OSInput 
+                            value={form.title} icon={CreditCard} iconPosition="left"
+                            placeholder="Enter entry title..." 
+                            onChange={(v: any) => setForm({...form, title: v})}
+                            onFocus={() => setShowKeypad(false)}
+                        />
+
+                        {/* 🎯 POINT 6: SQUIRCLE TOGGLE BOX */}
+                        <motion.button 
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className="w-full h-14 bg-[var(--bg-input)] rounded-[24px] border border-[var(--border)] flex items-center justify-center gap-3 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
+                        >
+                            <SlidersHorizontal size={16} />
+                            <span className="text-xs font-bold uppercase tracking-widest">{isExpanded ? 'Fewer Details' : 'More Options'}</span>
+                            <ChevronDown size={16} className={cn("transition-transform duration-500", isExpanded && "rotate-180")} />
+                        </motion.button>
+
                         <AnimatePresence>
                             {isExpanded && (
-                                <motion.div 
-                                    initial={{ height: 0, opacity: 0 }} 
-                                    animate={{ height: "auto", opacity: 1 }} 
-                                    exit={{ height: 0, opacity: 0 }} 
-                                    className="overflow-hidden space-y-4 pt-1"
-                                >
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <OSInput type="date" value={form.date} onChange={(v: any) => setForm({...form, date: v})} icon={Calendar} />
-                                        <OSInput type="time" value={form.time} onChange={(v: any) => setForm({...form, time: v})} icon={Clock} />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <ModalEliteDropdown label={t('classification')} current={form.category} options={userCategories} onChange={(v: any) => setForm({...form, category: v})} icon={Layers} />
-                                        <ModalEliteDropdown label={t('via_protocol')} current={form.paymentMethod} options={['CASH', 'BANK', 'BKASH', 'NAGAD']} onChange={(v: any) => setForm({...form, paymentMethod: v})} icon={CreditCard} />
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="space-y-4 overflow-hidden pt-1">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <OSInput type="date" value={form.date} icon={Calendar} iconPosition="left" onChange={(v: any) => setForm({...form, date: v})} onFocus={() => setShowKeypad(false)} />
+                                        <OSInput type="time" value={form.time} icon={Clock} iconPosition="left" onChange={(v: any) => setForm({...form, time: v})} onFocus={() => setShowKeypad(false)} />
                                     </div>
                                     
-                                    <OSInput value={form.note} onChange={(v: any) => setForm({...form, note: v})} placeholder={t('placeholder_entry_memo')} icon={Info} onFocus={handleTextFocus} />
+                                    {/* 🎯 POINT 7 & 8: ELITE DROPDOWNS */}
+                                    <div className="grid grid-cols-2 gap-3 relative z-50">
+                                        <ModalEliteDropdown current={form.category} options={currentUser?.categories || []} onChange={(v: any) => setForm({...form, category: v})} icon={Layers} />
+                                        <ModalEliteDropdown current={form.paymentMethod} options={['CASH', 'BANK', 'BKASH', 'NAGAD']} onChange={(v: any) => setForm({...form, paymentMethod: v})} icon={CreditCard} />
+                                    </div>
+
+                                    <OSInput 
+                                        value={form.note} icon={Info} iconPosition="left"
+                                        placeholder="Add a note..." 
+                                        onChange={(v: any) => setForm({...form, note: v})}
+                                        onFocus={() => setShowKeypad(false)}
+                                    />
+
+                                    {/* 📌 PIN TOGGLE - Apple Native Design */}
+                                    <div className="flex items-center justify-between p-3 bg-[var(--bg-input)] rounded-2xl border border-[var(--border)]">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+                                                <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/>
+                                                </svg>
+                                            </div>
+                                            <span className="text-sm font-medium text-[var(--text-main)]">Pin to Top</span>
+                                        </div>
+                                        <button
+                                            onClick={() => setForm({...form, isPinned: !form.isPinned})}
+                                            className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
+                                                form.isPinned ? 'bg-blue-500' : 'bg-gray-300'
+                                            }`}
+                                        >
+                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${
+                                                form.isPinned ? 'translate-x-7' : 'translate-x-1'
+                                            }`} />
+                                        </button>
+                                    </div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
                 </div>
 
-                {/* --- 🚀 BOTTOM ACTION AREA (Keypad + Warnings + Submit) --- */}
-                <AnimatePresence>
-                    {isMobile && showKeypad && (
-                        <motion.div
-                            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                            className="absolute bottom-0 w-full z-[100] bg-[var(--bg-card)] border-t border-[var(--border)] pb-safe"
-                        >
-                            {/* Potential Duplicate Warning (Mobile) */}
-                            <AnimatePresence>
-                                {showDuplicateWarning && (
-                                    <motion.div 
-                                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                                        className="mx-4 mb-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-xl flex items-center gap-3"
-                                    >
-                                        <AlertTriangle size={18} className="text-orange-500 shrink-0" />
-                                        <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wider leading-tight">
-                                            <span className="inline-flex items-center gap-2">
-                                                {t('duplicate_warning')}
-                                                <span className="inline-block w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                                            </span>
-                                        </p>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-                            <Keypad 
-                                onInput={(val) => setAmountStr(prev => prev + val)}
-                                onDelete={() => setAmountStr(prev => prev.slice(0, -1))}
-                            />
-                            <div className="px-4 pb-4">
-                                <button 
-                                    onClick={() => handleSubmit()} 
-                                    disabled={isLoading}
-                                    className="w-full h-14 bg-orange-500 text-white rounded-2xl font-black text-[13px] uppercase tracking-[3px] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                                >
-                                    {isLoading ? 'Processing...' : 'Save Entry'}
-                                </button>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Desktop Save Button with Duplicate Warning */}
-                <div className="hidden md:block p-6 border-t border-[var(--border)]/50 bg-[var(--bg-card)]">
+                {/* --- 🚀 ACTION AREA --- */}
+                <div className="absolute bottom-0 w-full bg-[var(--bg-app)] border-t border-[var(--border)] p-5 z-[100]">
                     <AnimatePresence>
-                        {showDuplicateWarning && (
-                            <motion.div 
-                                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                                className="mb-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl flex items-center gap-3"
-                            >
-                                <AlertTriangle size={18} className="text-orange-500" />
-                                <span className="text-[11px] font-bold text-orange-600 uppercase tracking-widest">{t('duplicate_warning')}</span>
+                        {showKeypad && (
+                            <motion.div initial={{ y: 250 }} animate={{ y: 0 }} exit={{ y: 250 }} transition={spring} className="mb-4">
+                                {showDuplicate && (
+                                    <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center gap-3">
+                                        <AlertTriangle size={16} className="text-orange-500" />
+                                        <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">{t('duplicate_warning')}</span>
+                                    </div>
+                                )}
+                                <Keypad 
+                                    onInput={(v) => setAmountStr(p => p + v)} 
+                                    onDelete={() => setAmountStr(p => p.slice(0, -1))} 
+                                />
                             </motion.div>
                         )}
                     </AnimatePresence>
-                    
-                    <button 
-                        onClick={() => handleSubmit()} 
-                        className="group w-full h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-black text-[12px] uppercase tracking-[3px] shadow-[0_10px_30px_-10px_rgba(249,115,22,0.5)] transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+
+                    {/* 🎯 POINT 10: ROBOT ORANGE BUTTON */}
+                    <SafeButton
+                        actionId="save-entry" onAction={handleSave}
+                        disabled={isLoading || !amountStr}
+                        className="w-full h-14 bg-[var(--orange-main)] text-white rounded-[24px] font-black uppercase tracking-[3px] shadow-[0_8px_20px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all"
                     >
-                        <CheckCircle2 size={18} className="group-hover:scale-110 transition-transform" />
-                        {t('execute_protocol')}
-                    </button>
+                        <CheckCircle2 size={18} /> {t('save_entry')}
+                    </SafeButton>
                 </div>
             </motion.div>
         </div>

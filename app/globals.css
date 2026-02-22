@@ -21,9 +21,11 @@
   /* Borders (Apple NEVER uses solid gray) */
   --border-color: rgba(0, 0, 0, 0.06);
   --border-soft: rgba(0, 0, 0, 0.03);
+  --border: rgba(0, 0, 0, 0.06);
 
   /* Accent */
   --accent: #F97316;
+  --accent-hover: #ea580c;
 
   /* Glass */
   --glass-blur: blur(20px);
@@ -31,6 +33,21 @@
   /* Shadow = primary separator in white */
   --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   --dropdown-main: #F5F5F7;
+
+  /* 🍎 Apple Design System Variables */
+  --apple-card-radius: 24px;
+  --apple-modal-radius: 32px;
+  --apple-sheet-radius: 40px;
+  --apple-btn-radius: 24px;
+  --apple-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --apple-glass-blur: blur(20px) saturate(150%);
+  --apple-glass-heavy-blur: blur(30px) saturate(180%);
+  --apple-modal-max-width: 28rem;
+
+  /* 🎯 Sidebar Variables - Native Apple Standard */
+  --sidebar-expanded: 280px;
+  --sidebar-collapsed: 90px;
+  --sidebar-mobile: 320px;
 }
 
 
@@ -41,11 +58,14 @@
     --bg-input: rgba(255, 255, 255, 0.04);
     --text-main: #F5F5F7;
     --text-muted: #8E8E93;
-     --border: #1f1f1f; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
-    /*--border-color: transparent; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
+    --border: #1f1f1f; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
     --border-color: rgba(255, 255, 255, 0.04); /* ডার্ক মোডে হালকা বর্ডার */
-     --dropdown-main: rgba(28, 28, 30, 1);
+    --dropdown-main: rgba(28, 28, 30, 1);
 
+    /* 🍎 Apple Dark Mode Adjustments */
+    --apple-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --apple-glass-blur: blur(20px) saturate(120%);
+    --apple-glass-heavy-blur: blur(30px) saturate(140%);
   }
 
   html.midnight-mode, html.midnight-mode .dark {
@@ -55,13 +75,27 @@
     --bg-input: #0A0A0A;
     --border: rgba(255, 255, 255, 0.08);
     --text-muted: #666666;
+
+    /* 🍎 Apple Midnight Mode Adjustments */
+    --apple-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    --apple-glass-blur: blur(16px) saturate(100%);
+    --apple-glass-heavy-blur: blur(24px) saturate(120%);
+  }
+
+  /* 🎯 ELITE UI HOVER EFFECTS */
+  .book-grid:hover .book-card:not(:hover) { 
+    opacity: 0.4; 
+    transform: scale(0.96); 
+    filter: blur(1px); 
   }
 
   body {
     background-color: var(--bg-app);
     color: var(--text-main);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
     -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.011em;
   }
 }
 
@@ -83,46 +117,109 @@
   .vault-btn-elite {
     @apply w-full py-5 rounded-[24px] font-black text-[11px] uppercase tracking-[4px] transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-xl;
   }
+
+  /* 🍎 APPLE NATIVE DESIGN SYSTEM */
+  
+  /* Apple Card - Squircle border radius */
+  .apple-card {
+    border-radius: var(--apple-card-radius, 24px);
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: var(--apple-card-shadow, 0 8px 32px rgba(0, 0, 0, 0.12));
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Apple Glass - Optimized backdrop blur */
+  .apple-glass {
+    background-color: var(--bg-card);
+    backdrop-filter: var(--apple-glass-blur, blur(20px) saturate(150%));
+    -webkit-backdrop-filter: var(--apple-glass-blur, blur(20px) saturate(150%));
+    border: 1px solid var(--border);
+    position: relative;
+  }
+
+  /* Apple Glass Heavy (for modals) */
+  .apple-glass-heavy {
+    background-color: var(--bg-card);
+    backdrop-filter: var(--apple-glass-heavy-blur, blur(30px) saturate(180%));
+    -webkit-backdrop-filter: var(--apple-glass-heavy-blur, blur(30px) saturate(180%));
+    border: 1px solid var(--border);
+  }
+
+  /* Apple Modal Container */
+  .apple-modal {
+    border-radius: var(--apple-modal-radius, 32px);
+    background-color: var(--bg-card);
+    backdrop-filter: var(--apple-glass-heavy-blur, blur(30px) saturate(180%));
+    -webkit-backdrop-filter: var(--apple-glass-heavy-blur, blur(30px) saturate(180%));
+    border: 1px solid var(--border);
+    max-width: var(--apple-modal-max-width, 28rem);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Apple Sheet (Mobile bottom sheet) */
+  .apple-sheet {
+    border-radius: var(--apple-sheet-radius, 40px) var(--apple-sheet-radius, 40px) 0 0;
+    background-color: var(--bg-card);
+    backdrop-filter: var(--apple-glass-blur, blur(20px) saturate(150%));
+    -webkit-backdrop-filter: var(--apple-glass-blur, blur(20px) saturate(150%));
+    border: 1px solid var(--border);
+    max-width: 100%;
+  }
+
+  /* Apple Button Primary */
+  .apple-btn-primary {
+    background-color: var(--accent);
+    color: white;
+    border-radius: var(--apple-btn-radius, 24px);
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+  }
+
+  .apple-btn-primary:hover {
+    background-color: var(--accent-hover, #ea580c);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.4);
+  }
+
+  .apple-btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+  }
+
+  /* Apple Button Secondary */
+  .apple-btn-secondary {
+    background-color: var(--bg-input);
+    color: var(--text-main);
+    border-radius: var(--apple-btn-radius, 24px);
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.75rem 1.5rem;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .apple-btn-secondary:hover {
+    background-color: var(--bg-input);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  /* 🎯 Sidebar Mask - Flicker Prevention */
+  .sidebar-mask {
+    overflow: hidden;
+  }
 }
-/* globals.css এর নিচে যোগ করুন 
-:root {
-  --header-h: 84px; 
-}
 
 
-.has-fixed-header {
-  padding-top: var(--header-h) !important;
-}
-
-
-body, html {
-  height: auto !important;
-  overflow-x: hidden !important;
-  overflow-y: visible !important;
-}
-
-main {
-  overflow: visible !important;
-  height: auto !important;
-}*/
-
-/* globals.css এর নিচে এইটুকু আপডেট করুন 
-.fixed-header-padding {
-  padding-top: 120px !important; 
-  padding-bottom: 120px !important; 
-}
-
-
-header {
-  transition: left 0.3s ease, margin-left 0.3s ease;
-}
-
-
-
-.vault-content-padding {
- 
-  padding-top: 120px !important;
-} */
 
 
 
@@ -152,8 +249,15 @@ body:has(.modal-overlay) {
 
   /* 🚀 TURBO MODE PERFORMANCE OPTIMIZATIONS */
   .turbo-mode {
-    /* Disable all backdrop-blur effects */
+    /* Disable all backdrop-blur effects including Apple Glass */
     * {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    
+    /* Specifically target Apple Glass classes */
+    .apple-glass,
+    .apple-glass-heavy {
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
     }
@@ -177,11 +281,8 @@ body:has(.modal-overlay) {
       transition: none !important;
       animation: none !important;
     }
-                    --app-gap: 0.5rem !important;
-                    --app-padding: 1rem !important;
-                    --input-height: 2.75rem !important;
-                    --header-height: 5rem !important;
-                }
+  }
+
 
 /* ড্রপডাউন এবং মডালের জন্য সলিড গ্লাস ইফেক্ট */
 .glass-heavy {
@@ -303,26 +404,6 @@ html {
 
 */
 
-/* globals.css */
-.full-blur {
-  @apply rounded-2xl border shadow-2xl;
-
-  /* Apple-style glass */
-  background-color: rgba(255, 255, 255, 0.25); /* Light theme default */
-  backdrop-filter: blur(30px) !important;       /* strong blur */
-  -webkit-backdrop-filter: blur(30px) !important;
-
-  isolation: isolate;
-  border: 1px solid rgba(0,0,0,0.05);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-  transition: background-color 0.2s ease, backdrop-filter 0.2s ease, border-color 0.2s ease;
-}
-
-/* Dark theme */
-.dark .full-blur {
-  background-color: rgba(28, 28, 30, 0.55); /* Dark glass */
-  border-color: rgba(255, 255, 255, 0.08);
-}
 
 /* 
  * 🚀 TURBO MODE PROTOCOL (VAULT PRO V10.0)
@@ -370,33 +451,6 @@ body.turbo-active .glass-heavy {
   backdrop-filter: none !important;
 }
 
-/* --- UTILITIES --- */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-.full-blur {
-  @apply rounded-[24px]; /* অ্যাপল এর মতো বড় রাউন্ডেড কর্নার */
-  
-  /* শ্যাডো টোটালি অফ করার মতো করা হয়েছে */
-  box-shadow: none !important; 
-  
-  /* ব্যাকগ্রাউন্ড কালার একদম হালকা সাদা (Off-white) */
-  background-color: rgba(255, 255, 255, 0.7) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-
-  /* শ্যাডোর বদলে হালকা বর্ডার দিয়ে এলিমেন্ট আলাদা করা (Apple Style) */
-  border: 1px solid rgba(0, 0, 0, 0.05) !important;
-  
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* ৩. ডার্ক মোডেও শ্যাডো অফ থাকবে */
-.dark .full-blur {
-  background-color: rgba(28, 28, 30, 0.6) !important;
-  border-color: rgba(255, 255, 255, 0.06) !important;
-  box-shadow: none !important;
-}
 
 /* ৪. ইনপুট এবং ছোট বাটন ফিক্স (যাতে হিজিবিজি না লাগে) */
 input, .tag-item {

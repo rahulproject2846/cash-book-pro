@@ -13,26 +13,21 @@ import { useGuidance } from '@/hooks/useGuidance';
 import { cn } from '@/lib/utils/helpers';
 import SyncProgressBar from '@/components/UI/SyncProgressBar'; // Global Progress Bar
 import { ConflictBackgroundService } from '@/lib/vault/ConflictBackgroundService';
+import { useRouter } from 'next/navigation';
+import { useVaultState } from '@/lib/vault/store/storeHelper';
+import { useModal } from '@/context/ModalContext';
+
+const NAV_ITEMS: Array<{ id: string; name: string; icon: any }> = [
+    { id: 'books', name: 'nav_dashboard', icon: LayoutGrid },
+    { id: 'reports', name: 'nav_analytics', icon: BarChart2 },
+    { id: 'timeline', name: 'nav_timeline', icon: History },
+    { id: 'settings', name: 'nav_system', icon: Settings },
+];
 
 // --- Types ---
 interface DashboardLayoutProps {
     children: React.ReactNode;
-    activeSection: 'books' | 'reports' | 'timeline' | 'settings' | 'profile';
-    setActiveSection: (section: any) => void;
-    onLogout: () => void;
-    currentUser: any; 
-    currentBook: any; 
-    onBack: () => void;
-    onFabClick: () => void;
-    fabTooltip?: string; // Optional tooltip for FAB
 }
-
-const NAV_ITEMS = [
-    { id: 'books', name: 'nav_dashboard', icon: Book },
-    { id: 'reports', name: 'nav_analytics', icon: BarChart2 },
-    { id: 'timeline', name: 'nav_timeline', icon: History },
-    { id: 'settings', name: 'nav_system', icon: Settings },
-] as const;
 
 // --- 1. Sidebar Component (Optimized Blur) ---
 const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onResetBook, isCompact }: any) => {
@@ -45,7 +40,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
                 "hidden md:flex flex-col h-screen fixed left-0 top-0", 
                 // Optimization: Reduced blur for faster rendering
                 "border-r border-[var(--border)] bg-[var(--bg-card)]/95 backdrop-blur-md",
-                "z-[500] transition-all duration-300 ease-out"
+                "z-[200] transition-all duration-300 ease-out"
             )}
         >
             <button 
@@ -176,21 +171,52 @@ const BottomNav = ({ active, setActive, onFabClick, onResetBook, fabTooltip }: a
 
 // --- 3. Dashboard Layout Main (Merged Logic & Simple Animation) ---
 export const DashboardLayout = (props: any) => {
-    const { children, activeSection, setActiveSection, onLogout, currentUser, currentBook, onBack, onFabClick, fabTooltip } = props;
+    const { children } = props;
     const [collapsed, setCollapsed] = useState(false);
     const [isShielded, setIsShielded] = useState(false);
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
-    
+    const router = useRouter();
+    const { openModal } = useModal();
+
+    const { activeSection, setActiveSection, activeBook, setActiveBook } = useVaultState();
+
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    useEffect(() => {
+        try {
+            const savedUser = localStorage.getItem('cashbookUser');
+            if (savedUser) setCurrentUser(JSON.parse(savedUser));
+        } catch {
+            setCurrentUser(null);
+        }
+    }, []);
+
     const prefs = currentUser?.preferences || {};
     const { t } = useTranslation();
 
     // Generate context-aware tooltip text
     const getFabTooltip = () => {
-        if (fabTooltip) return fabTooltip;
-        if (currentBook) return t('fab_add_entry'); // "Add Entry"
+        if (activeBook) return t('fab_add_entry'); // "Add Entry"
         if (activeSection === 'books') return t('fab_add_book'); // "Add Book"
         return t('fab_add_book'); // Default to "Add Book"
+    };
+
+    const handleLogout = () => {
+        const { orchestrator } = require('@/lib/vault/core/SyncOrchestrator');
+        orchestrator.logout();
+    };
+
+    const handleBack = () => {
+        setActiveBook(null);
+        router.push('?');
+    };
+
+    const handleFabClick = () => {
+        if (activeBook) {
+            openModal('addEntry', { currentBook: activeBook });
+        } else {
+            openModal('addBook');
+        }
     };
 
     // 🔥 Optimization: Merged Theme, Midnight, and Compact Mode Effects
@@ -239,53 +265,57 @@ export const DashboardLayout = (props: any) => {
     if (!mounted) return null;
 
     return (
-        <div className={cn("min-h-screen bg-[var(--bg-app)]", prefs.turboMode && "turbo-mode")}>
-            <Sidebar 
-                active={activeSection} 
-                setActive={setActiveSection} 
-                onLogout={onLogout} 
-                collapsed={collapsed} 
-                setCollapsed={setCollapsed}
-                isCompact={prefs.compactMode}
-                onResetBook={onBack}
-            />
-            <main className={cn(
-                "flex-1 transition-all duration-300 ease-out w-full relative z-[10] overflow-x-hidden",
-                collapsed ? "md:ml-[90px]" : "md:ml-[280px]"
-            )}>
-                {/* 🔥 PROGRESS BAR - Inside main content wrapper */}
-                <SyncProgressBar />
+        <div 
+            className="h-screen" 
+            style={{ 
+                display: 'grid', 
+                gridTemplateColumns: collapsed ? '90px 1fr' : '280px 1fr',
+                gridTemplateRows: 'auto 1fr',
+                gridTemplateAreas: '"sidebar header" "sidebar main"' 
+            }}
+        >
+            {/* Sidebar Column */}
+            <div style={{ gridArea: 'sidebar' }}>
+                <Sidebar 
+                    active={activeSection} 
+                    setActive={setActiveSection} 
+                    onLogout={handleLogout} 
+                    collapsed={collapsed} 
+                    setCollapsed={setCollapsed}
+                    isCompact={prefs.compactMode}
+                    onResetBook={handleBack}
+                />
+            </div>
+            
+            {/* Header Area */}
+            <div style={{ gridArea: 'header' }}>
+                <DynamicHeader />
+            </div>
+            
+            {/* Main Content Area */}
+            <main 
+                style={{ gridArea: 'main' }} 
+                className="overflow-y-auto custom-scrollbar h-full relative bg-[var(--bg-app)]"
+            >
+                {/* Mobile Bottom Nav */}
+                <BottomNav 
+                    active={activeSection} 
+                    setActive={setActiveSection} 
+                    onFabClick={handleFabClick} 
+                    onResetBook={handleBack} 
+                    fabTooltip={getFabTooltip()} 
+                />
                 
-                <DynamicHeader {...props} collapsed={collapsed} theme={theme} setTheme={setTheme} />
-
-                <div className={cn(
-                    "w-full max-w-[1920px] mx-auto transition-all duration-200",
-                    "px-[var(--app-padding,1.25rem)] md:px-[var(--app-padding,2.5rem)] pb-40",
-                    currentBook && activeSection === 'books' 
-                        ? "pt-[6rem] md:pt-[7rem] px-0 md:px-0"  
-                        : "pt-[5.5rem] md:pt-[7rem]"
-                )}>
-                    <AnimatePresence mode="wait">
-                        <motion.div 
-                            key={activeSection + (currentBook?._id || '')}
-                            // 🔥 Optimization: Using simple tween & opacity for fast loading
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                        >
-                            {children}
-                        </motion.div>
-                    </AnimatePresence>
-                </div>
+                {children}
             </main>
             
-            <BottomNav active={activeSection} setActive={setActiveSection} onFabClick={onFabClick} onResetBook={onBack} fabTooltip={fabTooltip} />
-
-            <AnimatePresence>
+            {/* Shield Overlay */}
+            <AnimatePresence mode="wait">
                 {isShielded && (
                     <motion.div 
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+                        initial={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        exit={{ opacity: 0 }} 
                         className="fixed inset-0 z-[10000] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-10 text-center text-white"
                     >
                         <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="w-24 h-24 bg-orange-500 rounded-[35px] flex items-center justify-center mb-8">

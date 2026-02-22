@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, X, Fingerprint, AlertOctagon } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils/helpers';
+import { SafeButton } from '@/components/UI/SafeButton';
 
 // 🔥 পুনারাবৃত্তি এড়াতে কাউন্টডাউন কম্পোনেন্টটি এখান থেকে এক্সপোর্ট করা হলো
 export const ToastCountdown = ({ initialSeconds }: { initialSeconds: number }) => {
@@ -62,16 +63,20 @@ export const TerminationModal = ({ isOpen, onClose, onConfirm, targetName, title
                         />
                     </div>
 
-                    <button 
-                        onClick={() => { if(isMatch) { onClose(); setTimeout(() => onConfirm(), 100); } }}
+                    <SafeButton
+                        actionId="execute-termination"
+                        onAction={() => { if(isMatch) { onClose(); setTimeout(() => onConfirm(), 100); } }}
+                        variant="danger"
+                        size="lg"
+                        loadingText="Executing..."
+                        blockedText="System Busy"
                         disabled={!isMatch}
-                        className={cn(
-                            "w-full h-18 py-6 rounded-[28px] font-black text-[12px] uppercase tracking-[6px] transition-all active:scale-95 flex items-center justify-center gap-5 shadow-2xl",
-                            isMatch ? "bg-red-600 text-white shadow-red-600/40 hover:bg-red-700" : "bg-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed border border-white/5"
-                        )}
+                        className="w-full h-18 py-6"
+                        shakeOnBlock={false}
                     >
-                        <Fingerprint size={22} /> EXECUTE PURGE
-                    </button>
+                        <Fingerprint size={22} />
+                        EXECUTE PURGE
+                    </SafeButton>
                 </div>
             </motion.div>
         </div>

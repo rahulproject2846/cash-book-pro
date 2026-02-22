@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/offlineDB';
 import { snipedInSession } from '@/lib/vault/store/sessionGuard';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 
 /**
  * 🚀 INSTANT LOCAL PREVIEW HOOK
@@ -14,6 +15,7 @@ export interface UseLocalPreviewResult {
   previewUrl: string | null;
   isLoading: boolean;
   error: string | null;
+  isHydrating?: boolean;
 }
 
 export const useLocalPreview = (imageSrc?: string): UseLocalPreviewResult => {
@@ -28,16 +30,46 @@ export const useLocalPreview = (imageSrc?: string): UseLocalPreviewResult => {
   const failedCIDs = useRef<Map<string, { attempts: number; lastAttempt: number }>>(new Map());
 
   // 🆕 STEP 1: Move ALL useLiveQuery calls to TOP level
+  const { bootStatus } = getVaultStore();
+  
+  // 🛡️ BOOT GUARD: Do not fetch while system is initializing
+  const shouldSkipBootGuard = bootStatus !== 'READY';
+  
+  // 🛡️ INPUT GUARD: Skip invalid inputs
+  const shouldSkipInput = !imageSrc || !imageSrc.startsWith('cid_') || failedCIDs.current.has(imageSrc);
+  
   const mediaRecord = useLiveQuery(
-    () => imageSrc?.startsWith('cid_') 
-      ? db.mediaStore.where('cid').equals(imageSrc).first()
-      : null
+    () => shouldSkipBootGuard || shouldSkipInput
+      ? null
+      : imageSrc?.startsWith('cid_') 
+        ? db.mediaStore.where('cid').equals(imageSrc).first()
+        : null
   );
   
   const bookRecord = useLiveQuery(
-    () => imageSrc?.startsWith('cid_')
-      ? db.books.where('mediaCid').equals(imageSrc).or('image').equals(imageSrc).first()
-      : null
+    () => shouldSkipBootGuard || shouldSkipInput
+      ? null
+      : imageSrc?.startsWith('cid_')
+        ? db.books.where('mediaCid').equals(imageSrc).or('image').equals(imageSrc).first()
+        : null
+  );
+
+  // 🎯 ENHANCED GUARD: Check if record already exists locally
+  const existingRecord = useLiveQuery(
+    () => shouldSkipBootGuard || shouldSkipInput
+      ? null
+      : imageSrc?.startsWith('cid_') 
+        ? db.books.where('cid').equals(imageSrc).first()
+        : null
+  );
+
+  // 🎯 IN-PROGRESS CHECK: Prevent hydration of records currently being processed
+  const isBeingProcessed = useLiveQuery(
+    () => shouldSkipBootGuard || shouldSkipInput
+      ? null
+      : imageSrc?.startsWith('cid_') 
+        ? db.books.where('cid').equals(imageSrc).and((book: any) => book.synced === 0).first()
+        : null
   );
 
   // 🔥 FIX: Cleanup function uses ref instead of state
@@ -50,129 +82,123 @@ export const useLocalPreview = (imageSrc?: string): UseLocalPreviewResult => {
     setPreviewUrl(null); // Still update state for UI
   }, []); // 🔥 FIX: No dependencies
 
-  // 🆕 STEP 2: Single useEffect to handle all logic
+  // 🆕 BLOB-TO-URL CONVERSION: Convert mediaRecord blob to preview URL with remote fallback
   useEffect(() => {
-    // Cleanup previous URL
-    cleanup();
-    
-    if (!imageSrc || !imageSrc.startsWith('cid_')) {
-      if (!imageSrc) {
-        setPreviewUrl(null);
-        setIsLoading(false);
-        setError(null);
-      } else if (imageSrc.startsWith('http')) {
-        // Direct URL, no need for preview
-        setPreviewUrl(imageSrc);
-        setIsLoading(false);
-        setError(null);
-      } else {
-        // Invalid or unsupported format
-        setPreviewUrl(null);
-        setIsLoading(false);
-        setError('Unsupported image format');
-      }
-      return;
-    }
-
-    // 🆕 STEP 3: Handle reactive logic
-    // 1. If we already have a Blob, use it
-    if (mediaRecord?.blobData) {
+    // 1. PRIORITY: If we have a local blob, use it
+    if (mediaRecord?.blobData && !previewUrlRef.current) {
       const url = URL.createObjectURL(mediaRecord.blobData);
-      setPreviewUrl(url);
       previewUrlRef.current = url;
-      setIsLoading(false);
-      setError(null);
-      
-      // 🆕 SUCCESS: Clear failure lock
-      failedCIDs.current.delete(imageSrc);
-      console.log(`✅ [LOCAL PREVIEW] Preview ready for CID: ${imageSrc}`);
+      setPreviewUrl(url);
+      console.log(`🖼️ [LOCAL PREVIEW] Created preview URL for CID: ${imageSrc}`);
       return;
     }
-
-    // 2. If we have a Cloudinary URL, use it
-    if (bookRecord?.image?.startsWith('http')) {
-      setPreviewUrl(bookRecord.image);
-      setIsLoading(false);
-      setError(null);
-      
-      // 🆕 SUCCESS: Clear failure lock
-      failedCIDs.current.delete(imageSrc);
-      console.log(`✅ [LOCAL PREVIEW] Using Cloudinary URL for CID: ${imageSrc}`);
-      return;
-    }
-
-    // 3. If missing, trigger Sniper Fetch with Failure Lock guard
-    // 🆕 FIX: Use FULL CID as key for consistency
-    const failureInfo = failedCIDs.current.get(imageSrc);
     
-    if (!mediaRecord && !isLoading && bookRecord?.synced === 1 && (!failureInfo || failureInfo.attempts < 3)) {
-      setIsLoading(true);
-      setError(null);
-      
-      // 🛡️ SESSION GUARD: Prevent duplicate sniper fetches
-      if (!snipedInSession.has(imageSrc)) {
+    // 2. FALLBACK: If local blob is missing but we have a remote image URL
+    // Check if imageSrc itself is a valid URL (Cloudinary)
+    if (!mediaRecord && imageSrc && imageSrc.startsWith('http')) {
+      setPreviewUrl(imageSrc);
+      setIsLoading(false); // 🆕 Set loading to false for remote URLs
+      console.log(`🌐 [REMOTE PREVIEW] Using Cloudinary URL: ${imageSrc}`);
+      return;
+    }
+    
+    // Cleanup when image changes or component unmounts
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        console.log(`🧹 [LOCAL PREVIEW] Revoked preview URL for CID: ${imageSrc}`);
+        previewUrlRef.current = null;
+        setPreviewUrl(null);
+      }
+    };
+  }, [mediaRecord?.blobData, imageSrc]);
+
+  // 🛡️ BOOT GUARD: Fixed useEffect with NO early returns
+  useEffect(() => {
+    // 🛡️ BOOT GUARD: Do not fetch while system is initializing
+    if (shouldSkipBootGuard) {
+      cleanup();
+      return;
+    }
+    
+    // 🛡️ INPUT GUARD: Skip invalid inputs
+    if (shouldSkipInput) {
+      cleanup();
+      return;
+    }
+    
+    // 🛡️ EXISTENCE GUARD: Skip if record exists
+    if (existingRecord) {
+      console.log(`🛡️ [LOCAL PREVIEW] Record already exists locally: ${imageSrc}`);
+      cleanup();
+      return;
+    }
+    
+    // 🛡️ PROCESS GUARD: Skip if being processed
+    if (isBeingProcessed) {
+      console.log(`🛡️ [LOCAL PREVIEW] Record currently being processed: ${imageSrc}`);
+      cleanup();
+      return;
+    }
+
+    (async () => {
+      // 🧹 GHOST BUSTER: Check if database is empty before attempting hydration
+      const localBookCount = await db.books.count();
+      if (localBookCount === 0 && imageSrc?.startsWith('cid_')) {
+        console.log('🧹 [GHOST BUSTER] Database empty, clearing orphaned preview');
+        localStorage.removeItem('vault-preview-cid');
+        cleanup();
+        return;
+      }
+
+      if (snipedInSession.has(imageSrc)) {
+        console.log(`🛡️ [SESSION GUARD] CID already processed this session: ${imageSrc}`);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
         snipedInSession.add(imageSrc);
         
-        // 🆕 EXPONENTIAL BACK-OFF: Calculate delay
-        const delay = Math.min(1000 * Math.pow(2, failureInfo?.attempts || 0), 8000);
-        
-        // Trigger sniper fetch asynchronously
-        (async () => {
-          // Wait before retry
-          await new Promise<void>(resolve => setTimeout(resolve, delay));
+        // 🛡️ API GUARD: ONLY hydrate if NOT a CID (real Book ID)
+        if (!imageSrc.startsWith('cid_')) {
+          console.log(`🎯 [SNIPER FETCH] Triggering hydration for Book ID: ${imageSrc}`);
           
-          try {
-            if (typeof window !== 'undefined' && window.orchestrator) {
-              const orchestrator = window.orchestrator as { 
-                hydrateSingleItem: (type: 'BOOK' | 'ENTRY', id: string) => Promise<{ success: boolean; error?: string }> 
-              };
-              // 🆕 FIX: Use FULL CID for API call (no stripping)
-              await orchestrator.hydrateSingleItem('BOOK', imageSrc);
-              console.log(`🔄 [LOCAL PREVIEW] Sniper Fetch triggered for CID: ${imageSrc}`);
-            }
-          } catch (sniperErr: unknown) {
-            console.error(`❌ [LOCAL PREVIEW] Sniper Fetch failed for CID: ${imageSrc}`, sniperErr);
-            setError('Failed to fetch preview');
+          const orchestrator = (window as any).orchestrator;
+          if (orchestrator) {
+            const result = await orchestrator.hydrateSingleItem('BOOK', imageSrc);
             
-            // 🛡️ GHOST BUSTER: Check for 404/Not Found errors
-            const errorMessage = sniperErr instanceof Error ? sniperErr.message : String(sniperErr);
-            if (errorMessage.includes('Not Found') || errorMessage.includes('404')) {
-              console.log(`🛡️ [GHOST BUSTER] Marking book as non-existent on server to stop loop: ${imageSrc}`);
-              
-              // Find and update the ghost book to prevent future attempts
-              try {
-                const ghostBook = await db.books.where('image').equals(imageSrc).or('mediaCid').equals(imageSrc).first();
-                if (ghostBook) {
-                  await db.books.update(ghostBook.localId!, {
-                    image: null,
-                    mediaCid: null,
-                    updatedAt: Date.now()
-                  });
-                  console.log(`🛡️ [GHOST BUSTER] Cleared image references for ghost book: ${ghostBook.cid}`);
-                }
-              } catch (dbErr) {
-                console.error(`❌ [GHOST BUSTER] Failed to update ghost book:`, dbErr);
-              }
+            // 🧹 GHOST BUSTER: Check if item is gone and cleanup localStorage
+            if (result.isGone || (result.error && result.error.includes('Not Found'))) {
+              console.log('🧹 [GHOST BUSTER] Cleared orphaned Book ID from localStorage:', imageSrc);
+              localStorage.removeItem('vault-preview-cid');
+              return;
             }
-          } finally {
-            // 🆕 UPDATE FAILURE TRACKING with FULL CID as key
-            const current = failedCIDs.current.get(imageSrc) || { attempts: 0, lastAttempt: 0 };
-            failedCIDs.current.set(imageSrc, { 
-              attempts: current.attempts + 1, 
-              lastAttempt: Date.now() 
-            });
-            setIsLoading(false);
           }
-        })();
-      } else {
-        console.log(`🛡️ [SESSION GUARD] CID already processed this session: ${imageSrc}`);
+        } else {
+          // 🆕 MEDIA LOGIC: For CIDs, check for Cloudinary URL fallback
+          console.log(`🛡️ [MEDIA GUARD] CID detected, skipping book hydration: ${imageSrc}`);
+          
+          // Check if we have a Cloudinary URL in the mediaStore
+          const mediaRecord = await db.mediaStore.where('cid').equals(imageSrc).first();
+          if (mediaRecord?.cloudinaryUrl) {
+            console.log(`🌐 [MEDIA GUARD] Found Cloudinary URL for CID: ${imageSrc}`);
+            // The useLiveQuery above will handle the URL conversion
+          } else {
+            console.log(`⚠️ [MEDIA GUARD] No Cloudinary URL found for CID: ${imageSrc}`);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ [SNIPER FETCH] Hydration failed for CID: ${imageSrc}`, error);
+      } finally {
+        setIsLoading(false); // 🆕 Always set loading to false when complete
       }
-    }
-  }, [imageSrc, mediaRecord, bookRecord, isLoading, cleanup]);
+    })();
+  }, [imageSrc, shouldSkipBootGuard, shouldSkipInput, existingRecord, isBeingProcessed]);
 
   return {
     previewUrl,
     isLoading,
     error
   };
-};
+}

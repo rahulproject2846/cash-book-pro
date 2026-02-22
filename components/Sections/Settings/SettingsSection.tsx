@@ -1,10 +1,11 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings2, Save, Cpu, ShieldCheck } from 'lucide-react';
+import { Settings2, Save, Cpu, ShieldCheck, Activity, Wifi } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn, toBn } from '@/lib/utils/helpers';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 
 // Modular Components
 import { HubHeader } from '@/components/Layout/HubHeader';
@@ -21,8 +22,22 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
         addCategory, removeCategory, updatePreference, updateCurrency, clearLocalCache
     } = useSettings(currentUser, setCurrentUser);
 
+    const [lastSynced, setLastSynced] = useState<string>('');
     const [newCat, setNewCat] = useState('');
     const [limitBuffer, setLimitBuffer] = useState(preferences?.expenseLimit || 0);
+
+    // Sync heartbeat effect
+    useEffect(() => {
+        const store = getVaultStore();
+        const lastSync = store.lastSyncedAt;
+        if (lastSync) {
+            const time = new Date(lastSync).toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            setLastSynced(time);
+        }
+    }, []);
 
     // preferences আপডেট হলে লিমিট বাফার সিঙ্ক করা
     useEffect(() => {
@@ -52,10 +67,18 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
                 showSearch={false}
             >
                 {/* Status Indicator inside Header */}
-                <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-inner">
+                <div className="flex items-center gap-2 px-4 py-2 apple-card rounded-2xl shadow-inner">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-[9px] font-black text-[var(--text-main)] uppercase tracking-[2px]">
+                    <span className="text-[9px] font-medium text-[var(--text-main)]">
                         {t('node_online') || "CORE ACTIVE"}
+                    </span>
+                </div>
+                
+                {/* Sync Heartbeat */}
+                <div className="flex items-center gap-2 px-4 py-2 apple-glass rounded-2xl border border-[var(--border)]">
+                    <Wifi size={12} className="text-green-500" />
+                    <span className="text-[9px] font-medium text-[var(--text-main)]">
+                        Last Synced: {lastSynced || 'Never'}
                     </span>
                 </div>
             </HubHeader>
@@ -104,12 +127,12 @@ export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
                 <div className="flex flex-col items-center gap-3 opacity-20 hover:opacity-100 transition-all duration-1000 group">
                     <div className="flex items-center gap-4">
                         <Cpu size={14} className="text-orange-500 group-hover:rotate-180 transition-transform duration-1000" />
-                        <span className="text-[10px] font-black uppercase tracking-[8px] text-[var(--text-main)]">
+                        <span className="text-[10px] font-medium text-[var(--text-main)]">
                             VAULT PRO SYSTEM
                         </span>
                         <ShieldCheck size={14} className="text-blue-500" />
                     </div>
-                    <span className="text-[8px] font-bold uppercase tracking-[4px] text-[var(--text-muted)]">
+                    <span className="text-[8px] font-medium text-[var(--text-muted)]">
                         {t('system_version') || 'BUILD V11.0 STABLE REL'}
                     </span>
                 </div>

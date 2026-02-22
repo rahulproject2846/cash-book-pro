@@ -12,8 +12,8 @@ import { getTimestamp } from '@/lib/shared/utils';
 
 export interface TelemetryEvent {
   id?: number;
-  type: 'CALCULATION' | 'SYNC_ERROR' | 'HYDRATION_ERROR' | 'OPERATION' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
-  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+  type: 'CALCULATION' | 'SYNC_ERROR' | 'HYDRATION_ERROR' | 'OPERATION' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'SECURITY';
+  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG' | 'CRITICAL';
   message: string;
   data?: any;
   timestamp: number;

@@ -36,7 +36,7 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
             <div className="md:hidden">
                 <button 
                     onClick={() => setIsOpen(!isOpen)}
-                    className="h-11 w-full px-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] flex items-center justify-between text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-sm"
+                    className="h-11 w-full px-4 apple-card bg-[var(--bg-card)] border border-[var(--border)] flex items-center justify-between text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all shadow-sm"
                 >
                     <div className="flex items-center gap-3">
                         <Calendar size={16} className="text-orange-500" strokeWidth={2.5} />
@@ -48,14 +48,14 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
                     {isOpen && (
                         <motion.div 
                             initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} 
-                            className="absolute right-0 mt-2 bg-[var(--bg-card)] backdrop-blur-3xl border border-[var(--border)] rounded-[24px] p-2 z-[1000] shadow-2xl"
+                            className="absolute right-0 mt-2 bg-[var(--bg-card)] apple-glass-heavy border border-[var(--border)] p-2 z-[1000] shadow-2xl"
                         >
                             {options.map((opt) => (
                                 <button 
                                     key={opt.days} 
                                     onClick={() => { onChange(opt.days); setIsOpen(false); }} 
                                     className={cn(
-                                        "w-full flex items-center justify-between px-5 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 last:mb-0",
+                                        "w-full flex items-center justify-between px-5 py-3.5 apple-card text-[10px] font-black uppercase tracking-tight transition-all mb-1 last:mb-0",
                                         value === opt.days ? "text-orange-500 bg-orange-500/10" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
                                     )}
                                 >
@@ -69,7 +69,7 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
             </div>
 
             {/* --- 💻 DESKTOP VIEW: SEGMENTED BUTTONS --- */}
-            <div className="hidden md:flex bg-[var(--bg-card)] border border-[var(--border)] p-1.5 rounded-[22px] h-12 items-center relative overflow-hidden shadow-inner">
+            <div className="hidden md:flex bg-[var(--bg-card)] border border-[var(--border)] p-1.5 apple-card h-12 items-center relative overflow-hidden shadow-inner">
                 {options.map((option) => {
                     const isActive = value === option.days;
                     return (
@@ -84,7 +84,7 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
                             <span className="relative z-20 text-[11px] font-black leading-none">{toBn(option.days, language)}</span>
                             <span className="relative z-20 text-[6px] font-black uppercase tracking-[1px] mt-0.5 opacity-60">DAYS</span>
                             {isActive && (
-                                <motion.div layoutId="activeRange" className="absolute inset-0 bg-orange-500 rounded-[16px] shadow-lg" />
+                                <motion.div layoutId="activeRange" className="absolute inset-0 bg-orange-500 apple-card shadow-lg" />
                             )}
                         </button>
                     );

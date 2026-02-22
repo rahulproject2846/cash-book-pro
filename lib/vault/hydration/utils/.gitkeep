@@ -1,0 +1,5 @@
+# Hydration Utils
+# This directory will contain:
+# - DeduplicationUtil.ts - CID-based deduplication
+# - ValidationUtil.ts - Normalization + Zod validation
+# - SecurityUtil.ts - Lockdown checks

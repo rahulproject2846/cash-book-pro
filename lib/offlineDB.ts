@@ -23,6 +23,14 @@ export interface LocalUser {
     turboMode?: boolean; // Phase 1 Turbo Mode
   };
   updatedAt: number;
+  
+  // 🔐 LICENSE & SECURITY FIELDS
+  plan?: 'free' | 'pro';
+  offlineExpiry?: number;
+  riskScore?: number;
+  receiptId?: string;
+  licenseSignature?: string; // HMAC signature for tamper detection
+  isMigrated?: boolean; // 🛡️ MIGRATION FLAG
 }
 
 export interface LocalBook {
@@ -193,6 +201,7 @@ export class VaultProDB extends Dexie {
   auditLogs!: Table<LocalAuditLog>; // Safety Net - Conflict Audit Log
   snapshots!: Table<LocalSnapshot>; // 🛡️ Safety Snapshots Table
   mediaStore!: Table<LocalMedia>;  // 🚀 BANKING-GRADE MEDIA ENGINE
+  syncPoints!: Table<any>; // 🔄 SYNC CHECKPOINTS
 
   constructor() {
     super('VaultPro_Core_V1'); 
@@ -321,6 +330,70 @@ export class VaultProDB extends Dexie {
     }).upgrade(async (tx) => {
       // FIXED: Indexes are already defined in .stores() - no manual creation needed
       console.log(' Vault Pro: Version 12 indexes handled automatically by Dexie');
+    });
+
+    // Version 13: V6.2 SECURITY SCHEMA
+    // Added security fields indexing for efficient license validation and risk analysis
+    this.version(13).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id, plan, offlineExpiry, riskScore, receiptId', // V6.2 SECURITY INDEXES
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp', // SAFETY SNAPSHOTS
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt', // MEDIA STORE
+      syncPoints: '++id, userId, type, offset, lastSequence, timestamp' // SYNC CHECKPOINTS
+    }).upgrade(async (tx) => {
+      console.log('Vault Pro: V6.2 Security Schema Applied.');
+    });
+
+    // Version 14: HIGH-SPEED PAGINATION OPTIMIZATION
+    // Added compound indexes for database-level pagination and filtering
+    this.version(14).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], [userId+isDeleted+bookId], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id, plan, offlineExpiry, riskScore, receiptId', // V6.2 SECURITY INDEXES
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp', // SAFETY SNAPSHOTS
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt', // MEDIA STORE
+      syncPoints: '++id, userId, type, offset, lastSequence, timestamp' // SYNC CHECKPOINTS
+    }).upgrade(tx => {
+      console.log('✅ Vault Pro: Database upgraded to V14 with Compound Indexes');
+    });
+
+    // Version 26: V26 SCROLL MEMORY / TRIPLE INDEX GUARANTEE
+    // Ensures [userId+isDeleted+updatedAt] exists for high-speed dashboard refreshBooks query
+    this.version(26).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], [userId+isDeleted+bookId], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id, plan, offlineExpiry, riskScore, receiptId',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp',
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt',
+      syncPoints: '++id, userId, type, offset, lastSequence, timestamp'
+    }).upgrade(() => {
+      console.log('✅ Vault Pro: Database upgraded to V26');
+    });
+
+    // Version 27: USER ID INDEX FIX
+    // Added userId index to users table for PullService security verification
+    this.version(27).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], [userId+isDeleted+bookId], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id, userId, plan, offlineExpiry, riskScore, receiptId', // ✅ ADDED userId INDEX
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp',
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt',
+      syncPoints: '++id, userId, type, offset, lastSequence, timestamp'
+    }).upgrade(() => {
+      console.log('✅ Vault Pro: Database upgraded to V27 - userId index added to users table');
     });
   }
 }

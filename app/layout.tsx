@@ -1,13 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const jakarta = Plus_Jakarta_Sans({ 
+const geist = Geist({ 
   subsets: ["latin"],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-jakarta',
-  display: 'swap', // এই লাইনটি নিশ্চিত করুন
+  weight: ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+  variable: '--font-geist',
+  display: 'swap',
+});
+
+const geistMono = Geist_Mono({ 
+  subsets: ["latin"],
+  weight: ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+  variable: '--font-geist-mono',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -91,7 +98,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${jakarta.variable} font-sans antialiased selection:bg-orange-500/30 overflow-x-hidden`} suppressHydrationWarning >
+      <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased selection:bg-orange-500/30 overflow-x-hidden`} suppressHydrationWarning >
         <Providers>
             {children}
         </Providers>

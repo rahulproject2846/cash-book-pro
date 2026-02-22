@@ -12,9 +12,11 @@ import { useLocalPreview } from '@/hooks/useLocalPreview';
 import { useBookImage } from '@/hooks/useBookImage';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
+import { useVaultStore } from '@/lib/vault/store/index';
 
-export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
+export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) => {
     const { t } = useTranslation();
+    const { saveBook } = useVaultStore();
     const [form, setForm] = useState({ name: '', description: '', type: 'general', phone: '', image: '' });
     const [isLoading, setIsLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
@@ -115,8 +117,12 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
         };
         
         try {
-            await onSubmit(cleanPayload);
-            onClose(); // সফল হলে বন্ধ হবে
+            const result = await saveBook(cleanPayload, initialData);
+            if (result.success) {
+                onClose();
+            } else {
+                console.error('Save failed:', result.error);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -133,7 +139,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center overflow-hidden">
+        <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center overflow-hidden">
             {/* ব্যাকড্রপ: পিওর গ্লাস ইফেক্ট */}
             <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
@@ -164,7 +170,9 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                             <span className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px]">{t('sync_ready')}</span>
                         </div>
                     </div>
-                    <button onClick={onClose} className="w-10 h-10 rounded-full bg-[var(--bg-input)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-sm"><X size={20} /></button>
+                    <Tooltip text={t('close_modal')}>
+                        <button onClick={onClose} className="w-10 h-10 rounded-full bg-[var(--bg-input)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-sm"><X size={20} /></button>
+                    </Tooltip>
                 </div>
 
                 <div className="flex-1 overflow-y-auto no-scrollbar px-8 py-6">
@@ -173,14 +181,18 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                         {/* ভিজ্যুয়াল আইডি সিলেকশন */}
                         <div className="flex flex-col items-center group">
                             <div className="relative">
-                                <motion.div 
-                                    whileTap={{ scale: 0.94 }}
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="w-24 h-24 rounded-[35px] bg-[var(--bg-input)] border border-[var(--border)] flex items-center justify-center cursor-pointer overflow-hidden transition-all hover:border-orange-500/50 shadow-md group/img"
-                                >
-                                    {imagePreviewContent}
-                                </motion.div>
-                                <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute -right-1 -bottom-1 w-8 h-8 bg-orange-500 rounded-xl flex items-center justify-center text-white shadow-lg border-4 border-[var(--bg-card)] active:scale-90 transition-all"><Plus size={14} strokeWidth={3} /></button>
+                                <Tooltip text={t('select_image')}>
+                                    <motion.div 
+                                        whileTap={{ scale: 0.94 }}
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="w-24 h-24 apple-card bg-[var(--bg-input)] border border-[var(--border)] flex items-center justify-center cursor-pointer overflow-hidden transition-all hover:border-orange-500/50 shadow-md group/img"
+                                    >
+                                        {imagePreviewContent}
+                                    </motion.div>
+                                </Tooltip>
+                                <Tooltip text={t('add_image')}>
+                                    <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute -right-1 -bottom-1 w-8 h-8 bg-orange-500 apple-card flex items-center justify-center text-white shadow-lg border-4 border-[var(--bg-card)] active:scale-90 transition-all"><Plus size={14} strokeWidth={3} /></button>
+                                </Tooltip>
                             </div>
                             <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={async (e) => {
                                 const file = e.target.files?.[0];
@@ -195,10 +207,10 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                         setForm(prev => ({ ...prev, image: mediaCid }));
                                     } catch (error) {
                                         console.error('Image upload failed:', error);
-                                        // Fallback to Base64 for now (can be removed later)
-                                        const reader = new FileReader();
-                                        reader.onloadend = () => setForm(prev => ({ ...prev, image: reader.result as string }));
-                                        reader.readAsDataURL(file);
+                                        // 🛡️ CLEAN STATE: Reset preview and clear image on error
+                                        setLocalPreview(null);
+                                        setForm(prev => ({ ...prev, image: "" }));
+                                        // Error is already shown by useBookImage toast
                                     }
                                 }
                             }} />
@@ -206,31 +218,32 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                         </div>
 
                         {/* টাইপ সিলেক্টর */}
-                        <div className="bg-[var(--bg-input)] p-1.5 rounded-[26px] border border-[var(--border)] flex h-14 shadow-md">
+                        <div className="bg-[var(--bg-input)] p-1.5 apple-card border border-[var(--border)] flex h-14 shadow-md">
                             {[
                                 { id: 'general', label: t('type_general'), icon: BookOpen },
                                 { id: 'customer', label: t('type_customer'), icon: User },
                                 { id: 'supplier', label: t('type_supplier'), icon: Truck },
                             ].map((type) => (
-                                <button 
-                                    key={type.id} 
-                                    type="button" 
-                                    onClick={() => setForm({...form, type: type.id})} 
-                                    className={cn(
-                                        "flex-1 flex items-center justify-center gap-2 rounded-[20px] border transition-all duration-500",
-                                        form.type === type.id 
-                                            ? "bg-[var(--bg-card)] text-orange-500 shadow-xl border-[var(--border)]" 
-                                            : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]"
-                                    )}
-                                >
-                                    <type.icon size={14} strokeWidth={2.5} />
-                                    <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">{type.label}</span>
-                                </button>
+                                <Tooltip key={type.id} text={type.label}>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setForm({...form, type: type.id})} 
+                                        className={cn(
+                                            "flex-1 flex items-center justify-center gap-2 apple-card border transition-all duration-500",
+                                            form.type === type.id 
+                                                ? "bg-[var(--bg-card)] text-orange-500 shadow-xl border-[var(--border)]" 
+                                                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                                        )}
+                                    >
+                                        <type.icon size={14} strokeWidth={2.5} />
+                                        <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">{type.label}</span>
+                                    </button>
+                                </Tooltip>
                             ))}
                         </div>
 
-                        {/* ইনপুট ফর্ম */}
                         <form className="flex flex-col gap-4" onSubmit={handleAction}>
+                            {/* নাম ইনপুট */}
                             <div className="group relative">
                                 <div className="absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-orange-500 transition-colors z-10">
                                     {form.type === 'general' ? <BookOpen size={18} /> : <User size={18} />}
@@ -238,7 +251,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                 <input 
                                     ref={nameInputRef} // 🔥 অটো-ফোকাস রেফারেন্স
                                     placeholder={form.type === 'general' ? t('placeholder_ledger_name') : t('placeholder_identity_name')} 
-                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] rounded-[24px] text-[13px] font-bold uppercase outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-inner" 
+                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] apple-card text-[13px] font-bold uppercase outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-inner" 
                                     value={form.name} 
                                     onChange={e => setForm({...form, name: e.target.value})} 
                                     onKeyDown={handleKeyDown} // 🔥 এন্টার বাটন হ্যান্ডলার
@@ -253,7 +266,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                         <input 
                                             type="tel" 
                                             placeholder="+880 1XXX XXXXXX" 
-                                            className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] rounded-[24px] text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-md" 
+                                            className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] apple-card text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-md" 
                                             value={form.phone} 
                                             onChange={e => setForm({...form, phone: e.target.value})} 
                                             onKeyDown={handleKeyDown}
@@ -266,7 +279,7 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                                 <div className="absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-orange-500 transition-colors z-10"><Info size={18} /></div>
                                 <input 
                                     placeholder={t('placeholder_vault_memo')} 
-                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] rounded-[24px] text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-md" 
+                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] apple-card text-[13px] font-bold outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-md" 
                                     value={form.description} 
                                     onChange={e => setForm({...form, description: e.target.value})} 
                                     onKeyDown={handleKeyDown}
@@ -274,15 +287,17 @@ export const BookModal = ({ isOpen, onClose, onSubmit, initialData }: any) => {
                             </div>
 
                             {/* সাবমিট বাটন */}
-                            <button 
-                                disabled={isLoading || !form.name} 
-                                className={cn(
-                                    "w-full h-16 rounded-[28px] font-black text-[11px] uppercase tracking-[5px] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 mt-4",
-                                    form.name ? "bg-orange-500 text-white shadow-orange-500/30 hover:bg-orange-600" : "bg-zinc-800 text-zinc-500 opacity-50"
-                                )}
-                            >
-                                {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Fingerprint size={20} /> {initialData ? t('btn_upgrade') : t('btn_execute')}</>}
-                            </button>
+                            <Tooltip text={initialData ? t('btn_upgrade') : t('btn_execute')}>
+                                <button 
+                                    disabled={isLoading || !form.name} 
+                                    className={cn(
+                                        "w-full h-16 apple-card font-black text-[11px] uppercase tracking-tight shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 mt-4",
+                                        form.name ? "bg-orange-500 text-white shadow-orange-500/30 hover:bg-orange-600" : "bg-zinc-800 text-zinc-500 opacity-50"
+                                    )}
+                                >
+                                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Fingerprint size={20} /> {initialData ? t('btn_upgrade') : t('btn_execute')}</>}
+                                </button>
+                            </Tooltip>
                         </form>
                     </div>
                 </div>

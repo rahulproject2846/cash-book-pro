@@ -6,6 +6,9 @@ import { telemetry } from '../Telemetry';
 import { getTimestamp } from '@/lib/shared/utils';
 import toast from 'react-hot-toast';
 import type { LocalEntry, LocalBook } from '@/lib/offlineDB';
+import { generateEntryChecksum } from '@/lib/offlineDB';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
+import { HydrationService } from './HydrationService';
 
 /**
  * 🔍 INTEGRITY SERVICE - Handles data integrity and conflict management
@@ -23,6 +26,7 @@ export class IntegrityService {
   private integrityCheckInterval: any = null;
   private shadowCache = new Map<string, any>();
   private pendingDeletions = new Map<string, NodeJS.Timeout>();
+  private hydrationService: HydrationService;
   
   // Constants
   private readonly SHADOW_CACHE_TTL = 15000; // 15 seconds
@@ -30,6 +34,7 @@ export class IntegrityService {
 
   constructor() {
     this.userId = identityManager.getUserId() || '';
+    this.hydrationService = new HydrationService();
   }
 
   /**
@@ -61,16 +66,21 @@ export class IntegrityService {
       let issuesFixed = 0;
       let conflicts = 0;
 
-      // 🔧 STEP 1: REPAIR CORRUPTED DATA
+      // 🔧 STEP 1: VALIDATE FINANCIAL CHECKSUMS (V4.5)
+      const checksumResult = await this.validateFinancialChecksums(userId);
+      issuesFound += checksumResult.issuesFound;
+      issuesFixed += checksumResult.issuesFixed;
+
+      // 🔧 STEP 2: REPAIR CORRUPTED DATA
       const repairResult = await this.repairCorruptedData(userId);
       issuesFound += repairResult.issuesFound;
       issuesFixed += repairResult.issuesFixed;
 
-      // 🔍 STEP 2: CHECK FOR CONFLICTS
+      // 🔍 STEP 3: CHECK FOR CONFLICTS
       const conflictResult = await this.checkForConflicts();
       conflicts = conflictResult.conflicts;
 
-      // 🔧 STEP 3: VALIDATE DATA CONSISTENCY
+      // 🔧 STEP 4: VALIDATE DATA CONSISTENCY
       const consistencyResult = await this.validateDataConsistency(userId);
       issuesFound += consistencyResult.issuesFound;
       issuesFixed += consistencyResult.issuesFixed;
@@ -103,16 +113,110 @@ export class IntegrityService {
   }
 
   /**
-   * 🔧 REPAIR CORRUPTED DATA
+   * 🔍 VALIDATE FINANCIAL CHECKSUMS (V4.5 Mathematical Integrity)
+   */
+  private async validateFinancialChecksums(userId: string): Promise<{ issuesFound: number; issuesFixed: number }> {
+    let issuesFound = 0;
+    let issuesFixed = 0;
+
+    try {
+      console.log('🔍 [INTEGRITY SERVICE] V4.5: Validating financial checksums...');
+      
+      // Fetch all unsynced entries
+      const unsyncedEntries = await db.entries
+        .where('userId')
+        .equals(userId)
+        .and((entry: LocalEntry) => entry.synced === 0 && entry.isDeleted === 0)
+        .toArray();
+      
+      // 🚀 CHUNKED PROCESSING: Process 50 items at a time to prevent UI blocking
+      const CHUNK_SIZE = 50;
+      const totalChunks = Math.ceil(unsyncedEntries.length / CHUNK_SIZE);
+      
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const startIndex = chunkIndex * CHUNK_SIZE;
+        const endIndex = Math.min(startIndex + CHUNK_SIZE, unsyncedEntries.length);
+        const chunk = unsyncedEntries.slice(startIndex, endIndex);
+        
+        console.log(`🔍 [INTEGRITY SERVICE] Processing chunk ${chunkIndex + 1}/${totalChunks} (${chunk.length} entries)`);
+        
+        for (const entry of chunk) {
+          // Re-calculate checksum using the same logic as generateEntryChecksum
+          const recalculatedChecksum = await generateEntryChecksum({
+            amount: entry.amount,
+            date: entry.date,
+            time: entry.time || "",
+            title: entry.title,
+            note: entry.note || "",
+            category: entry.category || "",
+            paymentMethod: entry.paymentMethod || "",
+            type: entry.type || "",
+            status: entry.status || ""
+          });
+          
+          // Check for tampering
+          if (entry.checksum !== recalculatedChecksum) {
+            issuesFound++;
+            
+            // Mark as tampered and enforce lockdown
+            await db.entries.update(entry.localId!, {
+              isTampered: 1,
+              synced: 0,
+              updatedAt: getTimestamp(),
+              vKey: getTimestamp()
+            });
+            
+            // IMMEDIATE LOCKDOWN ENFORCEMENT
+            getVaultStore().setSecurityLockdown(true);
+            
+            // Log critical security event
+            telemetry.log({
+              type: 'SECURITY',
+              level: 'CRITICAL',
+              message: 'CHECKSUM_TAMPERING_DETECTED',
+              data: {
+                entryId: entry.cid,
+                localId: entry.localId,
+                expectedChecksum: entry.checksum,
+                actualChecksum: recalculatedChecksum,
+                userId: this.userId
+              }
+            });
+            
+            console.error(`🚨 [INTEGRITY SERVICE] V4.5: TAMPERING DETECTED in entry ${entry.cid}! Lockdown enforced.`);
+            
+            // Break early - lockdown prevents further processing
+            return { issuesFound, issuesFixed };
+          }
+        }
+        
+        // 🚀 YIELD TO UI: Allow UI thread to process between chunks
+        if (chunkIndex < totalChunks - 1) {
+          console.log(`⏳ [INTEGRITY SERVICE] Yielding to UI thread before next chunk...`);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+      
+      console.log(`✅ [INTEGRITY SERVICE] V4.5: Financial checksum validation complete: ${issuesFound} tampering attempts detected`);
+      return { issuesFound, issuesFixed };
+      
+    } catch (error) {
+      console.error('❌ [INTEGRITY SERVICE] V4.5: Financial checksum validation failed:', error);
+      return { issuesFound, issuesFixed };
+    }
+  }
+
+  /**
+   * �� REPAIR CORRUPTED DATA (Enhanced with V4.5 Mathematical Mismatches)
    */
   private async repairCorruptedData(userId: string): Promise<{ issuesFound: number; issuesFixed: number }> {
     let issuesFound = 0;
     let issuesFixed = 0;
 
     try {
-      console.log('🔧 [INTEGRITY SERVICE] Starting data repair...');
+      console.log('🔧 [INTEGRITY SERVICE] Starting data repair (V4.5 enhanced)...');
       
-      // Fix entries table
+      // Legacy orphan cleanup logic
       const allEntries = await db.entries.toArray();
       for (const entry of allEntries) {
         const needsRepair = 
@@ -133,7 +237,7 @@ export class IntegrityService {
         }
       }
       
-      // Fix books table
+      // Legacy books cleanup
       const allBooks = await db.books.toArray();
       for (const book of allBooks) {
         const needsRepair = 
@@ -154,11 +258,58 @@ export class IntegrityService {
         }
       }
       
-      console.log(`✅ [INTEGRITY SERVICE] Data repair complete: ${issuesFixed}/${issuesFound} issues fixed`);
+      // V4.5: Mathematical Mismatch Detection
+      try {
+        console.log('🔍 [INTEGRITY SERVICE] V4.5: Checking mathematical mismatches...');
+        
+        // Fetch server balance manifest
+        const response = await fetch(`/api/stats/manifest?userId=${encodeURIComponent(userId)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const serverManifest = await response.json();
+          
+          // Get local stats from Zustand
+          const { globalStats } = getVaultStore();
+          
+          // Compare totals
+          const incomeDiff = Math.abs(serverManifest.totalIncome - globalStats.totalIncome);
+          const expenseDiff = Math.abs(serverManifest.totalExpense - globalStats.totalExpense);
+          
+          if (incomeDiff > 0 || expenseDiff > 0) {
+            issuesFound++;
+            console.warn(`⚠️ [INTEGRITY SERVICE] V4.5: Mathematical mismatch detected! Server vs Local:`, {
+              serverIncome: serverManifest.totalIncome,
+              localIncome: globalStats.totalIncome,
+              serverExpense: serverManifest.totalExpense,
+              localExpense: globalStats.totalExpense
+            });
+            
+            // Trigger full hydration to repair local data
+            await this.hydrationService.fullHydration(true);
+            issuesFixed++;
+            
+            console.log('🔧 [INTEGRITY SERVICE] V4.5: Full hydration triggered to repair mathematical mismatch');
+          }
+        } else if (response.status === 404) {
+          console.debug('🔍 [INTEGRITY SERVICE] V4.5: Server endpoint not available, skipping check');
+          return { issuesFound, issuesFixed };
+        } else {
+          console.warn('⚠️ [INTEGRITY SERVICE] V4.5: Could not fetch server manifest for comparison');
+        }
+      } catch (manifestError) {
+        console.warn('⚠️ [INTEGRITY SERVICE] V4.5: Mathematical mismatch check failed:', manifestError);
+      }
+      
+      console.log(`✅ [INTEGRITY SERVICE] V4.5: Data repair complete: ${issuesFixed}/${issuesFound} issues fixed`);
       return { issuesFound, issuesFixed };
       
     } catch (error) {
-      console.error('❌ [INTEGRITY SERVICE] Data repair failed:', error);
+      console.error('❌ [INTEGRITY SERVICE] V4.5: Data repair failed:', error);
       return { issuesFound, issuesFixed };
     }
   }
@@ -433,6 +584,30 @@ export class IntegrityService {
       pendingDeletions: this.pendingDeletions.size,
       isScheduled: !!this.integrityCheckInterval
     };
+  }
+
+  /**
+   * 🔍 PUBLIC VALIDATE FINANCIAL CHECKSUMS (For PushService Integration)
+   */
+  async validateFinancialChecksumsPublic(): Promise<{ success: boolean; tamperingDetected: boolean; error?: string }> {
+    try {
+      const userId = this.getUserId();
+      if (!userId) {
+        return { success: false, tamperingDetected: false, error: 'No user ID available' };
+      }
+      
+      const result = await this.validateFinancialChecksums(userId);
+      return { 
+        success: true, 
+        tamperingDetected: result.issuesFound > 0 
+      };
+    } catch (error) {
+      return { 
+        success: false, 
+        tamperingDetected: false, 
+        error: String(error) 
+      };
+    }
   }
 
   /**

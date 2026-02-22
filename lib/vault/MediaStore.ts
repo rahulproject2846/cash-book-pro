@@ -3,6 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { db } from '@/lib/offlineDB';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 
 interface MediaStoreState {
     // 🔄 QUEUE MANAGEMENT
@@ -140,8 +141,8 @@ export const useMediaStore = create<MediaStoreState>()(
                         orchestrator.triggerSync();
                         
                         // 🆕 MANUAL SYNC: Force vault store sync for immediate propagation
-                        if (typeof window !== 'undefined' && (window as any).useVaultStore) {
-                            const vaultStore = (window as any).useVaultStore.getState();
+                        if (typeof window !== 'undefined' && (window as any).getVaultStore) {
+                            const vaultStore = (window as any).getVaultStore();
                             if (vaultStore.triggerManualSync) {
                                 vaultStore.triggerManualSync();
                                 console.log(`🚀 [MEDIA SYNC] Manual vault sync triggered for book ${existingBook.cid}`);
@@ -227,6 +228,12 @@ export const useMediaStore = create<MediaStoreState>()(
         
         processQueue: async () => {
             if (!navigator.onLine) return;
+            
+            const { isSecurityLockdown } = getVaultStore(); // Use the correct name here
+            if (isSecurityLockdown) {
+              console.warn('🔒 [MEDIA] Processing blocked - Lockdown active');
+              return;
+            }
             
             const { currentUpload, uploadQueue } = get();
             if (currentUpload || uploadQueue.length === 0) return;

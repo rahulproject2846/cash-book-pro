@@ -1,14 +1,16 @@
 "use client";
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { useVaultState } from '@/lib/vault/store/storeHelper';
 
 /**
  * VAULT PRO: MASTER MODAL PROTOCOL (V12.0 ELITE)
  * -----------------------------------------------
  * Handles global modal states with framed-motion exit safety.
  * Added: 'deleteTagConfirm' and typed data handling.
+ * INTEGRATED: Central overlay state management
  */
 
-// ১. মডাল টাইপ ডেফিনিশন (Strict Registry)
+// ১. মডাল টাইপ ডেফিনিশ (Strict Registry)
 type ModalView = 
   | 'addBook' 
   | 'editBook' 
@@ -19,10 +21,10 @@ type ModalView =
   | 'share' 
   | 'deleteBookConfirm' 
   | 'deleteConfirm' 
-  | 'deleteTagConfirm' // 🔥 ফিক্স: রেড লাইন দূর করার জন্য এটি যোগ করা হয়েছে
+  | 'deleteTagConfirm' // ফিক্স: রেড লাইন দূর করার জন্য এটি যোগ করা হয়েছে
   | 'shortcut' 
-  | 'conflictResolver' // 🔥 ফিক্স: vKey mismatch conflict resolution
-  | 'actionMenu' // 🆕 Action Menu for FAB
+  | 'conflictResolver' // ফিক্স: vKey mismatch conflict resolution
+  | 'actionMenu' //  Action Menu for FAB
   | 'none';
 
 interface ModalContextType {
@@ -41,38 +43,53 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [data, setData] = useState<any>(null);
 
+  // CENTRAL OVERLAY STATE INTEGRATION
+  const { registerOverlay, unregisterOverlay } = useVaultState();
+
   // ২. মডাল ওপেন প্রোটোকল (Memoized for performance)
   const openModal = useCallback((targetView: ModalView, modalData: any = null) => {
     setData(modalData);
     setView(targetView);
-    // ছোট একটি ডিলে দিয়ে ওপেন করা হয় যাতে ডাটা প্রপারলি সিঙ্ক হয়
-    requestAnimationFrame(() => {
-        setIsOpen(true);
-    });
-  }, []);
+    setIsOpen(true); // SYNC: Set isOpen immediately
+    
+    // REGISTER OVERLAY IN CENTRAL STATE
+    registerOverlay('Modal');
+    
+    // NATIVE NAVIGATION: Push modal state to history
+    if (typeof window !== 'undefined') {
+      window.history.pushState(
+        { 
+          type: 'modal-view',
+          modalView: targetView,
+          timestamp: Date.now()
+        }, 
+        `Modal: ${targetView}`, 
+        `#modal-${targetView}`
+      );
+    }
+  }, [registerOverlay]);
 
   // ৩. মডাল ক্লোজ প্রোটোকল (Exit Animation Safety)
   const closeModal = useCallback((onClosed?: () => void) => {
     setIsOpen(false);
+    setView('none'); // SYNC: Set view immediately, no delay
+    setData(null); // SYNC: Clear data immediately
     
-    // 🔥 মাস্টার ডিলে: ৩৫০ms ওয়েট করা হয় যাতে Framer Motion এর exit অ্যানিমেশন শেষ হতে পারে।
-    // এটি না থাকলে মডাল হুট করে গায়েব হয়ে যায়, যা দেখতে বিচ্ছিরি লাগে।
-    setTimeout(() => {
-      setView('none');
-      setData(null);
-      // Execute callback after cleanup is complete
-      if (typeof onClosed === 'function') {
-        onClosed();
-      }
-    }, 350); 
-  }, []);
+    // UNREGISTER OVERLAY FROM CENTRAL STATE
+    unregisterOverlay('Modal');
+    
+    // Execute callback immediately since state is now synchronized
+    if (typeof onClosed === 'function') {
+      onClosed();
+    }
+  }, [unregisterOverlay]);
 
   // ৪. মডাল সুইচ প্রোটোকল (No Delay - Instant Switch)
   const switchModal = useCallback((targetView: ModalView, modalData: any = null) => {
     setView(targetView);
     setData(modalData);
     if (!isOpen) setIsOpen(true);
-  }, [isOpen]);
+  }, [isOpen, registerOverlay]);
 
   return (
     <ModalContext.Provider value={{ view, isOpen, data, openModal, closeModal, switchModal }}>

@@ -40,7 +40,14 @@ export class IdentityManager {
   }
 
   /**
-   * 📥 GET USER ID: Primary method for all consumers
+   * � GET READY STATUS: Public access to isReady
+   */
+  get ready(): boolean {
+    return this.isReady;
+  }
+
+  /**
+   * �📥 GET USER ID: Primary method for all consumers
    */
   getUserId(): string | null {
     // Priority 1: In-memory state (fastest)
@@ -94,11 +101,14 @@ export class IdentityManager {
   }
 
   /**
-   * 📞 SUBSCRIBE: React components can listen to changes
+   * SUBSCRIBE: React components can listen to changes
    */
   subscribe(callback: (userId: string | null) => void): () => void {
     this.subscribers.add(callback);
 
+    // Store previous userId to detect changes
+    const previousUserId = this.userId;
+    
     // Immediately call with current userId
     callback(this.getUserId());
 
@@ -293,6 +303,35 @@ onReady(callback: () => void): () => void {
       subscriberCount: this.subscribers.size,
       timestamp: new Date().toISOString()
     };
+  }
+
+  /**
+   * ⏳ WAIT FOR IDENTITY: Promise-based identity readiness
+   */
+  async waitForIdentity(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      // If already ready with valid userId, resolve immediately
+      if (this.isReady && this.userId) {
+        resolve(this.userId);
+        return;
+      }
+      
+      // Set timeout for safety
+      const timeout = setTimeout(() => {
+        reject(new Error('Identity timeout after 10 seconds'));
+      }, 10000);
+      
+      // Wait for ready state
+      const checkReady = () => {
+        if (this.isReady && this.userId) {
+          clearTimeout(timeout);
+          resolve(this.userId);
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      checkReady();
+    });
   }
 }
 

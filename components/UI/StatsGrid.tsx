@@ -43,7 +43,7 @@ export const StatsGrid = ({
             <div className="md:hidden">
                 <motion.div 
                     initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-                    className="relative bg-[var(--bg-card)] rounded-[35px] border border-[var(--border)] p-6 overflow-hidden shadow-xl"
+                    className="relative bg-[var(--bg-card)] apple-card border border-[var(--border)] p-6 overflow-hidden shadow-xl"
                 >
                     <div className="absolute -right-6 -top-6 opacity-[0.03] rotate-12 pointer-events-none">
                         <Zap size={150} strokeWidth={1} className="text-orange-500" />
@@ -60,7 +60,7 @@ export const StatsGrid = ({
                                 {toBn(Math.abs(finalSurplus).toLocaleString(), language)}
                             </h3>
                             <div className="mt-4">
-                                <span className="px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-color)] text-[7px] font-black text-green-500 uppercase tracking-widest">
+                                <span className="px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-color)] text-[7px] font-black text-green-500 uppercase tracking-tight">
                                     {t('status_secured') || "PROTOCOL SECURED"}
                                 </span>
                             </div>
@@ -71,7 +71,7 @@ export const StatsGrid = ({
                                 <div key={idx} className="flex flex-col items-end">
                                     <div className="flex items-center gap-1.5 mb-0.5 opacity-40">
                                         <item.icon size={10} className={item.color} />
-                                        <span className="text-[7px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</span>
+                                        <span className="text-[7px] font-black uppercase tracking-tight text-[var(--text-muted)]">{item.label}</span>
                                     </div>
                                     <p className={cn("text-[12px] font-mono-finance font-bold tracking-tight", item.color)}>
                                         {toBn(item.value.toLocaleString(), language)}
@@ -91,7 +91,7 @@ export const StatsGrid = ({
                             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.1, type: "spring", damping: 25 }}
                             whileHover={{ y: -5, boxShadow: `0 20px 40px -10px ${card.glow}` }}
-                            className="group relative bg-[var(--bg-card)] rounded-[32px] p-6 border border-[var(--border)] overflow-hidden transition-all duration-500 w-100 h-full flex flex-col"
+                            className="group relative bg-[var(--bg-card)] apple-card p-6 border border-[var(--border)] overflow-hidden transition-all duration-500 w-100 h-full flex flex-col"
                         >
                             <div className={cn("absolute -right-8 -top-8 w-24 h-24 blur-[50px] opacity-10 group-hover:opacity-30 transition-opacity duration-700", card.accent)} />
                             

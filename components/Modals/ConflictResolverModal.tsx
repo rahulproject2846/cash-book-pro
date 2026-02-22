@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Cloud, Save, Book, FileText } from 'lucide-react';
 import { cn, toBn } from '@/lib/utils/helpers';
-import { useVaultStore } from '@/lib/vault/store';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { mapConflictType } from '@/lib/vault/ConflictMapper';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -34,7 +34,7 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
   onResolve
 }) => {
   const [isResolving, setIsResolving] = useState(false);
-  const { registerConflict, resolveConflict } = useVaultStore();
+  const { registerConflict, resolveConflict } = getVaultStore();
   const { t } = useTranslation();
 
   if (!isOpen || !record) return null;
@@ -70,7 +70,7 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
         console.log(`🛡️ [CONFLICT MODAL] Triggering full resurrection for book: ${record.cid}`);
         
         // Direct call to resurrectBookChain for atomic resurrection
-        const { resurrectBookChain } = useVaultStore.getState();
+        const { resurrectBookChain } = getVaultStore();
         await resurrectBookChain(record.cid);
         
         onClose(); // Close modal immediately

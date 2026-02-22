@@ -24,11 +24,23 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   conflictedCount: number;
   hasConflicts: boolean;
   
+  // 🎯 USER SETTINGS STATE
+  categories: string[];
+  currency: string;
+  preferences: {
+    dailyReminder: boolean;
+    weeklyReports: boolean;
+    highExpenseAlert: boolean;
+  };
+  
   // 🚀 Cross-cutting state
   userId: string;
   isLoading: boolean;
   activeSection: string;
   nextAction: string | null;
+  isGlobalAnimating: boolean;
+  lastScrollPosition: number; // 🆕 SCROLL MEMORY
+  dynamicHeaderHeight: number;
   
   // 🔄 Cross-cutting actions
   refreshData: () => Promise<void>;
@@ -37,7 +49,13 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   calculateGlobalStats: (allEntries: any[]) => void;
   checkForNewConflicts: () => Promise<void>;
   setActiveSection: (section: string) => void;
+  setDynamicHeaderHeight: (height: number) => void;
   setNextAction: (action: string | null) => void;
+  
+  // 🎯 USER SETTINGS ACTIONS
+  setCategories: (categories: string[]) => void;
+  setCurrency: (currency: string) => void;
+  setPreferences: (preferences: any) => void;
   
   // 🔥 SESSION MANAGEMENT: Clear session cache on logout
   clearSessionCache: () => void;
@@ -69,15 +87,27 @@ export const useVaultStore = create<VaultStore>()(
       conflictedCount: 0,
       hasConflicts: false,
       
+      // 🎯 USER SETTINGS STATE
+      categories: ['GENERAL', 'SALARY', 'FOOD', 'RENT', 'SHOPPING', 'LOAN'],
+      currency: 'BDT (৳)',
+      preferences: {
+        dailyReminder: false,
+        weeklyReports: false,
+        highExpenseAlert: false
+      },
+      
       // Cross-cutting state
       userId: '',
       isLoading: false,
       activeSection: 'books',
       nextAction: null,
+      isGlobalAnimating: false,
+      dynamicHeaderHeight: 80,
 
       // CROSS-CUTTING ACTIONS
       refreshData: async () => {
         const userId = identityManager.getUserId();
+        
         console.log(' [MAIN STORE] Starting refresh for user:', userId);
         
         if (!userId) {
@@ -107,7 +137,8 @@ export const useVaultStore = create<VaultStore>()(
               .sortBy('updatedAt'),
           ]);
 
-          get().calculateGlobalStats(allEntries);
+          // 📊 STATS: Defer to refreshCounters to prevent duplicate calculations
+          // get().calculateGlobalStats(allEntries); // REMOVED
 
           const activeBookId = get().activeBook?._id || get().activeBook?.localId || '';
           const entries = activeBookId 
@@ -248,9 +279,29 @@ export const useVaultStore = create<VaultStore>()(
         set({ activeSection: section });
       },
 
+      setDynamicHeaderHeight: (height: number) => {
+        set({ dynamicHeaderHeight: height });
+      },
+
       setNextAction: (action: string | null) => {
         console.log(' [MAIN STORE] Next action set:', action);
         set({ nextAction: action });
+      },
+      
+      // 🎯 USER SETTINGS ACTIONS
+      setCategories: (categories: string[]) => {
+        console.log(' [MAIN STORE] Categories updated:', categories);
+        set({ categories });
+      },
+      
+      setCurrency: (currency: string) => {
+        console.log(' [MAIN STORE] Currency updated:', currency);
+        set({ currency });
+      },
+      
+      setPreferences: (preferences: any) => {
+        console.log(' [MAIN STORE] Preferences updated:', preferences);
+        set({ preferences });
       },
 
       // SESSION MANAGEMENT: Clear session cache on logout
@@ -275,24 +326,60 @@ if (typeof window !== 'undefined') {
 
   // Load data on first mount
   setTimeout(() => {
-    useVaultStore.getState().refreshData();
+    // 🛡️ SECURITY GUARD: Only refresh if not in lockdown
+    const { isSecurityLockdown } = useVaultStore.getState();
+    if (!isSecurityLockdown) {
+      useVaultStore.getState().refreshData();
+    } else {
+      console.log('🛡️ [MAIN STORE] Initial refresh blocked - App in lockdown mode');
+    }
   }, 100);
 
-  // 🆕 DEBOUNCE: Prevent multiple rapid refreshes
+  // 🆕 UNIFIED DEBOUNCE: Single source of truth for refresh prevention
   let lastRefreshTime = 0;
-  const REFRESH_DEBOUNCE_MS = 2000; // 2 seconds
+  let lastRefreshSource = '';
+  const REFRESH_DEBOUNCE_MS = 3000; // 3 seconds unified cooldown
+  let isBackgroundRefresh = false;
 
   // Listen for vault update events
-  window.addEventListener('vault-updated', () => {
-    console.log('📡 [MAIN STORE] Vault update event received');
+  window.addEventListener('vault-updated', (event: any) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('📡 [MAIN STORE] Vault update event received');
+    }
     
     const now = Date.now();
-    if (now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
-      console.log(`🛡️ [MAIN STORE] Debouncing refresh (${now - lastRefreshTime}ms ago)`);
+    const source = event.detail?.source || 'unknown';
+    
+    // 🔄 LOOP DETECTION: Same source within 1s = ignore
+    if (source === lastRefreshSource && 
+        now - lastRefreshTime < 1000) {
+      console.log(`🛡️ [MAIN STORE] Loop detected: ${source} refresh ignored`);
       return;
     }
     
+    if (now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
+      console.log(`🛡️ [MAIN STORE] Refresh blocked - too soon (${now - lastRefreshTime}ms ago)`);
+      return;
+    }
+    
+    // 🛡️ SELF-REFRESH GUARD: Ignore SyncOrchestrator's own broadcasts
+    if (source === 'SyncOrchestrator' && 
+        event.detail?.origin === 'SyncOrchestrator') {
+      console.log(`🛡️ [MAIN STORE] Self-refresh ignored: ${source}`);
+      return;
+    }
+    
+    // 🛡️ BACKGROUND SERVICE GUARD: Skip refresh if from background service
+    if (source === 'IntegrityService' || 
+        source === 'MaintenanceService') {
+      console.log(`🛡️ [MAIN STORE] Skipping refresh from background service: ${source}`);
+      isBackgroundRefresh = true;
+      return;
+    }
+    
+    lastRefreshSource = source;
     lastRefreshTime = now;
+    isBackgroundRefresh = false;
     useVaultStore.getState().refreshData();
   });
 

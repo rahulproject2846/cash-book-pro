@@ -1,7 +1,8 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { 
     Layers, BookOpen, Calendar, Edit3, 
     MoreHorizontal, Settings, Plus, Trash2,
@@ -12,8 +13,10 @@ import { cn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useModal } from '@/context/ModalContext';
 import { useLocalPreview } from '@/hooks/useLocalPreview';
-import { useVaultStore } from '@/lib/vault/store';
+import { useVaultState } from '@/lib/vault/store/storeHelper';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { db } from '@/lib/offlineDB';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 interface BookCardProps {
     book: any;
@@ -21,17 +24,45 @@ interface BookCardProps {
     onDelete: (book: any) => void;
     onOpen: (book: any) => void;
     currentUser: any;
+    isDimmed?: boolean;
 }
 
 // 🚀 OPTIMIZED BOOK CARD: Memoized to prevent unnecessary re-renders
-export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser }: BookCardProps) => {
+export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDimmed = false }: BookCardProps) => {
     const { t } = useTranslation();
     const { openModal } = useModal();
+    const router = useRouter();
     
-    // 🎯 IMAGE STATE MANAGEMENT - URL FIRST PRIORITY
-    const isHttpImage = book.image?.startsWith('http');
-    const displayImage = isHttpImage ? book.image : (book.image || book.mediaCid);
+    // 🔍 Observe this specific book for background updates (like mediaCid or image URL)
+    const liveBook = useLiveQuery(
+        () => book.localId ? db.books.where('localId').equals(book.localId).first() : null,
+        [book.localId]
+    );
+
+    // Fallback to initial prop if live query hasn't returned yet
+    const reactiveBook = liveBook || book;
+    
+    // 🎯 Z-INDEX STATE MANAGEMENT
+    const [isAnimating, setIsAnimating] = useState<boolean>(false);
+    const { activeSection, activeBook, setGlobalAnimating, isGlobalAnimating } = useVaultState();
+    
+    // 🎯 IMAGE STATE MANAGEMENT - URL FIRST PRIORITY (NOW REACTIVE)
+    const isHttpImage = reactiveBook.image?.startsWith('http');
+    const displayImage = isHttpImage ? reactiveBook.image : (reactiveBook.image || reactiveBook.mediaCid);
     const { previewUrl, isLoading, error: previewError } = useLocalPreview(displayImage);
+    
+    // 🖼️ [AUDIT] Log display pipeline for forensic analysis
+    if (process.env.NODE_ENV === 'development') {
+        console.log('🖼️ [CARD RENDER]', { 
+            bookId: book.localId || book._id,
+            displayImage, 
+            previewUrl, 
+            isLoading,
+            hasLiveBook: !!liveBook,
+            isHttpImage,
+            hasMediaCid: !!reactiveBook.mediaCid
+        });
+    }
     
     // 🎯 IMAGE STATE LOGIC
     const isCidImage = displayImage && displayImage.startsWith('cid_');
@@ -83,8 +114,32 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
 
     const handleOpen = React.useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
+        
+        // 🎯 SAVE SCROLL POSITION BEFORE NAVIGATION
+        const scrollEl = document.querySelector('main[layoutId="main-container"]');
+        if (scrollEl) {
+            getVaultStore().setLastScrollPosition(scrollEl.scrollTop);
+        }
+        
+        // 🎯 Z-INDEX INTERLOCK: Set this card to top layer during animation
+        if (!isGlobalAnimating) {
+            setIsAnimating(true);
+            getVaultStore().setGlobalAnimating(true);
+        }
+        
+        // 🎯 URL-BASED NAVIGATION: Use Next.js router for book details
+        const bookId = book._id || book.localId;
+        if (bookId) {
+            router.push(`?tab=books&id=${bookId}`);
+        }
         onOpen(book);
-    }, [onOpen, book]);
+        
+        // 🎯 RESET Z-INDEX: Reset after animation completes
+        setTimeout(() => {
+            setIsAnimating(false);
+            getVaultStore().setGlobalAnimating(false);
+        }, 500);
+    }, [onOpen, book, router, isGlobalAnimating]);
 
     // 🛡️ CONFLICT RESOLUTION: Handle conflict modal opening
     const handleConflictResolution = React.useCallback(async () => {
@@ -164,7 +219,8 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
         '#8B5CF6': Settings,
         '#6366F1': Plus,
         '#14B8A6': MoreHorizontal,
-        '#F97316': Calendar
+        '#F97316': Calendar,
+        'default': BookOpen
     } as const;
     
     // 🚀 BOOK ICON COMPONENT: Memoized and defined outside return
@@ -180,24 +236,63 @@ export const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUse
     return (
         <motion.div
             layout
+            layoutId={`book-hero-${bookId}`}
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            animate={{ 
+                opacity: isDimmed ? 0.35 : 1, 
+                y: 0,
+                scale: isDimmed ? 0.94 : 1,
+                filter: isDimmed ? "blur(2px) saturate(0.5) grayscale(0.5)" : "blur(0px) saturate(1)"
+            }}
             exit={{ opacity: 0, scale: 0.95 }}
-            onClick={() => onOpen(book)}
-            className="group relative bg-[#1E1E1E] rounded-xl border border-white/5 hover:border-white/10 p-4 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col gap-4 overflow-hidden"
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+            whileHover={{ 
+                scale: 1.08, 
+                zIndex: 100, 
+                boxShadow: "0 30px 60px rgba(0,0,0,0.3), 0 10px 20px rgba(251, 146, 60, 0.2)",
+                transition: { duration: 0.2 } 
+            }}
+            whileTap={{ scale: 0.98 }}
+            onClick={(e) => {
+                if (!isGlobalAnimating) {
+                    setIsAnimating(true);
+                    getVaultStore().setGlobalAnimating(true);
+                }
+                onOpen(book);
+                
+                // RESET Z-INDEX: Reset after animation completes
+                setTimeout(() => {
+                    setIsAnimating(false);
+                    getVaultStore().setGlobalAnimating(false);
+                }, 500);
+            }}
+            style={{ 
+                zIndex: isAnimating ? 100 : 1,
+                willChange: "transform" 
+            }}
+            className="group relative z-30 bg-[#1E1E1E] rounded-xl border border-white/5 hover:border-white/10 p-4 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] flex flex-col gap-4 overflow-hidden"
         >
-            {/* 🎨 HEADER SECTION */}
+            {/* HEADER SECTION */}
             <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <div 
+                    <motion.div 
+                        layoutId={`title-${bookId}`}
+                        layout
+                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        style={{ willChange: "transform" }}
+                        className="flex items-center gap-2 mb-1"
+                    >
+                        <motion.div 
+                            layoutId={`icon-${bookId}`}
+                            layout
+                            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                            style={{ willChange: "transform", backgroundColor: book.color || '#3B82F6' }}
                             className="w-2 h-2 rounded-full shrink-0" 
-                            style={{ backgroundColor: book.color || '#3B82F6' }} 
                         />
                         <span className="text-sm font-medium text-slate-100 truncate">
                             {stableProps.bookName || t('unnamed_book')}
                         </span>
-                    </div>
+                    </motion.div>
                     
                     {/* 📝 DESCRIPTION BLOCK */}
                     {stableProps.bookDescription && (

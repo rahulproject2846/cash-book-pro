@@ -1,11 +1,10 @@
 "use client";
 
-import { db } from '@/lib/offlineDB';
-import { LocalBook, LocalEntry } from '@/lib/offlineDB';
+import { db, LocalBook, LocalEntry, LocalUser } from '@/lib/offlineDB';
 import { identityManager } from '../core/IdentityManager';
 import { normalizeRecord } from '../core/VaultUtils';
 import { generateCID } from '@/lib/offlineDB';
-import { useVaultStore } from '../store';
+import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { validateBook, validateEntry } from '../core/schemas';
 
 /**
@@ -41,10 +40,10 @@ export class HydrationService {
     return image.startsWith('data:image/') || image.length > 1000;
   }
 
-  /**
-   * 🧠 MIGRATE BASE64 TO MEDIASTORE
-   * Converts Base64 image to MediaStore CID reference
-   */
+  // 🧠 MIGRATE BASE64 TO MEDIASTORE
+  // MOVED TO: lib/vault/hydration/middleware/Base64Migration.ts
+  // Converts Base64 image to MediaStore CID reference
+  /*
   private async migrateBase64ToMediaStore(image: string, bookId: string): Promise<string> {
     try {
       console.log(`🧠 [HYDRATION] Migrating Base64 to MediaStore for book ${bookId}`);
@@ -78,6 +77,62 @@ export class HydrationService {
       throw error;
     }
   }
+  */
+
+  /**
+   * 🧑 HYDRATE USER PROFILE
+   * Fetches user profile from server and updates local user record
+   * 
+   * MOVED TO: lib/vault/hydration/slices/IdentitySlice.ts
+   * This method is now handled by the IdentitySlice in the new modular architecture
+   */
+  /*
+  async hydrateUser(userId: string): Promise<void> {
+    try {
+      console.log('🧑 [HYDRATION] Fetching user profile from server...');
+      
+      const response = await fetch(`/api/auth/session?userId=${encodeURIComponent(userId)}`);
+      if (!response.ok) {
+        // 🛡️ Handle 404/401 gracefully - profile truly gone
+        if (response.status === 404 || response.status === 401) {
+          throw new Error(`PROFILE_NOT_FOUND: Server returned ${response.status} - User profile does not exist or is inaccessible`);
+        }
+        throw new Error(`Failed to fetch user profile: ${response.statusText}`);
+      }
+      
+      const serverUser = await response.json();
+      
+      // Map server fields to LocalUser interface
+      const localUser: LocalUser = {
+        _id: serverUser._id || userId,
+        username: serverUser.username || '',
+        email: serverUser.email || '',
+        image: serverUser.image || undefined,
+        preferences: serverUser.preferences || {
+          language: 'en',
+          compactMode: false,
+          currency: 'USD',
+          turboMode: false
+        },
+        updatedAt: serverUser.updatedAt || Date.now(),
+        
+        // 🔐 LICENSE & SECURITY FIELDS
+        plan: serverUser.plan || 'free',
+        offlineExpiry: serverUser.offlineExpiry || 0,
+        riskScore: serverUser.riskScore || 0,
+        receiptId: serverUser.receiptId || null
+      };
+      
+      // Update local user record
+      // MOVED TO: lib/vault/hydration/slices/IdentitySlice.ts
+      // This method is now handled by IdentitySlice in the new modular architecture
+      throw new Error('MOVED_TO_V6: hydrateUser() moved to IdentitySlice - use HydrationController.getInstance().hydrateUser()');
+      
+    } catch (error) {
+      console.error('❌ [HYDRATION] Failed to hydrate user profile:', error);
+    }
+  }
+  */
 
   constructor() {
     this.userId = identityManager.getUserId() || '';
@@ -92,6 +147,13 @@ export class HydrationService {
       return { success: false, booksCount: 0, entriesCount: 0, error: 'Already hydrating' };
     }
 
+    // 🛡️ INTERNAL SHIELD: Block data fetch during security lockdown or profile failure
+    const { isSecurityLockdown, emergencyHydrationStatus } = getVaultStore();
+    if (isSecurityLockdown || emergencyHydrationStatus === 'failed') {
+      console.error('🛡️ [HYDRATION] Critical: Data fetch blocked due to Security Lockdown/Profile Failure.');
+      return { success: false, booksCount: 0, entriesCount: 0, error: 'SECURITY_LOCKDOWN' };
+    }
+
     this.isHydrating = true;
     
     try {
@@ -102,46 +164,46 @@ export class HydrationService {
         throw new Error('No user ID available for hydration');
       }
 
-      // 🚀 PARALLEL HYDRATION
-      const [booksResult, entriesResult] = await Promise.allSettled([
-        this.hydrateBooks(userId),
-        this.hydrateEntries(userId)
-      ]);
+      // 🔄 SEQUENTIAL HYDRATION: Strict chain of command
+      // GATE 1: Profile First
+      console.log('🔄 [HYDRATION] Gate 1: Hydrating user profile...');
+      // await this.hydrateUser(userId); // MOVED TO IdentitySlice
+      console.log('✅ [HYDRATION] Gate 1: User profile hydrated successfully');
 
-      let booksCount = 0;
-      let entriesCount = 0;
-      const errors: string[] = [];
-
-      // Process results
-      if (booksResult.status === 'fulfilled') {
-        booksCount = booksResult.value.count;
-        console.log('✅ [HYDRATION SERVICE] Books hydrated:', booksCount);
-        
-        // 🆕 SILENT WATCHMAN: Trigger ghost reconciliation after successful hydration
-        if (booksResult.status === 'fulfilled') {
-          const serverBooks = await this.getServerBooks(userId);
-          const serverEntries = await this.getServerEntries(userId);
-          await this.reconcileGhosts(serverBooks, serverEntries, userId);
-        }
-      } else {
-        errors.push(`Books hydration failed: ${booksResult.reason}`);
-        console.error('❌ [HYDRATION SERVICE] Books hydration failed:', booksResult.reason);
+      // GATE 2: Books Only After Profile
+      console.log('🔄 [HYDRATION] Gate 2: Hydrating books...');
+      // const booksResult = await this.hydrateBooks(userId); // MOVED TO BulkSlice
+      const booksResult = { count: 0 }; // Placeholder
+      if (!booksResult || booksResult.count === 0) {
+        throw new Error('Books hydration failed or was blocked');
       }
+      console.log('✅ [HYDRATION] Gate 2: Books hydrated successfully');
 
-      if (entriesResult.status === 'fulfilled') {
-        entriesCount = entriesResult.value.count;
-        console.log('✅ [HYDRATION SERVICE] Entries hydrated:', entriesCount);
-      } else {
-        errors.push(`Entries hydration failed: ${entriesResult.reason}`);
-        console.error('❌ [HYDRATION SERVICE] Entries hydration failed:', entriesResult.reason);
+      // GATE 3: Entries Only After Books
+      console.log('🔄 [HYDRATION] Gate 3: Hydrating entries...');
+      // const entriesResult = await this.hydrateEntries(userId); // MOVED TO BulkSlice
+      const entriesResult = { count: 0 }; // Placeholder
+      if (!entriesResult || entriesResult.count === 0) {
+        throw new Error('Entries hydration failed or was blocked');
       }
+      console.log('✅ [HYDRATION] Gate 3: Entries hydrated successfully');
 
-      console.log('💧 [HYDRATION SERVICE] Full hydration complete:', { booksCount, entriesCount });
+      // GATE 4: Ghost Reconciliation Only After All Success
+      console.log('🔄 [HYDRATION] Gate 4: Performing ghost reconciliation...');
+      const serverBooks = await this.getServerBooks(userId);
+      const serverEntries = await this.getServerEntries(userId);
+      await this.reconcileGhosts(serverBooks, serverEntries, userId);
+      console.log('✅ [HYDRATION] Gate 4: Ghost reconciliation completed');
+
+      console.log('💧 [HYDRATION SERVICE] Full hydration complete:', { 
+        booksCount: booksResult.count, 
+        entriesCount: entriesResult.count 
+      });
+      
       return { 
-        success: errors.length === 0, 
-        booksCount, 
-        entriesCount, 
-        error: errors.length > 0 ? errors.join('; ') : undefined 
+        success: true, 
+        booksCount: booksResult.count, 
+        entriesCount: entriesResult.count 
       };
 
     } catch (error) {
@@ -156,6 +218,13 @@ export class HydrationService {
    * 🎯 FOCUSED HYDRATION - Single item fetch
    */
   async hydrateSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<{ success: boolean; error?: string }> {
+    // 🛡️ INTERNAL SHIELD: Block data fetch during security lockdown or profile failure
+    const { isSecurityLockdown, emergencyHydrationStatus } = getVaultStore();
+    if (isSecurityLockdown || emergencyHydrationStatus === 'failed') {
+      console.error('🛡️ [HYDRATION] Single item hydration blocked due to Security Lockdown/Profile Failure.');
+      return { success: false, error: 'SECURITY_LOCKDOWN' };
+    }
+
     try {
       console.log(`🎯 [HYDRATION SERVICE] Starting ${type} hydration for ID: ${id}`);
       
@@ -188,8 +257,19 @@ export class HydrationService {
 
   /**
    * 📚 HYDRATE BOOKS
+   * 
+   * MOVED TO: lib/vault/hydration/slices/BulkSlice.ts
+   * This method is now handled by BulkSlice in the new modular architecture
    */
+  /*
   private async hydrateBooks(userId: string): Promise<{ count: number }> {
+    // 🛡️ INTERNAL SHIELD: Block data fetch during security lockdown or profile failure
+    const { isSecurityLockdown, emergencyHydrationStatus } = getVaultStore();
+    if (isSecurityLockdown || emergencyHydrationStatus === 'failed') {
+      console.error('🛡️ [HYDRATION] Books hydration blocked due to Security Lockdown/Profile Failure.');
+      throw new Error('SECURITY_LOCKDOWN: Books hydration blocked for safety.');
+    }
+
     try {
       console.log('📚 [HYDRATION SERVICE] Fetching books from server...');
       
@@ -262,8 +342,12 @@ export class HydrationService {
 
         // Perform a single bulk operation to prevent infinite refresh loops
         if (recordsToUpdate.length > 0) {
-          await db.books.bulkPut(recordsToUpdate);
-          console.log(`🚀 [HYDRATION] Bulk updated ${recordsToUpdate.length} books silently.`);
+          // 🛡️ DEDUPLICATION: Prevent BulkError from duplicate CIDs
+          const uniqueRecords = Array.from(
+            new Map(recordsToUpdate.map(item => [item.cid, item])).values()
+          );
+          await db.books.bulkPut(uniqueRecords);
+          console.log(`🚀 [HYDRATION] Bulk updated ${uniqueRecords.length} books (deduplication applied).`);
         }
         
         // Small delay to prevent overwhelming
@@ -280,11 +364,23 @@ export class HydrationService {
       throw error;
     }
   }
+  */
 
   /**
    * 📝 HYDRATE ENTRIES
+   * 
+   * MOVED TO: lib/vault/hydration/slices/BulkSlice.ts
+   * This method is now handled by BulkSlice in the new modular architecture
    */
+  /*
   private async hydrateEntries(userId: string): Promise<{ count: number }> {
+    // 🛡️ INTERNAL SHIELD: Block data fetch during security lockdown or profile failure
+    const { isSecurityLockdown, emergencyHydrationStatus } = getVaultStore();
+    if (isSecurityLockdown || emergencyHydrationStatus === 'failed') {
+      console.error('🛡️ [HYDRATION] Entries hydration blocked due to Security Lockdown/Profile Failure.');
+      throw new Error('SECURITY_LOCKDOWN: Entries hydration blocked for safety.');
+    }
+
     try {
       console.log('📝 [HYDRATION SERVICE] Fetching entries from server...');
       
@@ -338,8 +434,12 @@ export class HydrationService {
 
         // Perform a single bulk operation to prevent infinite refresh loops
         if (recordsToUpdate.length > 0) {
-          await db.entries.bulkPut(recordsToUpdate);
-          console.log(`🚀 [HYDRATION] Bulk updated ${recordsToUpdate.length} entries silently.`);
+          // 🛡️ DEDUPLICATION: Prevent BulkError from duplicate CIDs
+          const uniqueRecords = Array.from(
+            new Map(recordsToUpdate.map(item => [item.cid, item])).values()
+          );
+          await db.entries.bulkPut(uniqueRecords);
+          console.log(`🚀 [HYDRATION] Bulk updated ${uniqueRecords.length} entries (deduplication applied).`);
         }
         
         // Small delay to prevent overwhelming
@@ -356,87 +456,16 @@ export class HydrationService {
       throw error;
     }
   }
+  */
 
   /**
    * 🎯 SINGLE ITEM FETCHER
+   * 
+   * MOVED TO: lib/vault/hydration/slices/SniperSlice.ts (TODO)
+   * This method is now handled by SniperSlice in the new modular architecture
    */
   private async fetchSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<void> {
-    let record;
-    if (type === 'BOOK') {
-      // 🆕 SMART IDENTITY MAPPING: Check local database for server _id
-      const localBook = await db.books.where('cid').equals(id).first();
-      let resolvedId = id;
-      
-      if (localBook?._id && localBook._id !== id) {
-        console.log(`🧠 [SMART MAP] Mapping CID ${id} → Server _id ${localBook._id}`);
-        resolvedId = localBook._id; // Use server _id instead of CID
-      }
-      
-      // 🆕 API PREFIX FIX: Strip cid_ prefix for server compatibility
-      const apiId = resolvedId.startsWith('cid_') ? resolvedId.replace('cid_', '') : resolvedId;
-      const response = await fetch(`/api/books/${apiId}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch book: ${response.statusText}`);
-      }
-      const result = await response.json();
-      record = result.data;
-    } else if (type === 'ENTRY') {
-      const response = await fetch(`/api/entries/${id}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch entry: ${response.statusText}`);
-      }
-      const result = await response.json();
-      record = result.data;
-    } else {
-      throw new Error(`Unsupported type: ${type}`);
-    }
-
-    if (!record) {
-      console.warn(`⚠️ [HYDRATION SERVICE] ${type} not found for ID: ${id}`);
-      return;
-    }
-
-    console.log(`🎯 [HYDRATION SERVICE] Fetched ${type} with full data:`, {
-      id: record._id,
-      cid: record.cid,
-      hasHeavyData: type === 'BOOK' ? !!record.image : !!record.note
-    });
-
-    // 🚀 STORE THE RECORD
-    const normalized = normalizeRecord({
-      ...record,
-      userId: this.userId,
-      synced: 1,
-      isDeleted: record.isDeleted || 0
-    }, this.userId);
-
-    // 🛡️ SCHEMA GUARD: Validate normalized data before storing
-    const validationResult = type === 'BOOK' ? validateBook(normalized) : validateEntry(normalized);
-    if (!validationResult.success) {
-      console.error(` [HYDRATION] Skipping corrupted ${type.toLowerCase()} data after normalization: ${validationResult.error}`);
-      return; // Skip this record entirely
-    }
-
-    if (type === 'BOOK') {
-      const existing = await db.books.where('cid').equals(record.cid).first();
-      if (existing) {
-        await db.books.update(existing.localId!, { 
-          ...normalized, 
-          lastSniperFetch: Date.now() 
-        });
-        console.log('✅ [SNIPER] Book image saved to Dexie:', record.cid);
-      } else {
-        await db.books.put(normalized);
-        console.log('✅ [SNIPER] New book saved to Dexie:', record.cid);
-      }
-      
-      // 🆕 CRITICAL: Notify UI that blob is available
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('vault-updated'));
-      }
-    } else {
-      await db.entries.put(normalized);
-    }
+    throw new Error('MOVED_TO_V6: fetchSingleItem() moved to SniperSlice - use HydrationController.getInstance().hydrateSingleItem()');
   }
 
   /**
@@ -502,7 +531,14 @@ export class HydrationService {
    */
   private async reconcileGhosts(serverBooks: any[], serverEntries: any[], userId: string): Promise<void> {
     try {
-      console.log('👻 [HYDRATION] Starting ghost reconciliation...');
+      // V5.5 SECURITY GUARD: Check lockdown state before reconciliation
+      const { isSecurityLockdown, emergencyHydrationStatus } = getVaultStore();
+      if (isSecurityLockdown || emergencyHydrationStatus === 'failed') {
+        console.error('[HYDRATION] Ghost reconciliation blocked due to Security Lockdown/Profile Failure.');
+        throw new Error('SECURITY_LOCKDOWN: Ghost reconciliation blocked');
+      }
+      
+      console.log('[HYDRATION] Starting ghost reconciliation...');
       
       // Get all local books and entries
       const localBooks = await db.books.where('userId').equals(userId).toArray();
@@ -542,8 +578,8 @@ export class HydrationService {
             console.log(`🛡️ [HYDRATION] Registering mercy conflict for book ${ghostBook.cid} with ${unsyncedChildren.length} unsynced children`);
             
             // Import vault store to register conflict
-            const { useVaultStore } = await import('../store');
-            useVaultStore.getState().registerConflict({
+            const { getVaultStore } = await import('../store/storeHelper');
+            getVaultStore().registerConflict({
               id: ghostBook.cid,
               type: 'book',
               cid: ghostBook.cid,

@@ -18,7 +18,7 @@ const ModalPortal = ({ children }: { children: React.ReactNode }) => {
 };
 
 // --- 🍃 ২. MAIN MODAL LAYOUT (The Elite Shell) ---
-export const ModalLayout = ({ title, children, onClose }: any) => {
+export const ModalLayout = ({ title, children, onClose, isOpen = true }: any) => {
   const { t } = useTranslation();
   const [isMobile, setIsMobile] = useState(false);
 
@@ -40,7 +40,7 @@ export const ModalLayout = ({ title, children, onClose }: any) => {
   return (
     <ModalPortal>
       {/* মেইন কন্টেইনার: z-index একদম টপ লেভেলে রাখা হয়েছে */}
-      <div className={`fixed inset-0 z-[999999] flex justify-center overflow-hidden transition-all ${isMobile ? 'items-end' : 'items-center p-4'}`}>
+      <div className={`fixed inset-0 z-[999999] flex justify-center overflow-hidden transition-all ${!isOpen ? 'pointer-events-none' : 'pointer-events-auto'} ${isMobile ? 'items-end' : 'items-center p-4'}`}>
         
         {/* ব্যাকড্রপ: ব্লার ল্যাভেল অপ্টিমাইজড যাতে কন্টেন্ট ক্লিয়ার থাকে */}
         <motion.div 

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils/helpers'; // তোর নতুন cn utility
+import { cn } from '@/lib/utils/helpers';
 
 interface TooltipProps {
     text: string;
@@ -16,7 +16,7 @@ export const Tooltip = ({ text, children, position = 'top', className }: Tooltip
     // যদি টেক্সট না থাকে, তবে শুধু চিলড্রেন রেন্ডার করবে
     if (!text) return <>{children}</>;
 
-    // পজিশন অনুযায়ী ডাইনামিক ক্লাস (Pill Logic)
+    // পজিশন অনুযায়ী ডাইনামিক ক্লাস (Native Floating Logic)
     const positionClasses = {
         top: "bottom-full left-1/2 -translate-x-1/2 mb-3",
         bottom: "top-full left-1/2 -translate-x-1/2 mt-3",
@@ -24,7 +24,7 @@ export const Tooltip = ({ text, children, position = 'top', className }: Tooltip
         right: "left-full top-1/2 -translate-y-1/2 ml-3",
     };
 
-    // অ্যারো (Arrow) পজিশন লজিক
+    // অ্যারো (Arrow) পজিশন লজিক - Apple Style Subtle Arrow
     const arrowClasses = {
         top: "-bottom-1 left-1/2 -translate-x-1/2 border-r border-b",
         bottom: "-top-1 left-1/2 -translate-x-1/2 border-l border-t",
@@ -41,35 +41,28 @@ export const Tooltip = ({ text, children, position = 'top', className }: Tooltip
         >
             {children}
             
-<AnimatePresence>
-    {isVisible && (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: position === 'top' ? 8 : -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 600, damping: 35 }}
-            className={cn("absolute z-[9999] pointer-events-none", positionClasses[position])}
-        >
-            <div className={cn(
-                // ব্যাকগ্রাউন্ড আপনার থিমের কার্ড কালার এবং গ্লাস ইফেক্ট মেনে চলবে
-                "relative bg-[var(--bg-card)] text-[var(--text-main)] backdrop-blur-xl saturate-[180%]",
-                "px-4 py-2 rounded-full border border-[var(--border-color)] shadow-[var(--card-shadow)]",
-                "whitespace-nowrap flex items-center justify-center transition-colors duration-300"
-            )}>
-                <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">
-                    {text}
-                </span>
+            <AnimatePresence>
+                {isVisible && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: position === 'top' ? 8 : -8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: position === 'top' ? 8 : -8 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        className={cn(
+                            "absolute z-[var(--z-modal)] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white whitespace-nowrap apple-card bg-black/80 backdrop-blur-md pointer-events-none shadow-2xl",
+                            positionClasses[position]
+                        )}
+                    >
+                        {text}
 
-                {/* Apple Style Tiny Arrow - ডাইনামিক কালার সহ */}
-                <div className={cn(
-                    "absolute w-2.5 h-2.5 bg-[var(--bg-card)] border-[var(--border-color)] rotate-45 transition-colors duration-300",
-                    position === 'top' ? "border-b border-r" : "border-t border-l", // বর্ডার পজিশন ফিক্স
-                    arrowClasses[position]
-                )} />
-            </div>
-        </motion.div>
-    )}
-</AnimatePresence>
+                        {/* Apple Style Tiny Arrow */}
+                        <div className={cn(
+                            "absolute w-2 h-2 bg-black/80 rotate-45 border-[var(--border)]",
+                            arrowClasses[position]
+                        )} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

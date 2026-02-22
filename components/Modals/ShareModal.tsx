@@ -67,7 +67,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
 
     return (
         <ModalPortal>
-            <div className="fixed inset-0 z-[999999] flex items-end md:items-center justify-center overflow-hidden">
+            <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center overflow-hidden">
                 {/* --- 🌑 NATIVE BACKDROP --- */}
                 <motion.div 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}

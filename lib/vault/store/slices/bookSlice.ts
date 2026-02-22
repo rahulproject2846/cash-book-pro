@@ -16,6 +16,7 @@ export interface BookState {
   isRefreshing: boolean;
   activeBook: any;
   bookId: string;
+  lastScrollPosition: number; // 🆕 SCROLL MEMORY
 }
 
 // 📚 BOOK ACTIONS INTERFACE
@@ -31,6 +32,7 @@ export interface BookActions {
   clearActiveBook: () => void;
   getBookBalance: (id: string) => number;
   resurrectBookChain: (bookCid: string) => Promise<{ success: boolean; error?: Error }>;
+  setLastScrollPosition: (pos: number) => void; // 🆕 SCROLL MEMORY
 }
 
 // 📚 COMBINED BOOK STORE TYPE
@@ -46,19 +48,20 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   isRefreshing: false,
   activeBook: null,
   bookId: '',
+  lastScrollPosition: 0, // 🆕 SCROLL MEMORY
 
-  // 📚 REFRESH BOOKS WITH SNIPER LOGIC
+  // 🔄 REFRESH BOOKS WITH SNIPER LOGIC
   refreshBooks: async () => {
     const userId = identityManager.getUserId();
     if (!userId) return true;
+    set({ isRefreshing: true });
     
     try {
       const books = await db.books
-        .where('userId')
-        .equals(String(userId))
-        .and((book: any) => book.isDeleted === 0)
+        .where('[userId+isDeleted+updatedAt]')
+        .between([String(userId), 0, 0], [String(userId), 0, Date.now()])
         .reverse()
-        .sortBy('updatedAt');
+        .toArray();
 
       // 🆕 MODULE 1: LEGACY DATA REPAIR - Silent Repair for books with mediaCid but missing _id
       const legacyBooks = books.filter((book: any) => 
@@ -71,11 +74,17 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         // Attempt to repair by re-syncing to get server _id
         for (const legacyBook of legacyBooks) {
           try {
-            // Force re-sync to get server _id
-            await db.books.update(legacyBook.localId!, { 
+            // Force re-sync to get server _id using HydrationController
+            const { HydrationController } = await import('../../hydration/HydrationController');
+            const controller = HydrationController.getInstance();
+            
+            const repairPayload = {
+              ...legacyBook,
               synced: 0,
               updatedAt: getTimestamp()
-            });
+            };
+            
+            await controller.ingestLocalMutation('BOOK', [repairPayload]);
           } catch (repairErr) {
             console.error(`❌ [LEGACY REPAIR] Failed to repair book ${legacyBook.cid}:`, repairErr);
           }
@@ -89,6 +98,14 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
       // Only set state if data actually changed significantly
       const currentBooks = get().books;
+
+      // 🧊 COLD START: Empty store -> hydrate directly from Dexie
+      if (currentBooks.length === 0) {
+        set({ books });
+        get().applyFiltersAndSort();
+        return true;
+      }
+
       if (JSON.stringify(currentBooks) === JSON.stringify(books)) {
         return true; // Stop if data is identical
       }
@@ -108,6 +125,13 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         
         return newBook || existingBook; // Use new book if available
       });
+
+      // 🆕 INCLUDE NEW BOOKS: Anything fetched that's not already in the store
+      for (const [id, newBook] of newBooksMap.entries()) {
+        if (!booksMap.has(id)) {
+          updatedBooks.push(newBook);
+        }
+      }
 
       // 🆕 SMART UPDATE: Only set if data actually changed
       if (JSON.stringify(updatedBooks) !== JSON.stringify(currentBooks)) {
@@ -129,6 +153,28 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     const userId = identityManager.getUserId();
     if (!userId) return { success: false };
     
+    // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
+    const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
+    if (isSecurityLockdown) {
+      console.warn('🚫 [BOOK SLICE] Blocked book save during security lockdown');
+      return { success: false, error: new Error('App in security lockdown') };
+    }
+    
+    // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
+    const actionId = 'save-book';
+    if (isGlobalAnimating) {
+      console.warn('🚫 [BOOK SLICE] Blocked book save during animation');
+      return { success: false, error: new Error('System busy - animation in progress') };
+    }
+    
+    if (activeActions.includes(actionId)) {
+      console.warn('🚫 [BOOK SLICE] Blocked duplicate book save action');
+      return { success: false, error: new Error('Book save already in progress') };
+    }
+    
+    // Register action for protection
+    registerAction(actionId);
+    
     try {
       const bookPayload = {
         ...bookData,
@@ -137,6 +183,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         userId: String(userId),
         vKey: (editTarget?.vKey || 0) + 1,
         synced: 0,
+        syncAttempts: 0, // ✅ Ensure initialization
         updatedAt: getTimestamp()
       };
 
@@ -154,22 +201,16 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       const { db } = await import('@/lib/offlineDB');
       let id: number = 0;
       
-      // 🆕 SURGICAL FIX: Use transaction to ensure atomicity
-      await db.transaction('rw', db.books, async () => {
-        if (editTarget?.cid) {
-          const existingRecord = await db.books.where('cid').equals(editTarget.cid).first();
-          if (existingRecord) {
-            normalized.localId = existingRecord.localId;
-            id = await db.books.put(normalized);
-          } else {
-            delete normalized.localId;
-            id = await db.books.put(normalized);
-          }
-        } else {
-          delete normalized.localId;
-          id = await db.books.put(normalized);
-        }
-      });
+      // 🆕 SURGICAL FIX: Use HydrationController for atomic writes
+      const { HydrationController } = await import('../../hydration/HydrationController');
+      const controller = HydrationController.getInstance();
+      
+      const result = await controller.ingestLocalMutation('BOOK', [normalized]);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save book via HydrationController');
+      }
+      
+      id = result.count || 0;
       
       // 🆕 OPTIMISTIC UPDATE: Add to Zustand immediately
       const currentBooks = get().books;
@@ -203,6 +244,9 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     } catch (error) {
       console.error('❌ [BOOK SLICE] saveBook failed:', error);
       return { success: false, error: error as Error };
+    } finally {
+      // 🛡️ SAFE ACTION SHIELD: Always unregister action
+      unregisterAction(actionId);
     }
   },
 
@@ -210,14 +254,45 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   deleteBook: async (book: any) => {
     const userId = identityManager.getUserId();
     if (!userId || !book?.localId) return { success: false };
+    
+      // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
+      const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
+      if (isSecurityLockdown) {
+        console.warn('🚫 [BOOK SLICE] Blocked book delete during security lockdown');
+        return { success: false, error: new Error('App in security lockdown') };
+      }
+      
+      // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
+      const actionId = 'delete-book';
+      if (isGlobalAnimating) {
+        console.warn('🚫 [BOOK SLICE] Blocked book delete during animation');
+        return { success: false, error: new Error('System busy - animation in progress') };
+      }
+      
+      if (activeActions.includes(actionId)) {
+        console.warn('🚫 [BOOK SLICE] Blocked duplicate book delete action');
+        return { success: false, error: new Error('Book delete already in progress') };
+      }
+      
+      // Register action for protection
+      registerAction(actionId);
 
-    try {
-      await db.books.update(Number(book.localId), { 
-        isDeleted: 1, 
-        synced: 0, 
-        vKey: getTimestamp(),
-        updatedAt: getTimestamp()
-      });
+      try {
+        const { HydrationController } = await import('../../hydration/HydrationController');
+        const controller = HydrationController.getInstance();
+        
+        const deletePayload = {
+          ...book,
+          isDeleted: 1,
+          synced: 0,
+          vKey: getTimestamp(),
+          updatedAt: getTimestamp()
+        };
+        
+        const result = await controller.ingestLocalMutation('BOOK', [deletePayload]);
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to delete book via HydrationController');
+        }
       
       const { orchestrator } = await import('../../core/SyncOrchestrator');
       orchestrator.triggerSync();
@@ -228,20 +303,39 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     } catch (error) {
       console.error('❌ [BOOK SLICE] deleteBook failed:', error);
       return { success: false, error: error as Error };
+    } finally {
+      // 🛡️ SAFE ACTION SHIELD: Always unregister action
+      unregisterAction(actionId);
     }
   },
 
   // 🔄 RESTORE BOOK
   restoreBook: async (book: any) => {
+    // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
+    const { isSecurityLockdown } = get();
+    if (isSecurityLockdown) {
+      console.warn('🚫 [BOOK SLICE] Blocked book restore during security lockdown');
+      return { success: false, error: new Error('App in security lockdown') };
+    }
+    
     try {
       console.log('🔄 [BOOK SLICE] Restoring book:', book.localId);
       
-      await db.books.update(Number(book.localId), {
+      const { HydrationController } = await import('../../hydration/HydrationController');
+      const controller = HydrationController.getInstance();
+      
+      const restorePayload = {
+        ...book,
         isDeleted: 0,
         synced: 0,
         updatedAt: getTimestamp(),
         vKey: getTimestamp()
-      });
+      };
+      
+      const result = await controller.ingestLocalMutation('BOOK', [restorePayload]);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to restore book via HydrationController');
+      }
 
       const { orchestrator } = await import('../../core/SyncOrchestrator');
       orchestrator.triggerSync();
@@ -369,31 +463,36 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       };
       
       // 🎯 STEP 3: UPDATE BOOK AND ENTRIES IN SINGLE TRANSACTION
-      await db.transaction('rw', db.books, db.entries, async () => {
-        // Update the book first
-        await db.books.update(book.localId!, resurrectedBook);
+      const { HydrationController } = await import('../../hydration/HydrationController');
+      const controller = HydrationController.getInstance();
+      
+      // Update the book first
+      const bookResult = await controller.ingestLocalMutation('BOOK', [resurrectedBook]);
+      if (!bookResult.success) {
+        throw new Error(bookResult.error || 'Failed to resurrect book via HydrationController');
+      }
+      
+      // 🎯 STEP 4: FIND ALL ENTRIES
+      const allEntries = await db.entries
+        .where('bookId').equals(bookCid)
+        .and((entry: any) => entry.isDeleted === 0)
+        .toArray();
+      
+      // 🎯 STEP 5: RESET ALL ENTRIES ATOMICALLY
+      if (allEntries.length > 0) {
+        const entryUpdates = allEntries.map((entry: LocalEntry) => ({
+          ...entry,
+          synced: 0, // Mark as unsynced
+          vKey: (entry.vKey || 0) + 100, // 🛡️ VKEY UPGRADE: +100 for entries too
+          updatedAt: getTimestamp()
+        }));
         
-        // 🎯 STEP 4: FIND ALL ENTRIES
-        const allEntries = await db.entries
-          .where('bookId').equals(bookCid)
-          .and((entry: any) => entry.isDeleted === 0)
-          .toArray();
-        
-        // 🎯 STEP 5: RESET ALL ENTRIES ATOMICALLY
-        if (allEntries.length > 0) {
-          const entryUpdates = allEntries.map((entry: LocalEntry) => ({
-            key: entry.localId!,
-            changes: {
-              synced: 0, // Mark as unsynced
-              vKey: (entry.vKey || 0) + 100, // 🛡️ VKEY UPGRADE: +100 for entries too
-              updatedAt: getTimestamp()
-            }
-          }));
-          
-          await db.entries.bulkUpdate(entryUpdates);
-          console.log(`🛡️ [BOOK SLICE] Reset ${entryUpdates.length} entries for resurrection`);
+        const entryResult = await controller.ingestLocalMutation('ENTRY', entryUpdates);
+        if (!entryResult.success) {
+          throw new Error(entryResult.error || 'Failed to resurrect entries via HydrationController');
         }
-      });
+        console.log(`🛡️ [BOOK SLICE] Reset ${entryUpdates.length} entries for resurrection`);
+      }
       
       // 🎯 STEP 6: TRIGGER BATCHED SYNC
       const { triggerManualSync } = get();
@@ -408,5 +507,9 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       console.error(`❌ [BOOK SLICE] Resurrection failed for book ${bookCid}:`, error);
       return { success: false, error: error as Error };
     }
-  }
+  },
+
+  setLastScrollPosition: (pos: number) => {
+    set({ lastScrollPosition: pos });
+  },
 });
