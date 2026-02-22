@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation'; // ✅ Fixed: Added useRouter
 
@@ -18,7 +18,7 @@ import { useBootStatus, useVaultState } from '@/lib/vault/store/storeHelper';
 import { identityManager } from '@/lib/vault/core/IdentityManager';
 import { orchestrator } from '@/lib/vault/core/SyncOrchestrator';
 
-export default function CashBookApp() {
+function CashBookAppContent() {
   const { isSystemReady } = useBootStatus();
   const { activeSection, setActiveSection, activeBook } = useVaultState();
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -128,5 +128,13 @@ export default function CashBookApp() {
     <DashboardLayout>
       {renderView()}
     </DashboardLayout>
+  );
+}
+
+export default function CashBookApp() {
+  return (
+    <Suspense fallback={<div className="h-screen w-screen bg-[#F2F2F7] dark:bg-black" />}>
+      <CashBookAppContent />
+    </Suspense>
   );
 }
