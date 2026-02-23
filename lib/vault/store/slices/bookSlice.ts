@@ -17,13 +17,14 @@ export interface BookState {
   activeBook: any;
   bookId: string;
   lastScrollPosition: number; // 🆕 SCROLL MEMORY
+  pendingDeletion: { bookId: string; timeoutId: any; expiresAt: number } | null; // 🆕 9-SECOND DELAYED DELETE
 }
 
 // 📚 BOOK ACTIONS INTERFACE
 export interface BookActions {
   refreshBooks: () => Promise<boolean>;
   saveBook: (bookData: any, editTarget?: any) => Promise<{ success: boolean; book?: any; error?: Error }>;
-  deleteBook: (book: any) => Promise<{ success: boolean; error?: Error }>;
+  deleteBook: (book: any, router: any) => Promise<{ success: boolean; error?: Error }>;
   restoreBook: (book: any) => Promise<{ success: boolean; error?: Error }>;
   setSearchQuery: (query: string) => void;
   setSortOption: (option: string) => void;
@@ -33,6 +34,9 @@ export interface BookActions {
   getBookBalance: (id: string) => number;
   resurrectBookChain: (bookCid: string) => Promise<{ success: boolean; error?: Error }>;
   setLastScrollPosition: (pos: number) => void; // 🆕 SCROLL MEMORY
+  cancelDeletion: () => void; // 🆕 CANCEL PENDING DELETION
+  completeDeletionAndRedirect: (router: any) => void; // 🆕 COMPLETE DELETION AND REDIRECT
+  executeFinalDeletion: (book: any, userId: string) => Promise<void>; // 🆕 EXECUTE FINAL DELETION
 }
 
 // 📚 COMBINED BOOK STORE TYPE
@@ -48,7 +52,8 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   isRefreshing: false,
   activeBook: null,
   bookId: '',
-  lastScrollPosition: 0, // 🆕 SCROLL MEMORY
+  lastScrollPosition: 0,
+  pendingDeletion: null, // 🆕 9-SECOND DELAYED DELETE
 
   // 🔄 REFRESH BOOKS WITH SNIPER LOGIC
   refreshBooks: async () => {
@@ -129,7 +134,19 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       // 🆕 INCLUDE NEW BOOKS: Anything fetched that's not already in the store
       for (const [id, newBook] of newBooksMap.entries()) {
         if (!booksMap.has(id)) {
-          updatedBooks.push(newBook);
+          // 🛡️ CID DEDUPLICATION: Check if book with same cid already exists
+          const existingCid = (newBook as any).cid;
+          const cidExists = updatedBooks.some((book: any) => book.cid === existingCid);
+          
+          if (!cidExists) {
+            updatedBooks.push(newBook);
+          } else {
+            // 🔄 UPDATE EXISTING: Replace existing book with same cid
+            const existingIndex = updatedBooks.findIndex((book: any) => book.cid === existingCid);
+            if (existingIndex !== -1) {
+              updatedBooks[existingIndex] = newBook;
+            }
+          }
         }
       }
 
@@ -251,61 +268,58 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   },
 
   // 🗑️ DELETE BOOK
-  deleteBook: async (book: any) => {
+  deleteBook: async (book: any, router: any) => {
     const userId = identityManager.getUserId();
     if (!userId || !book?.localId) return { success: false };
     
-      // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
-      const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
-      if (isSecurityLockdown) {
-        console.warn('🚫 [BOOK SLICE] Blocked book delete during security lockdown');
-        return { success: false, error: new Error('App in security lockdown') };
-      }
-      
-      // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
-      const actionId = 'delete-book';
-      if (isGlobalAnimating) {
-        console.warn('🚫 [BOOK SLICE] Blocked book delete during animation');
-        return { success: false, error: new Error('System busy - animation in progress') };
-      }
-      
-      if (activeActions.includes(actionId)) {
-        console.warn('🚫 [BOOK SLICE] Blocked duplicate book delete action');
-        return { success: false, error: new Error('Book delete already in progress') };
-      }
-      
-      // Register action for protection
-      registerAction(actionId);
+    const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
+    if (isSecurityLockdown || isGlobalAnimating || activeActions.includes('delete-book')) return { success: false };
+    
+    registerAction('delete-book');
 
-      try {
-        const { HydrationController } = await import('../../hydration/HydrationController');
-        const controller = HydrationController.getInstance();
-        
-        const deletePayload = {
-          ...book,
-          isDeleted: 1,
-          synced: 0,
-          vKey: getTimestamp(),
-          updatedAt: getTimestamp()
-        };
-        
-        const result = await controller.ingestLocalMutation('BOOK', [deletePayload]);
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to delete book via HydrationController');
+    try {
+      const bookId = String(book._id || book.localId);
+      const expiresAt = Date.now() + 7000; // 7 seconds total
+      
+      // 1. Lock UI
+      set({ isInteractionLocked: true });
+      
+      // 2. Trigger Apple Toast and Capture ID
+      const activeToastId = get().showToast({
+        type: 'undo',
+        message: `Deleting "${book.name || 'Ledger'}" in 6 seconds...`,
+        countdown: 6,
+        onUndo: () => {
+          const { pendingDeletion } = get();
+          if (pendingDeletion?.timeoutId) clearTimeout(pendingDeletion.timeoutId);
+          set({ pendingDeletion: null, isInteractionLocked: false });
+          get().hideToast(activeToastId);
         }
+      });
       
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
+      // 3. Set 7s Delayed Commit
+      const timeoutId = setTimeout(async () => {
+        try {
+          // FIRST: Execute final deletion
+          await get().executeFinalDeletion(book, userId);
+          // SECOND: Hide toast and navigate
+          get().hideToast(activeToastId);
+          get().completeDeletionAndRedirect(router);
+        } catch (err) {
+          console.error('Final Deletion Failed:', err);
+          // THIRD: Unlock UI on error
+          set({ isInteractionLocked: false });
+        }
+      }, 7000);
       
-      get().refreshBooks();
-      
+      set({ pendingDeletion: { bookId, timeoutId, expiresAt } });
       return { success: true };
+      
     } catch (error) {
-      console.error('❌ [BOOK SLICE] deleteBook failed:', error);
+      set({ isInteractionLocked: false });
       return { success: false, error: error as Error };
     } finally {
-      // 🛡️ SAFE ACTION SHIELD: Always unregister action
-      unregisterAction(actionId);
+      unregisterAction('delete-book');
     }
   },
 
@@ -512,4 +526,83 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   setLastScrollPosition: (pos: number) => {
     set({ lastScrollPosition: pos });
   },
+
+  // 🆕 CANCEL PENDING DELETION
+  cancelDeletion: () => {
+    const { pendingDeletion } = get();
+    if (pendingDeletion?.timeoutId) {
+      clearTimeout(pendingDeletion.timeoutId);
+    }
+    set({ pendingDeletion: null });
+  },
+
+  // 🗑️ EXECUTE FINAL DELETION
+  executeFinalDeletion: async (book: any, userId: string): Promise<void> => {
+    const bookId = String(book._id || book.localId);
+    
+    try {
+      console.log(`🗑️ [BOOK SLICE] Executing final deletion for book: ${bookId}`);
+      
+      // Create delete payload with mandatory name field
+      const deletePayload = {
+        _id: book._id,
+        localId: book.localId,
+        cid: book.cid,
+        name: book.name || 'Deleted Ledger', // ✅ MANDATORY for Validator
+        userId: book.userId,
+        isDeleted: 1,
+        synced: 0,
+        vKey: getTimestamp(),
+        updatedAt: getTimestamp()
+      };
+      
+      // a. Execute Dexie Transaction (Book + Entries marked isDeleted: 1)
+      await db.transaction('rw', db.books, db.entries, db.users, async () => {
+        // Mark book as deleted
+        await db.books.put(deletePayload);
+        
+        // Cascade delete all entries for this book
+        await db.entries
+          .where('bookId')
+          .equals(bookId)
+          .modify({ isDeleted: 1, synced: 0, updatedAt: getTimestamp() });
+        
+        console.log(`✅ [BOOK SLICE] Book ${bookId} and entries marked as deleted`);
+      });
+      
+      // b. Trigger orchestrator.triggerSync() (Fire-and-forget sync)
+      const { orchestrator } = await import('../../core/SyncOrchestrator');
+      orchestrator.triggerSync();
+      
+      // c. Call get().refreshBooks() to update the local list
+      get().refreshBooks();
+      
+      // d. Set get().setActiveBook(null) to clear the current view state
+      get().clearActiveBook();
+      
+    } catch (error) {
+      console.error(`❌ [BOOK SLICE] Final deletion failed for book ${bookId}:`, error);
+      throw error;
+    }
+  },
+
+  // 🧭 COMPLETE DELETION AND REDIRECT
+  completeDeletionAndRedirect: (router: any) => {
+    try {
+      console.log('✅ Database committed. Navigating now.');
+      if (typeof window !== 'undefined') {
+        if (router) {
+          // Using Next.js router for soft navigation
+          router.push('/?tab=books');
+        } else {
+          // 🚫 NO HARD RELOAD: Throw error instead of window.location
+          console.error('[NAVIGATION] Router instance missing, cannot perform soft redirect');
+          throw new Error('Router instance required for soft navigation');
+        }
+      }
+    } finally {
+      // Ensure UI is unlocked even if navigation fails
+      set({ isInteractionLocked: false });
+    }
+  }
 });

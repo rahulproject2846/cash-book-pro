@@ -71,19 +71,17 @@ const BookSchema = new Schema<IBook>({
   // পাবলিক শেয়ারিং ও অন্যান্য প্রোটোকল
   isPublic: { 
     type: Boolean, 
-    default: false 
+    default: true 
   },
   shareToken: { 
     type: String, 
-    unique: true, 
-    sparse: true, 
-    index: true
+    default: null,
+    sparse: true
   },
   type: { 
     type: String, 
     enum: ['general', 'customer', 'supplier'],
     default: 'general',
-    lowercase: true,
     index: true
   },
   phone: { 

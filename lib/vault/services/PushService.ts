@@ -186,6 +186,12 @@ export class PushService {
     try {
       console.log('🚨 [PRIORITY TELEMETRY] Syncing security evidence to server...');
       
+      // Guard clause: Ensure userId and events are valid
+      if (!this.userId) {
+        console.warn('⚠️ [PRIORITY TELEMETRY] No user ID available, skipping telemetry sync');
+        return { success: true };
+      }
+      
       // Fetch all audit events
       const auditEvents = await db.audits.toArray();
       
@@ -201,6 +207,9 @@ export class PushService {
       // Priority: Sync security events first
       const allEvents = [...securityEvents, ...otherEvents];
       
+      // Ensure sessionId is always valid
+      const sessionId = allEvents[0]?.sessionId || 'unknown-session';
+      
       // Send to server
       const response = await fetch('/api/telemetry', {
         method: 'POST',
@@ -210,7 +219,7 @@ export class PushService {
         body: JSON.stringify({
           events: allEvents,
           userId: this.userId,
-          sessionId: allEvents[0]?.sessionId
+          sessionId: sessionId
         })
       });
       
@@ -542,6 +551,29 @@ export class PushService {
         console.log(`🛡️ [PUSH VALIDATOR] Removed empty image string for book ${book.cid}`);
       }
       
+      // 🆕 MEDIA HANDSHAKE: Handle CID references and upload status
+      if (cleanBook.image && cleanBook.image.startsWith('cid_')) {
+        console.log(`🔄 [MEDIA HANDSHAKE] Book ${book.cid} has CID reference: ${cleanBook.image}`);
+        
+        // Check MediaStore for upload status
+        const media = await db.mediaStore.where('cid').equals(cleanBook.image).first();
+        if (!media) {
+          console.warn(`⚠️ [MEDIA HANDSHAKE] No media record found for CID: ${cleanBook.image}`);
+          cleanBook.image = ''; // Remove invalid CID
+        } else if (media.localStatus !== 'uploaded') {
+          console.log(`🔄 [MEDIA HANDSHAKE] Media not uploaded yet, deferring sync for book ${book.cid}`);
+          return { success: false, error: `Media upload pending for book ${book.cid} - will retry` };
+        } else if (media.cloudinaryUrl) {
+          // ✅ SUCCESS: Swap CID with actual Cloudinary URL
+          console.log(`🚀 [MEDIA HANDSHAKE] Swapping CID ${cleanBook.image} with URL: ${media.cloudinaryUrl}`);
+          cleanBook.image = media.cloudinaryUrl;
+          cleanBook.mediaCid = cleanBook.image; // Preserve CID reference
+        } else {
+          console.warn(`⚠️ [MEDIA HANDSHAKE] Media marked uploaded but no URL found for CID: ${cleanBook.image}`);
+          cleanBook.image = ''; // Remove broken reference
+        }
+      }
+      
       // 🆕 CRITICAL: Ensure Cloudinary URLs are ALWAYS included
       if (cleanBook.image && cleanBook.image.startsWith('http')) {
         console.log(`🚀 [PUSH SERVICE] Including Cloudinary URL in payload for book ${book.cid}:`, cleanBook.image);
@@ -567,6 +599,17 @@ export class PushService {
         console.log('✅ [PUSH SERVICE] Book success:', book.cid);
         const sData = await res.json();
         
+        // 🆕 FLEXIBLE RESPONSE PARSING: Handle multiple response formats
+        const serverBook = sData.data || sData.book || sData;
+        const serverId = serverBook?._id || serverBook?.id;
+        
+        if (!serverBook || !serverId) {
+          console.error('❌ [PUSH SERVICE] Invalid server response format:', sData);
+          return { success: false, error: 'Invalid server response format' };
+        }
+        
+        console.log(`🟢 [PUSH SERVICE] Server response parsed - ID: ${serverId}, CID: ${serverBook.cid}`);
+        
         // 🗑️ HARD DELETE CHECK
         if (book.isDeleted === 1) {
           await db.books.delete(book.localId!);
@@ -574,7 +617,7 @@ export class PushService {
         } else {
           // 🔍 COMPLETE SYNC UPDATE - ONLY AFTER VERIFIED SERVER SUCCESS
           await db.books.update(book.localId!, {
-            _id: sData.data?._id || sData.book?._id || book._id,
+            _id: serverId,
             synced: 1, // 🛡️ SAFETY: Update synced flag ONLY on success
             conflicted: 0,
             conflictReason: '',
@@ -582,6 +625,8 @@ export class PushService {
             vKey: book.vKey,
             updatedAt: book.updatedAt
           });
+          
+          console.log(`✅ [PUSH SERVICE] Book ${book.cid} marked as synced (ID: ${serverId})`);
         }
         
         return { success: true };

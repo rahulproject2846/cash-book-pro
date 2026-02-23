@@ -6,7 +6,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLocalPreview } from '@/hooks/useLocalPreview';
-import { useVaultState, useBootStatus } from '@/lib/vault/store/storeHelper';
+import { useVaultState, getVaultStore } from '@/lib/vault/store/storeHelper';
+import { useBootStatus } from '@/lib/vault/store/storeHelper';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn, getTimeAgo } from '@/lib/utils/helpers';
 
@@ -301,7 +302,7 @@ const BooksList = React.memo<BooksListProps>(({
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     
     // 🎯 ZUSTAND STORE INTEGRATION
-    const { filteredBooks, isLoading: isStoreLoading } = useVaultState();
+    const { filteredBooks, isLoading: isStoreLoading, pendingDeletion } = useVaultState();
     const { isSystemInitializing } = useBootStatus();
 
     // 🛡️ STABLE EVENT HANDLERS WITH useCallback
@@ -317,15 +318,16 @@ const BooksList = React.memo<BooksListProps>(({
         onAddClick();
     }, [onAddClick]);
 
-    // 🎯 MEMOIZED BALANCE GETTER - PRESERVE COMPLEX LOGIC
+    // 🎯 MEMOIZED BALANCE GETTER - USE REAL STORE DATA
     const getBalance = useCallback((book: any) => {
-        // ✅ PRESERVED: reactKey priority logic
+        // ✅ REAL BALANCE: Use store's getBookBalance function
         const bookId = book.reactKey || book._id || book.localId;
-        return getBookBalance(bookId);
-    }, [getBookBalance]);
+        const { getBookBalance } = getVaultStore();
+        return getBookBalance(String(bookId));
+    }, []);
 
-    // 🎯 LOADING STATE
-    if (isStoreLoading || isSystemInitializing) {
+    // LOADING STATE CHECK
+    if (isSystemInitializing) {
         return (
             <div className="py-40 flex flex-col items-center justify-center gap-6 opacity-20">
                 <Loader2 className="animate-spin text-orange-500" size={48} />
@@ -380,7 +382,7 @@ const BooksList = React.memo<BooksListProps>(({
                                 currencySymbol={currencySymbol} 
                                 lang={language}
                                 t={t}
-                                isDimmed={hoveredId !== null && hoveredId !== bookId}
+                                isDimmed={hoveredId !== null && hoveredId !== bookId || (pendingDeletion?.bookId === bookId)}
                                 onMouseEnter={() => setHoveredId(bookId)}
                                 onMouseLeave={() => setHoveredId(null)}
                             />

@@ -87,19 +87,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     console.log('🔍 [API-BOOKS-PUT] ID Match Check - URL ID:', JSON.stringify(id), 'DB _id:', JSON.stringify(existingBook._id), 'Match:', String(id) === String(existingBook._id));
     
     // ৩. আপডেটেড পেলোড তৈরি (নতুন ফিল্ড সহ)
+    // 🛡️ SHARETOKEN EXCLUSION: Remove shareToken from all operations to prevent conflicts
+    const { shareToken, ...finalUpdateData } = updateData;
     const updatePayload: any = {};
     
     // 🔕 BLIND DELETE BYPASS: Skip all validations for delete operations
-    if (updateData.isDeleted === 1) {
+    if (finalUpdateData.isDeleted === 1) {
         console.log('🔕 [BLIND DELETE] Bypassing validations for delete operation');
         
         const updatedBook = await Book.findByIdAndUpdate(
             id, 
             { $set: { 
                 isDeleted: 1,
-                vKey: updateData.vKey || Date.now() // 🚨 CRITICAL: Update vKey for delete
+                vKey: finalUpdateData.vKey || Date.now() // 🚨 CRITICAL: Update vKey for delete
             }}, 
-            { new: true }
+            { new: true, runValidators: false, strict: false } // 🛡️ BYPASS: Skip all validation during delete
         );
         
         if (!updatedBook) {
@@ -132,6 +134,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (updateData.type) updatePayload.type = updateData.type.toLowerCase();
     if (updateData.phone !== undefined) updatePayload.phone = updateData.phone.trim();
     if (updateData.image !== undefined) updatePayload.image = updateData.image;
+    
+    // 🛡️ SHARETOKEN GUARD: Never allow empty strings - convert to null
+    if (updateData.shareToken !== undefined) {
+      updatePayload.shareToken = updateData.shareToken === "" ? null : updateData.shareToken;
+      console.log("🛡️ [SHARETOKEN GUARD] shareToken processed:", updatePayload.shareToken);
+    }
+
+    console.log("🔍 [BOOKS-PUT] FINAL PAYLOAD TO MONGO:", updatePayload);
 
     const updatedBook = await Book.findByIdAndUpdate(
         id, 
@@ -187,7 +197,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         });
       } catch (e) {}
       
-      await Entry.deleteMany({ bookId: id });
+      await Entry.updateMany({ bookId: id }, { isDeleted: true, updatedAt: new Date() });
       await Book.findByIdAndDelete(id);
 
       return NextResponse.json({ 

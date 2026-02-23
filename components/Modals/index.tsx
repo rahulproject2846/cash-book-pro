@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { createPortal } from "react-dom";
+import { useRouter } from 'next/navigation';
 
 // Global Engine Hooks
 import { useTranslation } from '@/hooks/useTranslation';
@@ -65,8 +66,8 @@ export const ModalLayout = ({ title, children, onClose, isOpen = true }: any) =>
     transition={{ 
         // অপাসিটির জন্য ফিক্সড সময় (যাতে এটি স্প্রিংয়ের জন্য ওয়েট না করে)
         opacity: { duration: 0.2, ease: "linear" },
-        // পজিশনের জন্য আপনার প্রিয় স্প্রিং
-        y: { type: 'spring', damping: 30, stiffness: 400 },
+        // পজিশনের জন্য আপনার প্রিয় স্প্রিং - SLOWER DOWNWARD GLIDE
+        y: { type: 'spring', damping: 30, stiffness: 260, mass: 1 },
         scale: { type: 'spring', damping: 30, stiffness: 400 }
     }}
     onClick={(e) => e.stopPropagation()} 
@@ -111,8 +112,23 @@ export const ModalLayout = ({ title, children, onClose, isOpen = true }: any) =>
 // --- 🗑️ ৩. DELETE CONFIRMATION MODAL (Logic Preserved) ---
 export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
     const { t } = useTranslation();
+    const router = useRouter();
     const [localConfirmName, setLocalConfirmName] = React.useState('');
+    const [isDeleting, setIsDeleting] = React.useState(false);
     const isMatch = localConfirmName?.toLowerCase() === targetName?.toLowerCase();
+
+    const handleDelete = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!isMatch || isDeleting) return;
+        
+        setIsDeleting(true);
+        onClose(); // CLOSE MODAL IMMEDIATELY
+        
+        // WAIT for modal animation to complete (500ms)
+        setTimeout(() => {
+            onConfirm(router); // CALL deleteBook AFTER modal closes WITH ROUTER
+        }, 500);
+    };
 
     return (
         <ModalLayout title={t('term_confirm_title') || "Security Protocol: Termination"} onClose={onClose}>
@@ -140,19 +156,20 @@ export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
                     />
                 </div>
                 <div className="flex gap-3 pt-2">
-                    <button onClick={onClose} className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[2px] text-[var(--text-muted)] bg-[var(--bg-app)] border border-[var(--border)] hover:bg-[var(--bg-card)] transition-all">
+                    <button onClick={onClose} disabled={isDeleting} className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[2px] text-[var(--text-muted)] bg-[var(--bg-app)] border border-[var(--border)] hover:bg-[var(--bg-card)] transition-all disabled:opacity-50 disabled:cursor-wait">
                         {t('cancel')}
                     </button>
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); if (isMatch) onConfirm(); }} 
-                        disabled={!isMatch} 
+                    <motion.button 
+                        onClick={handleDelete}
+                        disabled={!isMatch || isDeleting} 
+                        whileTap={{ scale: 0.96 }}
                         className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[2px] transition-all shadow-xl 
-                            ${isMatch 
+                            ${isMatch && !isDeleting
                                 ? 'bg-red-600 text-white shadow-red-600/30 hover:bg-red-700 active:scale-95' 
                                 : 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 shadow-none'}`}
                     >
-                        {t('btn_delete_identity')}
-                    </button>
+                        {isDeleting ? 'Deleting...' : t('btn_delete_identity')}
+                    </motion.button>
                 </div>
             </div>
         </ModalLayout>

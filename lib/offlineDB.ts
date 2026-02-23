@@ -39,7 +39,10 @@ export interface LocalBook {
   cid: string;        // মাস্টার প্রোটোকল: ডুপ্লিকেট প্রোটেকশন
   name: string;
   description?: string;
+  type: 'general' | 'customer' | 'supplier'; // ✅ ADDED: Business type matching MongoDB
+  phone?: string;     // ✅ ADDED: Contact phone for customer/supplier
   updatedAt: number;
+  createdAt: number;  // ✅ ADDED: Creation timestamp (number for consistency)
   synced: 0 | 1;        
   isDeleted: 0 | 1;     
   vKey: number;         
@@ -52,6 +55,9 @@ export interface LocalBook {
   serverData?: any;        // 🚨 SERVER DATA: Original server data that caused conflict
   image?: string;         // ✅ ADDED: Book cover image
   mediaCid?: string;       // 🚨 MEDIA CID: Reference to mediaStore record
+  isPublic?: boolean;     // ✅ ADDED: Public sharing flag
+  shareToken?: string | null;    // ✅ ADDED: Public sharing token (null for sparse index)
+  localStatus?: 'pending_media' | 'ready'; // ✅ ADDED: Media upload status guard
   lastSniperFetch?: number;  // 🎯 ADDED: Track when image was last fetched by sniper
 }
 
@@ -319,14 +325,14 @@ export class VaultProDB extends Dexie {
     // Added mediaCid index to books store for efficient CID clearing
     // Added mediaId index to entries store for efficient entry image operations
     this.version(12).stores({
-      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, mediaCid, conflicted',
       entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
       users: '_id',
       telemetry: '++id, type, synced, timestamp',
       audits: '++id, type, level, timestamp, sessionId, userId',
       auditLogs: '++localId, cid, userId, timestamp',
-      snapshots: '++localId, cid, userId, timestamp', // SAFETY SNAPSHOTS
-      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt' // MEDIA STORE
+      snapshots: '++localId, cid, userId, timestamp',  // SAFETY SNAPSHOTS
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt'  // MEDIA STORE
     }).upgrade(async (tx) => {
       // FIXED: Indexes are already defined in .stores() - no manual creation needed
       console.log(' Vault Pro: Version 12 indexes handled automatically by Dexie');
@@ -335,7 +341,7 @@ export class VaultProDB extends Dexie {
     // Version 13: V6.2 SECURITY SCHEMA
     // Added security fields indexing for efficient license validation and risk analysis
     this.version(13).stores({
-      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, mediaCid, conflicted',
       entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
       users: '_id, plan, offlineExpiry, riskScore, receiptId', // V6.2 SECURITY INDEXES
       telemetry: '++id, type, synced, timestamp',
@@ -383,7 +389,7 @@ export class VaultProDB extends Dexie {
     // Version 27: USER ID INDEX FIX
     // Added userId index to users table for PullService security verification
     this.version(27).stores({
-      books: '++localId, _id, userId, &cid, [userId+isDeleted], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, &mediaCid, conflicted',
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, mediaCid, conflicted',
       entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], [userId+isDeleted+bookId], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
       users: '_id, userId, plan, offlineExpiry, riskScore, receiptId', // ✅ ADDED userId INDEX
       telemetry: '++id, type, synced, timestamp',
@@ -394,6 +400,38 @@ export class VaultProDB extends Dexie {
       syncPoints: '++id, userId, type, offset, lastSequence, timestamp'
     }).upgrade(() => {
       console.log('✅ Vault Pro: Database upgraded to V27 - userId index added to users table');
+    });
+
+    // Version 28: MEDIA CID UNIQUE CONSTRAINT FIX
+    // Removed & from mediaCid to prevent constraint violations
+    this.version(28).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, mediaCid, conflicted',
+      entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], [userId+isDeleted+bookId], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id, userId, plan, offlineExpiry, riskScore, receiptId',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp',
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt',
+      syncPoints: '++id, userId, type, offset, lastSequence, timestamp'
+    }).upgrade(() => {
+      console.log('✅ Vault Pro: Database upgraded to V28 - mediaCid unique constraint removed');
+    });
+
+    // Version 29: SCHEMA ALIGNMENT UPGRADE
+    // Added missing fields to match MongoDB schema: type, phone, createdAt, isPublic, shareToken, localStatus
+    this.version(29).stores({
+      books: '++localId, _id, userId, &cid, [userId+isDeleted], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, image, mediaCid, conflicted, type, phone, createdAt, isPublic, shareToken, localStatus',
+      entries: '++localId, _id, &cid, bookId, userId, &mediaId, [userId+isDeleted], [userId+isDeleted+bookId], [userId+isDeleted+updatedAt], synced, isDeleted, updatedAt, vKey, syncAttempts, isPinned, conflicted',
+      users: '_id, userId, plan, offlineExpiry, riskScore, receiptId',
+      telemetry: '++id, type, synced, timestamp',
+      audits: '++id, type, level, timestamp, sessionId, userId',
+      auditLogs: '++localId, cid, userId, timestamp',
+      snapshots: '++localId, cid, userId, timestamp',
+      mediaStore: '++localId, &cid, parentType, parentId, localStatus, userId, createdAt, uploadedAt',
+      syncPoints: '++id, userId, type, offset, lastSequence, timestamp'
+    }).upgrade(() => {
+      console.log('✅ Vault Pro: Database upgraded to V29 - schema alignment with MongoDB completed');
     });
   }
 }

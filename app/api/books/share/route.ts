@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
     // টোকেন জেনারেট করার নিরাপদ ফাংশন
     const generateSecureToken = () => {
-        return crypto.randomBytes(12).toString('hex'); // যেমন: 'xdlsacgdtok1ahms9wudm'
+        return crypto.randomBytes(16).toString('hex'); // 32-character secure token
     };
 
     let updateData: any = { isPublic: !!enable }; // নিশ্চিতভাবে বুলিয়ান ভ্যালু করা
@@ -33,8 +33,9 @@ export async function POST(req: Request) {
             updateData.shareToken = generateSecureToken();
         }
     } else {
-        // শেয়ার অফ করলে Public Access বন্ধ হয়ে যাবে
+        // শেয়ার অফ করলে Public Access বন্ধ হয়ে যাবে এবং টোকেন null করে দিতে হবে
         updateData.isPublic = false;
+        updateData.shareToken = null;
     }
 
     // ২. ডাটাবেসে শেয়ার সেটিংস আপডেট করা

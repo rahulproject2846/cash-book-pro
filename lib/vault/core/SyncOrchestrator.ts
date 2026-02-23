@@ -37,6 +37,7 @@ export class SyncOrchestratorRefactored {
   private isInitializing = false;
   private static isInitializing = false;
   private static initializationPromise: Promise<void> | null = null;
+  private tabId = Math.random().toString(36).substr(2, 9); // 🆕 SOURCE ID GUARD
 
   constructor() {
     this.pushService = new PushService();
@@ -728,12 +729,13 @@ export class SyncOrchestratorRefactored {
    */
   private notifyUI(origin?: string): void {
     if (typeof window !== 'undefined') {
-      // 🎯 ORIGIN AWARE: Pass source to prevent loops
-      window.dispatchEvent(new CustomEvent('vault-updated', {
+      // ✅ DISPATCH WITH tabId TO PREVENT SELF-LOOP
+      window.dispatchEvent(new CustomEvent('vault-updated', { 
         detail: { 
           source: origin || 'SyncOrchestrator',
-          timestamp: Date.now()
-        }
+          origin: origin || 'SyncOrchestrator',
+          tabId: this.tabId // CRITICAL: Identify the sender
+        } 
       }));
       
       // Only broadcast to other tabs if not self-originated
@@ -741,7 +743,8 @@ export class SyncOrchestratorRefactored {
         this.getChannel().postMessage({ 
           type: 'FORCE_REFRESH',
           source: 'SyncOrchestrator',
-          origin: origin || 'SyncOrchestrator'
+          origin: origin || 'SyncOrchestrator',
+          sourceTabId: this.tabId // ✅ SOURCE ID GUARD
         });
       }
     }

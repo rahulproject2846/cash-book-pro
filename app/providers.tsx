@@ -7,6 +7,7 @@ import { ModalProvider } from '@/context/ModalContext';
 import { ModalRegistry } from '@/components/Modals/ModalRegistry'; 
 import { PusherProvider } from '@/context/PusherContext'; // 🔥 নতুন ইমপোর্ট
 import { Toaster } from 'react-hot-toast'; // 🚀 Move Toaster here for client-side logic
+import { AppleToastContainer } from '@/src/components/ui/AppleToastContainer'; // 🍎 Apple Toast Container
 import { identityManager } from '@/lib/vault/core/IdentityManager'; // 🔥 Unified Identity Management
 import { useMediaStore } from '@/lib/vault/MediaStore'; // 🚀 Media Store Integration
 import { orchestrator } from '@/lib/vault/core/SyncOrchestrator'; // 🔥 Sync Orchestrator Integration
@@ -191,6 +192,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 </div>
                 
                 {mounted && <ModalRegistry />}
+                
+                {/* 🍎 Apple Toast Container - Rendered after all providers are initialized */}
+                <AppleToastContainer />
                 
             </TranslationProvider>
         </PusherProvider>

@@ -1,19 +1,19 @@
-"use client";
+﻿"use client";
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { identityManager } from '../core/IdentityManager';
 import { db } from '@/lib/offlineDB';
-import { clearSessionCache as sessionCleanup } from './sessionGuard';
+import { clearSessionCache } from './sessionGuard';
 import { createBookSlice, BookState, BookActions } from './slices/bookSlice';
 import { createEntrySlice, EntryState, EntryActions } from './slices/entrySlice';
 import { createSyncSlice, SyncState, SyncActions } from './slices/syncSlice';
 import { createToastSlice, ToastState, ToastActions } from './slices/toastSlice';
 
-// UNIFIED VAULT STORE TYPE
+// ðŸš€ UNIFIED VAULT STORE TYPE
 export interface VaultStore extends BookState, BookActions, EntryState, EntryActions, SyncState, SyncActions, ToastState, ToastActions {
-  // Stats state
+  // ðŸ“Š Stats state
   globalStats: {
     totalIncome: number;
     totalExpense: number;
@@ -25,7 +25,7 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   conflictedCount: number;
   hasConflicts: boolean;
   
-  // USER SETTINGS STATE
+  // ðŸŽ¯ USER SETTINGS STATE
   categories: string[];
   currency: string;
   preferences: {
@@ -34,16 +34,16 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
     highExpenseAlert: boolean;
   };
   
-  // Cross-cutting state
+  // ðŸš€ Cross-cutting state
   userId: string;
   isLoading: boolean;
   activeSection: string;
   nextAction: string | null;
   isGlobalAnimating: boolean;
-  lastScrollPosition: number; // SCROLL MEMORY
+  lastScrollPosition: number; // ðŸ†• SCROLL MEMORY
   dynamicHeaderHeight: number;
   
-  // Cross-cutting actions
+  // ðŸ”„ Cross-cutting actions
   refreshData: () => Promise<void>;
   forceRefresh: () => Promise<void>;
   refreshCounters: () => Promise<void>;
@@ -53,67 +53,33 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   setDynamicHeaderHeight: (height: number) => void;
   setNextAction: (action: string | null) => void;
   
-  // USER SETTINGS ACTIONS
+  // ðŸŽ¯ USER SETTINGS ACTIONS
   setCategories: (categories: string[]) => void;
   setCurrency: (currency: string) => void;
   setPreferences: (preferences: any) => void;
   
-  // SESSION MANAGEMENT: Clear session cache on logout
+  // ðŸ”¥ SESSION MANAGEMENT: Clear session cache on logout
   clearSessionCache: () => void;
 }
 
-// MAIN VAULT STORE - COMBINES ALL SLICES
+// ðŸ›¡ï¸ MAIN VAULT STORE - COMBINES ALL SLICES
 export const useVaultStore = create<VaultStore>()(
   immer(
     subscribeWithSelector((set, get, api) => {
-      // UNIFIED DEBOUNCE: Single source of truth for refresh prevention
-      let lastRefreshTime = 0;
-      let lastRefreshSource = '';
-      const REFRESH_DEBOUNCE_MS = 5000; // 5 seconds unified cooldown
-      let isBackgroundRefresh = false;
-
-      // Listen for vault update events
-      if (typeof window !== 'undefined') {
-        window.addEventListener('vault-updated', (event: any) => {
-          const now = Date.now();
-          const source = event.detail?.source || 'unknown';
-          const eventTabId = event.detail?.tabId;
-
-          // 🛡️ KILL INFINITE LOOP: Ignore if event came from this same tab
-          const { orchestrator } = require('../core/SyncOrchestrator');
-          if (eventTabId && eventTabId === orchestrator.tabId) {
-            return;
-          }
-          
-          if (source === lastRefreshSource && now - lastRefreshTime < 1000) {
-            return;
-          }
-
-          if (now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
-            set({ isLoading: false, isRefreshing: false });
-            return;
-          }
-          
-          lastRefreshSource = source;
-          lastRefreshTime = now;
-          get().refreshData();
-        });
-      }
-
       return {
-        // BOOK SLICE
+        // ðŸ“š BOOK SLICE
         ...createBookSlice(set, get, api),
         
-        // ENTRY SLICE  
+        // ðŸ“ ENTRY SLICE  
         ...createEntrySlice(set, get, api),
         
-        // SYNC SLICE
+        // ðŸ”„ SYNC SLICE
         ...createSyncSlice(set, get, api),
       
-        // TOAST SLICE
+        // ðŸŽ TOAST SLICE
         ...createToastSlice(set, get, api),
       
-      // STATS STATE
+      // ðŸ“Š STATS STATE
       globalStats: {
         totalIncome: 0,
         totalExpense: 0,
@@ -125,9 +91,9 @@ export const useVaultStore = create<VaultStore>()(
       conflictedCount: 0,
       hasConflicts: false,
       
-      // USER SETTINGS STATE
+      // ðŸŽ¯ USER SETTINGS STATE
       categories: ['GENERAL', 'SALARY', 'FOOD', 'RENT', 'SHOPPING', 'LOAN'],
-      currency: 'BDT (৳)',
+      currency: 'BDT (à§³)',
       preferences: {
         dailyReminder: false,
         weeklyReports: false,
@@ -147,14 +113,14 @@ export const useVaultStore = create<VaultStore>()(
         const userId = identityManager.getUserId();
         
         if (!userId) {
-          console.warn('[MAIN STORE] No userId found, skipping refresh');
+          console.warn(' [MAIN STORE] No userId found, skipping refresh');
           return;
         }
         
         set({ isLoading: true, userId: String(userId) });
         
         try {
-          console.log('[MAIN STORE] Starting coordinated data refresh...');
+          console.log(' [MAIN STORE] Starting coordinated data refresh...');
           
           const [books, allEntries] = await Promise.all([
             db.books
@@ -172,7 +138,7 @@ export const useVaultStore = create<VaultStore>()(
               .sortBy('updatedAt'),
           ]);
 
-          // STATS: Defer to refreshCounters to prevent duplicate calculations
+          // ðŸ“Š STATS: Defer to refreshCounters to prevent duplicate calculations
           // get().calculateGlobalStats(allEntries); // REMOVED
 
           const activeBookId = get().activeBook?._id || get().activeBook?.localId || '';
@@ -180,7 +146,7 @@ export const useVaultStore = create<VaultStore>()(
             ? allEntries.filter((entry: any) => String(entry.bookId || '') === String(activeBookId))
             : [];
 
-          console.log('[MAIN STORE] Coordinated refresh complete:', {
+          console.log(' [MAIN STORE] Coordinated refresh complete:', {
             booksCount: books.length,
             entriesCount: entries.length,
             allEntriesCount: allEntries.length,
@@ -200,13 +166,13 @@ export const useVaultStore = create<VaultStore>()(
           get().refreshCounters();
 
         } catch (error) {
-          console.error('[MAIN STORE] Refresh failed:', error);
+          console.error(' [MAIN STORE] Refresh failed:', error);
           set({ isLoading: false });
         }
       },
 
       forceRefresh: async () => {
-        console.log('[MAIN STORE] Force refresh triggered');
+        console.log(' [MAIN STORE] Force refresh triggered');
         await get().refreshData();
       },
 
@@ -233,9 +199,9 @@ export const useVaultStore = create<VaultStore>()(
             isLoading: false
           });
 
-          console.log('[MAIN STORE] Counters refreshed:', { conflictedCount });
+          console.log(' [MAIN STORE] Counters refreshed:', { conflictedCount });
         } catch (error) {
-          console.error('[MAIN STORE] Counters refresh failed:', error);
+          console.error(' [MAIN STORE] Counters refresh failed:', error);
           set({ isLoading: false });
         }
       },
@@ -255,7 +221,7 @@ export const useVaultStore = create<VaultStore>()(
         
         set({ globalStats });
         
-        console.log('[MAIN STORE] Global stats calculated:', globalStats);
+        console.log(' [MAIN STORE] Global stats calculated:', globalStats);
       },
 
       checkForNewConflicts: async (): Promise<void> => {
@@ -292,10 +258,10 @@ export const useVaultStore = create<VaultStore>()(
             toast.error(`${totalConflicts} conflict${totalConflicts === 1 ? '' : 's'} detected!`, {
               duration: 8000,
             });
-
-            console.log(`[MAIN STORE] Found ${totalConflicts} conflicts and updated global store`);
+            
+            console.log(` [MAIN STORE] Found ${totalConflicts} conflicts and updated global store`);
           } else {
-            console.log('[MAIN STORE] No conflicts found');
+            console.log(' [MAIN STORE] No conflicts found');
           }
 
           set({
@@ -305,12 +271,12 @@ export const useVaultStore = create<VaultStore>()(
             hasConflicts: totalConflicts > 0
           });
         } catch (error) {
-          console.error('[MAIN STORE] Failed to check for conflicts:', error);
+          console.error(' [MAIN STORE] Failed to check for conflicts:', error);
         }
       },
 
       setActiveSection: (section: string) => {
-        console.log('[MAIN STORE] Active section set:', section);
+        console.log(' [MAIN STORE] Active section set:', section);
         set({ activeSection: section });
       },
 
@@ -319,62 +285,113 @@ export const useVaultStore = create<VaultStore>()(
       },
 
       setNextAction: (action: string | null) => {
-        console.log('[MAIN STORE] Next action set:', action);
+        console.log(' [MAIN STORE] Next action set:', action);
         set({ nextAction: action });
       },
       
-      // USER SETTINGS ACTIONS
+      // ðŸŽ¯ USER SETTINGS ACTIONS
       setCategories: (categories: string[]) => {
-        console.log('[MAIN STORE] Categories updated:', categories);
+        console.log(' [MAIN STORE] Categories updated:', categories);
         set({ categories });
       },
-
+      
       setCurrency: (currency: string) => {
-        console.log('[MAIN STORE] Currency updated:', currency);
+        console.log(' [MAIN STORE] Currency updated:', currency);
         set({ currency });
       },
-
+      
       setPreferences: (preferences: any) => {
-        console.log('[MAIN STORE] Preferences updated:', preferences);
+        console.log(' [MAIN STORE] Preferences updated:', preferences);
         set({ preferences });
       },
 
       // SESSION MANAGEMENT: Clear session cache on logout
       clearSessionCache: () => {
-        console.log('[SESSION GUARD] Clearing session cache');
-        sessionCleanup();
+        console.log(' [SESSION GUARD] Clearing session cache');
+        clearSessionCache();
       }
     };
   })
 ));
 
-// INITIAL DATA LOAD
+// ðŸŽ¯ INITIAL DATA LOAD
 if (typeof window !== 'undefined') {
-  // ACTIVATE MEDIA ENGINE: Background Base64 cleanup
+  // ðŸ§  ACTIVATE MEDIA ENGINE: Background Base64 cleanup
   import('../services/MediaMigrator').then(({ mediaMigrator }) => {
     mediaMigrator.migrateLegacyImages().catch(error => {
-      console.error('[MIGRATION] Background cleanup failed:', error);
+      console.error('ðŸ§  [MIGRATION] Background cleanup failed:', error);
     });
   }).catch(error => {
-    console.error('[MIGRATION] Failed to load MediaMigrator:', error);
+    console.error('ðŸ§  [MIGRATION] Failed to load MediaMigrator:', error);
   });
 
   // Load data on first mount
   setTimeout(() => {
-    // SECURITY GUARD: Only refresh if not in lockdown
+    // ðŸ›¡ï¸ SECURITY GUARD: Only refresh if not in lockdown
     const { isSecurityLockdown } = useVaultStore.getState();
     if (!isSecurityLockdown) {
       useVaultStore.getState().refreshData();
     } else {
-      console.log('[MAIN STORE] Initial refresh blocked - App in lockdown mode');
+      console.log('ðŸ›¡ï¸ [MAIN STORE] Initial refresh blocked - App in lockdown mode');
     }
   }, 100);
+
+  // ðŸ†• UNIFIED DEBOUNCE: Single source of truth for refresh prevention
+  let lastRefreshTime = 0;
+  let lastRefreshSource = '';
+  const REFRESH_DEBOUNCE_MS = 5000; // 5 seconds unified cooldown
+  let isBackgroundRefresh = false;
+
+  // Listen for vault update events
+  window.addEventListener('vault-updated', (event: any) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('ðŸ“¡ [MAIN STORE] Vault update event received');
+    }
+    
+    const now = Date.now();
+    const source = event.detail?.source || 'unknown';
+    
+    // ðŸ”„ LOOP DETECTION: Same source within 1s = ignore
+    if (source === lastRefreshSource && 
+        now - lastRefreshTime < 1000) {
+      console.log(`ðŸ›¡ï¸ [MAIN STORE] Loop detected: ${source} refresh ignored`);
+      return;
+    }
+    
+    if (now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
+      console.log(`ðŸ›¡ï¸ [MAIN STORE] Refresh blocked - too soon (${now - lastRefreshTime}ms ago)`);
+      // ðŸ›¡ï¸ ENSURE STATE RESET: Always reset loading states on block
+      set({ isLoading: false, isRefreshing: false });
+      return;
+    }
+    
+    // ðŸ›¡ï¸ SELF-REFRESH GUARD: Ignore SyncOrchestrator's own broadcasts
+    if (source === 'SyncOrchestrator' && 
+        event.detail?.origin === 'SyncOrchestrator') {
+      console.log(`ðŸ›¡ï¸ [MAIN STORE] Self-refresh ignored: ${source}`);
+      return;
+    }
+    
+    // ðŸ›¡ï¸ BACKGROUND SERVICE GUARD: Skip refresh if from background service
+    if (source === 'IntegrityService' || 
+        source === 'MaintenanceService') {
+      console.log(`ðŸ›¡ï¸ [MAIN STORE] Skipping refresh from background service: ${source}`);
+      isBackgroundRefresh = true;
+      return;
+    }
+    
+    lastRefreshSource = source;
+    lastRefreshTime = now;
+    isBackgroundRefresh = false;
+    useVaultStore.getState().refreshData();
+  });
 
   // Listen for identity changes
   if (identityManager.subscribe) {
     identityManager.subscribe((newUserId) => {
-      console.log('[MAIN STORE] Identity changed:', newUserId);
+      console.log('ðŸ‘¤ [MAIN STORE] Identity changed:', newUserId);
       useVaultStore.getState().refreshData();
     });
   }
-}
+
+  }

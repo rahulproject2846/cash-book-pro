@@ -107,7 +107,7 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST: নতুন বই (Vault) তৈরি করা
+ * POST: ATOMIC UPSERT - Create or update book with CID-based deduplication
  */
 export async function POST(req: Request) {
   try {
@@ -133,72 +133,112 @@ export async function POST(req: Request) {
     if (user && user.isActive === false) {
         return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
-    
-    // চেক: এই ইউজারের এই নামে অন্য কোনো বই আছে কি না - Use string userId
-    // 🔒 STRICT INTEGRITY: Ignore deleted books when checking for name conflicts
-    const existingBook = await Book.findOne({ 
-        userId: userId, 
-        name: { $regex: new RegExp(`^${name.trim()}$`, "i") },
-        isDeleted: { $ne: 1 } // 🔥 CRITICAL: Only consider active books, ignore deleted ones
-    });
 
-    if (existingBook) {
-        // 🔥 CONFLICT RESOLUTION: Return existing book with 200 status for sync engine adoption
-        return NextResponse.json({ 
+    // 🚀 PHASE 24.2: ATOMIC UPSERT OPERATION
+    // This eliminates E11000 duplicate key errors by using findOneAndUpdate with upsert
+    try {
+      const bookData = {
+        name: name.trim(),
+        description: description || "",
+        userId,
+        type: String(type || 'general').toLowerCase(),
+        phone: phone || "",
+        image: (image && image !== "") ? image : undefined,
+        mediaCid: mediaCid || undefined,
+        vKey: vKey || Date.now(),
+        cid: cid || undefined,
+        isDeleted: 0, // Ensure active status
+        updatedAt: Date.now(),
+                // shareToken removed - let schema default handle it
+      };
+
+      // 🔥 ATOMIC UPSERT: Create if not exists, update if exists (by CID)
+      const filter = cid ? { cid } : { userId, name: { $regex: new RegExp(`^${name.trim()}$`, "i") }, isDeleted: { $ne: 1 } };
+      
+            
+      const upsertedBook = await Book.findOneAndUpdate(
+        filter,
+        { 
+          $set: bookData,
+          $setOnInsert: { 
+            createdAt: Date.now(),
+            isPublic: false,
+            syncAttempts: 0,
+            isPinned: 0
+          }
+        },
+        { 
+          upsert: true, 
+          new: true, 
+          setDefaultsOnInsert: true,
+          runValidators: true 
+        }
+      );
+
+      // �️ DUPLICATE NAME CHECK: If no CID provided, check for name conflicts
+      if (!cid) {
+        const nameConflict = await Book.findOne({
+          userId: userId,
+          name: { $regex: new RegExp(`^${name.trim()}$`, "i") },
+          isDeleted: { $ne: 1 },
+          _id: { $ne: upsertedBook._id }
+        });
+
+        if (nameConflict) {
+          return NextResponse.json({ 
             success: true, 
-            book: existingBook, 
+            book: nameConflict, 
             message: "Vault adopted", 
             isActive: true 
-        }, { status: 200 });
-    }
-
-    // 🔥 SERVER-SIDE DEDUPLICATION: Check for duplicate CID before creation
-    if (cid) {
-      const existingByCid = await Book.findOne({ cid });
-      if (existingByCid) {
-        return NextResponse.json({ 
-            success: true, 
-            book: existingByCid, 
-            message: "CID match found", 
-            isActive: true 
-        }, { status: 200 });
-      }
-    }
-
-    const newBook = await Book.create({ 
-        name: name.trim(), 
-        description, 
-        userId, 
-        type: String(type || 'general').toLowerCase(), 
-        phone, 
-        image: (image && image !== "") ? image : undefined, // 🛡️ SERVER GUARD: Reject empty strings
-        mediaCid: mediaCid || undefined, // ✅ ADDED: Store mediaCid
-        vKey: vKey || Date.now(), // 🔥 UNIFIED VKEY STRATEGY: Use Date.now() for absolute versioning
-        cid: cid || undefined // 🔥 CRITICAL: Include cid field if provided
-    });
-    
-    // � [STRICT INTEGRITY] Book created without automatic entry relinking
-    console.log('� [STRICT INTEGRITY] Book created without automatic entry relinking');
-    
-    // সিগন্যাল ট্রিগার
-    try {
-        // Backend Name Verification: Check if name field exists
-        if (!newBook.name) {
-            console.warn('⚠️ BOOK_CREATED payload missing name field:', newBook);
+          }, { status: 200 });
         }
-        
+      }
+
+      // 📡 PUSH NOTIFICATION
+      try {
         await pusher.trigger(`vault-channel-${userId}`, 'BOOK_CREATED', { 
-            cid: newBook.cid,
-            _id: newBook._id,
-            userId: userId,
-            vKey: newBook.vKey
+          cid: upsertedBook.cid,
+          _id: upsertedBook._id,
+          userId: userId,
+          vKey: upsertedBook.vKey
         });
-    } catch (e) {}
+      } catch (e) {}
+
+      // 🎯 CONSISTENT RESPONSE FORMAT
+      return NextResponse.json({ 
+        success: true, 
+        data: upsertedBook,
+        isActive: true 
+      }, { status: 201 });
+
+    } catch (upsertError: any) {
+      // �️ FALLBACK: Handle any remaining duplicate key errors
+      if (upsertError.code === 11000) {
+        console.warn('🔄 [UPSERT] Duplicate key error, fetching existing record:', upsertError.message);
+        
+        const existingBook = await Book.findOne({ 
+          $or: [
+            cid ? { cid } : {},
+            { userId, name: { $regex: new RegExp(`^${name.trim()}$`, "i") }, isDeleted: { $ne: 1 } }
+          ].filter(Boolean)
+        });
+
+        if (existingBook) {
+          return NextResponse.json({ 
+            success: true, 
+            data: existingBook,
+            message: "Existing record returned", 
+            isActive: true 
+          }, { status: 200 });
+        }
+      }
+      
+      throw upsertError; // Re-throw if not a duplicate error
+    }
     
-    return NextResponse.json({ success: true, book: newBook, isActive: true }, { status: 201 });
   } catch (error: any) {
-    // console.error('❌ [API-BOOKS-POST] Error:', error.message);
-    return NextResponse.json({ message: error.message || "Creation failed" }, { status: 500 });
+    console.error('❌ [API-BOOKS-POST] Error:', error.message);
+    return NextResponse.json({ message: error.message || "Operation failed" }, { status: 500 });
   }
 }
 

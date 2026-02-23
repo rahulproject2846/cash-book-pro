@@ -23,6 +23,7 @@ interface CleanupResult {
   metadataCleaned: number;
   incompleteRecordsFlagged: number;
   serverCleanupTriggered: boolean;
+  orphanedEntriesCleaned: number;
   errors: string[];
   duration: number;
 }
@@ -63,6 +64,7 @@ export class MaintenanceService {
       metadataCleaned: 0,
       incompleteRecordsFlagged: 0,
       serverCleanupTriggered: false,
+      orphanedEntriesCleaned: 0,
       errors: [],
       duration: 0
     };
@@ -92,6 +94,10 @@ export class MaintenanceService {
       console.log('🧹 [MAINTENANCE SERVICE] Step 5: Running media garbage collection...');
       const mediaCleanupResult = await mediaGarbageCollector.runFullCleanup();
       console.log(`🧹 [MAINTENANCE SERVICE] Media cleanup: ${mediaCleanupResult.totalCleaned} blobs freed, ${(mediaCleanupResult.totalFreedSpace / 1024 / 1024).toFixed(2)}MB recovered`);
+
+      // 🆕 STEP 6: Clean up orphaned entries
+      console.log('🧹 [MAINTENANCE SERVICE] Step 6: Cleaning orphaned entries...');
+      result.orphanedEntriesCleaned = await this.cleanupOrphanedEntries(userId);
 
       result.success = true;
       result.duration = Date.now() - startTime;
@@ -409,6 +415,57 @@ export class MaintenanceService {
    */
   setUserId(userId: string): void {
     this.userId = String(userId);
+  }
+
+  /**
+   * 🧹 CLEAN UP ORPHANED ENTRIES - Remove entries with deleted parent books
+   */
+  private async cleanupOrphanedEntries(userId: string): Promise<number> {
+    try {
+      console.log('🧹 [MAINTENANCE SERVICE] Cleaning orphaned entries...');
+      
+      // Get all active entries for this user
+      const activeEntries = await db.entries
+        .where('userId')
+        .equals(userId)
+        .and((entry: any) => entry.isDeleted === 0)
+        .toArray();
+      
+      // Get all active books for this user
+      const activeBooks = await db.books
+        .where('userId')
+        .equals(userId)
+        .and((book: any) => book.isDeleted === 0)
+        .toArray();
+      
+      // Create set of valid book IDs
+      const validBookIds = new Set(
+        activeBooks.map((book: any) => String(book._id || book.localId))
+      );
+      
+      // Find orphaned entries (entries whose bookId is not in active books)
+      const orphanedEntries = activeEntries.filter((entry: any) => 
+        !validBookIds.has(String(entry.bookId))
+      );
+      
+      console.log(`🧹 [MAINTENANCE SERVICE] Found ${orphanedEntries.length} orphaned entries to clean`);
+      
+      // Mark orphaned entries as deleted and unsynced
+      for (const orphanedEntry of orphanedEntries) {
+        await db.entries.update(orphanedEntry.localId!, {
+          isDeleted: 1,
+          synced: 0,
+          updatedAt: getTimestamp()
+        });
+      }
+      
+      console.log(`✅ [MAINTENANCE SERVICE] Cleaned ${orphanedEntries.length} orphaned entries`);
+      return orphanedEntries.length;
+      
+    } catch (error) {
+      console.error('❌ [MAINTENANCE SERVICE] Failed to cleanup orphaned entries:', error);
+      return 0;
+    }
   }
 
   /**

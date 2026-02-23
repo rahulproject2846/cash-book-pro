@@ -333,10 +333,8 @@ export const DynamicHeader = () => {
                                               title: "modal_terminate_book_title",
                                               desc: "modal_terminate_book_desc",
                                               onConfirm: async () => {
-                                                const result = await deleteBook(activeBook);
-                                                if (result.success) {
-                                                  router.push('/?tab=books');
-                                                }
+                                                const result = await deleteBook(activeBook, router);
+                                                // 🚫 NO IMMEDIATE REDIRECT: Let 9s timer handle navigation
                                               }
                                             });
                                         })} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-[22px] transition-all text-left text-red-500 hover:bg-red-500/10 hover:text-red-600">
