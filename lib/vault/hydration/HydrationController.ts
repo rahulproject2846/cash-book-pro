@@ -312,6 +312,14 @@ export class HydrationController {
       
       if (result.success) {
         console.log(`[CONTROLLER] Local mutation successful: ${result.count} records processed`);
+        
+        // 🆕 DISPATCH GLOBAL UPDATE EVENT
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vault-updated', { 
+            detail: { source: 'HydrationController', origin: 'local-mutation' } 
+          }));
+        }
+        
         return { 
           success: true, 
           count: result.count 

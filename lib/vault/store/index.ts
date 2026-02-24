@@ -175,9 +175,14 @@ export const useVaultStore = create<VaultStore>()(
           // STATS: Defer to refreshCounters to prevent duplicate calculations
           // get().calculateGlobalStats(allEntries); // REMOVED
 
-          const activeBookId = get().activeBook?._id || get().activeBook?.localId || '';
-          const entries = activeBookId 
-            ? allEntries.filter((entry: any) => String(entry.bookId || '') === String(activeBookId))
+          const activeBook = get().activeBook;
+          const entries = activeBook 
+            ? allEntries.filter((entry: any) => {
+                const eBookId = String(entry.bookId || "");
+                return (eBookId === String(activeBook._id) || 
+                        eBookId === String(activeBook.localId) || 
+                        eBookId === String(activeBook.cid)) && entry.isDeleted === 0;
+              })
             : [];
 
           console.log('[MAIN STORE] Coordinated refresh complete:', {
@@ -193,10 +198,11 @@ export const useVaultStore = create<VaultStore>()(
             entries,
             isLoading: false,
             userId: String(userId),
-            bookId: activeBookId
+            bookId: activeBook?._id || activeBook?.localId || ''
           });
 
           get().applyFiltersAndSort();
+          get().processEntries();
           get().refreshCounters();
 
         } catch (error) {

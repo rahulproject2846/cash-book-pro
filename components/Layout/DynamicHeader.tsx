@@ -21,8 +21,6 @@ import { useModal } from '@/context/ModalContext';
 
 export const DynamicHeader = () => {
     const { t } = useTranslation();
-    const [showSuperMenu, setShowSuperMenu] = useState(false);
-    const [showUserMenu, setShowUserMenu] = useState(false);
 
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -38,6 +36,7 @@ export const DynamicHeader = () => {
         registerOverlay,
         unregisterOverlay,
         setDynamicHeaderHeight,
+        activeOverlays,
     } = useVaultState();
 
     const { deleteBook } = useVaultStore();
@@ -112,32 +111,26 @@ export const DynamicHeader = () => {
         return () => observer.disconnect();
     }, [setDynamicHeaderHeight, bookIdFromUrl]);
 
+    // 🎯 CENTRALIZED OVERLAY MANAGEMENT
+    const openOverlay = (overlayId: string) => {
+        registerOverlay(overlayId);
+    };
+
+    const closeOverlay = (overlayId: string) => {
+        unregisterOverlay(overlayId);
+    };
+
+    const isOverlayActive = (overlayId: string) => {
+        return activeOverlays.includes(overlayId);
+    };
+
     // Optimized Menu Handler (Closes menus after action)
     const handleAction = (action: () => void) => {
-        setShowSuperMenu(false); 
-        setShowUserMenu(false);
+        // Close all overlays first
+        activeOverlays.forEach(overlayId => {
+            unregisterOverlay(overlayId);
+        });
         if (action) action(); 
-    };
-
-    // 🎯 CENTRALIZED MENU STATE
-    const openSuperMenu = () => {
-        setShowSuperMenu(true);
-        registerOverlay('SuperMenu');
-    };
-
-    const closeSuperMenu = () => {
-        setShowSuperMenu(false);
-        unregisterOverlay('SuperMenu');
-    };
-
-    const openUserMenu = () => {
-        setShowUserMenu(true);
-        registerOverlay('UserMenu');
-    };
-
-    const closeUserMenu = () => {
-        setShowUserMenu(false);
-        unregisterOverlay('UserMenu');
     };
 
     // 🎯 CONDITIONAL RENDERING LOGIC - AFTER ALL HOOKS
@@ -172,9 +165,10 @@ export const DynamicHeader = () => {
                 {/* Contextual Title Logic with Morphic Transitions */}
                 {isBookActive ? (
                     <motion.div 
-                        layoutId={`book-title-${activeBook?._id || activeBook?.localId || 'active'}`}
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        className="flex items-center gap-4 relative z-50"
+                        layoutId={`book-hero-${activeBook?._id || activeBook?.localId || 'active'}`}
+                        transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
+                        className="flex items-center gap-4 relative z-50 will-change-transform"
+                        style={{ transform: 'translateZ(0)' }}
                     >
                         <Tooltip text={t('tt_back_dashboard')}>
                             <SafeButton
@@ -284,12 +278,12 @@ export const DynamicHeader = () => {
                         <Tooltip text={t('tt_more_options')} position="bottom">
                             <SafeButton
                                 actionId="header-menu"
-                                onAction={() => setShowSuperMenu(!showSuperMenu)}
+                                onAction={() => isOverlayActive('SuperMenu') ? closeOverlay('SuperMenu') : openOverlay('SuperMenu')}
                                 variant="ghost"
                                 size="sm"
                                 className={cn(
                                     "p-3.5 rounded-2xl border transition-all shadow-sm",
-                                    showSuperMenu 
+                                    isOverlayActive('SuperMenu')
                                         ? "bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20" 
                                         : "bg-[var(--bg-app)] border border-[var(--border)] text-[var(--text-muted)] hover:text-orange-500"
                                 )}
@@ -299,12 +293,14 @@ export const DynamicHeader = () => {
                             </SafeButton>
                         </Tooltip>
                         
-                        <AnimatePresence>
-                            {showSuperMenu && (
+                        <AnimatePresence mode="wait">
+                            {isOverlayActive('SuperMenu') && (
                                 <>
-                                    <div className="fixed inset-0 z-[499] pointer-events-none" onClick={() => setShowSuperMenu(false)} />
+                                    <div className="fixed inset-0 z-[499] pointer-events-none" onClick={() => closeOverlay('SuperMenu')} />
                                     <motion.div 
-                                        initial={{ opacity: 0, scale: 0.9, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 15 }} 
+                                        initial={{ opacity: 0, scale: 0.9, y: 15 }} 
+                                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                                        exit={{ opacity: 0, scale: 0.9, y: 15 }} 
                                         className="absolute right-0 top-16 w-72 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden"
                                     >
                                         <div className="px-5 py-3 border-b border-[var(--border)] mb-1 flex items-center justify-between opacity-60">
@@ -350,12 +346,12 @@ export const DynamicHeader = () => {
                     <div className="relative">
                         <Tooltip text={t('tt_account_settings')} position="bottom">
                             <button 
-                                onClick={(e) => { e.stopPropagation(); setShowUserMenu(!showUserMenu); }} 
+                                onClick={(e) => { e.stopPropagation(); isOverlayActive('UserMenu') ? closeOverlay('UserMenu') : openOverlay('UserMenu'); }} 
                                 className={cn(
                                     "w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-black",
                                     "flex items-center justify-center text-white text-lg font-black",
                                     "border border-[var(--border)] overflow-hidden transition-all active:scale-90 shadow-lg",
-                                    showUserMenu ? "ring-4 ring-orange-500/20 border-orange-500" : ""
+                                    isOverlayActive('UserMenu') ? "ring-4 ring-orange-500/20 border-orange-500" : ""
                                 )}
                             >
                                 {userProfilePreview.previewUrl ? (
@@ -366,11 +362,16 @@ export const DynamicHeader = () => {
                             </button>
                         </Tooltip>
                         
-                        <AnimatePresence>
-                            {showUserMenu && (
+                        <AnimatePresence mode="wait">
+                            {isOverlayActive('UserMenu') && (
                                 <>
-                                    <div className="fixed inset-0 z-[499] pointer-events-none" onClick={() => setShowUserMenu(false)} />
-                                    <motion.div initial={{ opacity: 0, scale: 0.9, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute right-0 top-16 w-64 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden">
+                                    <div className="fixed inset-0 z-[499] pointer-events-none" onClick={() => closeOverlay('UserMenu')} />
+                                    <motion.div 
+                                        initial={{ opacity: 0, scale: 0.9, y: 15 }} 
+                                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                                        exit={{ opacity: 0, scale: 0.9, y: 15 }} 
+                                        className="absolute right-0 top-16 w-64 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden"
+                                    >
                                         <button onClick={() => handleAction(() => setActiveSection('profile'))} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-blue-500/10 hover:text-blue-500">
                                             <User size={18} strokeWidth={2.5} /> <span>{t('action_account_settings')}</span>
                                         </button>

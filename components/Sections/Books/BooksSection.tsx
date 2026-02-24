@@ -26,6 +26,7 @@ import ConflictManagementList from '@/components/UI/ConflictManagementList';
 import { getVaultStore } from '@/lib/vault/store/storeHelper'; 
 import { useVaultStore } from '@/lib/vault/store';
 import { identityManager } from '@/lib/vault/core/IdentityManager'; 
+import { useRouter, useSearchParams } from 'next/navigation'; 
 
 /**
  * VAULT PRO: MASTER BOOKS SECTION (V13.0 - PINNED & ACTIVITY SORTED)
@@ -34,7 +35,8 @@ import { identityManager } from '@/lib/vault/core/IdentityManager';
  * 🚀 Performance Optimized with React.memo and useMemo
  */
 const BooksSection = memo(({ 
-    currentUser
+    currentUser,
+    router
 }: any) => {
     
     // 🎯 ALL HOOKS AT THE TOP - NO CONDITIONALS BEFORE HOOKS
@@ -58,58 +60,31 @@ const BooksSection = memo(({
     // 🎯 GET ACTIVE BOOK FROM ZUSTAND STORE
     const { activeBook, setActiveBook } = getVaultStore();
     
-    // ১. রিঅ্যাক্টিভ লজিক ইঞ্জিন (Direct Connection to Zustand Store)
-    const {
-        books, globalStats, isLoading,
-        saveBook, saveEntry, deleteEntry, toggleEntryStatus, togglePin, 
-        conflictedCount,    // CONFLICT TRACKING: Total conflicted items count
-        hasConflicts,       // CONFLICT TRACKING: Boolean flag for any conflicts
-        searchQuery, sortOption, filteredBooks, setSearchQuery, setSortOption, 
-        isLoading: isStoreLoading, entries, allEntries
-    } = getVaultStore();
-
-    // ৪. UNSYNCED COUNT QUERY
-    const unsyncedCount = useLiveQuery(
-        () => db.entries
-            .where('synced').equals(0)
-            .and((e: any) => e.isDeleted === 0) 
-            .count(),
-        []
-    ) || 0;
-
-    // ৪. PAGINATION LOGIC
-    const ITEMS_PER_PAGE = 15;
-    const totalPages = Math.ceil(filteredBooks.length / ITEMS_PER_PAGE) || 1;
-    const currentBooks = useMemo(() => {
-        return filteredBooks.slice((dashPage - 1) * ITEMS_PER_PAGE, dashPage * ITEMS_PER_PAGE);
-    }, [filteredBooks, dashPage]);
-
-    // Helper function to get currency symbol from user preferences
-    const getCurrencySymbol = () => {
-        return currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
-    };
-
-    const getBookBalance = useCallback((id: any) => {
-        // Calculate balance from Zustand store
-        const { getBookBalance } = getVaultStore();
-        return getBookBalance(String(id));
-    }, []);
+    // 🎯 GET CURRENT SECTION FROM URL
+    const searchParams = useSearchParams();
+    const currentSection = searchParams.get('tab') || 'books';
     
+    // 🎯 CONDITIONAL RENDERING LOGIC - AFTER ALL HOOKS
+    const isBookActive = !!activeBook;
+    const isGlobalView = !isBookActive;
+
+
+
     // 🚀 IDENTITY & STORE TRIGGER - ATOMIC LOCK GUARD
     useEffect(() => {
-        console.log('🔄 [BOOKS SECTION] Current State:', { booksCount: books.length, isLoading, isRefreshing: getVaultStore().isRefreshing });
+        console.log('🔄 [BOOKS SECTION] Current State:', { booksCount: getVaultStore().books.length, isLoading: getVaultStore().isLoading, isRefreshing: getVaultStore().isRefreshing });
         const userId = currentUser?._id || identityManager.getUserId();
         if (!userId || !mounted || refreshLock.current) return;
 
         console.log('🚀 [BOOKS SECTION] Atomic Trigger: One-time refresh for user:', userId);
         refreshLock.current = true; // Lock it immediately
         
-        getVaultStore().refreshData().finally(() => {
+        getVaultStore().refreshBooks().finally(() => {
             // Unlock after delay to prevent rapid re-triggers
             setTimeout(() => { refreshLock.current = false; }, 5000);
         });
     }, [currentUser?._id, mounted]); // ONLY these two dependencies
-    
+
     // 🎯 SYNC ACTIVE BOOK WITH STORE
     useEffect(() => {
         if (activeBook) {
@@ -122,7 +97,7 @@ const BooksSection = memo(({
     useEffect(() => {
         const { lastScrollPosition } = getVaultStore();
         if (lastScrollPosition > 0 && mounted) {
-            // Use a double requestAnimationFrame to ensure the grid has rendered
+            // Use a double requestAnimationFrame to ensure that grid has rendered
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     const scrollEl = document.querySelector('main');
@@ -136,17 +111,61 @@ const BooksSection = memo(({
         }
     }, [mounted]); // Only run when activeBook changes
 
+    // 🚀 CHUNK FETCH ON PAGE CHANGE
+    useEffect(() => {
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        getVaultStore().fetchPageChunk(dashPage, isMobile);
+    }, [dashPage]);
+
+    // 🎯 CALCULATIONS AFTER ALL HOOKS
+    const {
+        books, globalStats, isLoading,
+        saveBook, saveEntry, deleteBook, toggleEntryStatus, togglePin, 
+        conflictedCount,    // CONFLICT TRACKING: Total conflicted items count
+        hasConflicts,       // CONFLICT TRACKING: Boolean flag for any conflicts
+        searchQuery, sortOption, filteredBooks, setSearchQuery, setSortOption, 
+        isLoading: isStoreLoading, entries, allEntries
+    } = useVaultStore();
+
     useEffect(() => {
         if (bootStatus === 'READY') {
             setShowConflictList(false);
         }
     }, [bootStatus]);
     
-    // 🎯 CALCULATIONS AFTER ALL HOOKS
-    const combinedLoading = isLoading || isStoreLoading;
+    // 🚀 SMART CACHE LOGIC: Direct DB access with pagination
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    const ITEMS_PER_PAGE = isMobile ? 16 : 15; // Mobile: 16 real, Desktop: 15 real + 1 dummy
+    const totalPages = Math.ceil(getVaultStore().totalBookCount / ITEMS_PER_PAGE) || 1;
+    const currentBooks = useMemo(() => {
+        const books = getVaultStore().books || [];
+        return books.length > 0 ? books.slice((dashPage - 1) * ITEMS_PER_PAGE, dashPage * ITEMS_PER_PAGE) : [];
+    }, [getVaultStore().books, dashPage]);
+
+    // Helper function to get currency symbol from user preferences
+    const getCurrencySymbol = () => {
+        return currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
+    };
+
+    const getBookBalance = useCallback((id: any) => {
+        // Calculate balance from Zustand store
+        const { getBookBalance } = getVaultStore();
+        return getBookBalance(String(id));
+    }, []);
+
+    const onEdit = useCallback((book: any) => {
+        openModal('addBook', { editTarget: book, onSubmit: (data: any) => saveBook(data, book), currentUser });
+    }, [openModal, saveBook, currentUser]);
+
+    const onDelete = useCallback((book: any) => {
+        openModal('deleteConfirm', { targetName: book.name, onConfirm: () => deleteBook(book, router) });
+    }, [openModal, deleteBook, router]);
+
     const handleImportClick = () => {
         fileInputRef.current?.click();
     };
+
+    const combinedLoading = isLoading || isStoreLoading;
 
     return (
         <div className="w-full relative transition-all duration-500">
@@ -158,7 +177,7 @@ const BooksSection = memo(({
                 </div>
             ) : (
                 <>
-                    {/* --- ১. HUB HEADER --- */}
+                    {/* --- 🧠 HUB HEADER --- */}
                     {!activeBook && (
                         <HubHeader 
                             title={t('ledger_hub') || "LEDGER HUB"} 
@@ -175,9 +194,9 @@ const BooksSection = memo(({
                         </HubHeader>
                     )}
 
-                    {/* --- ২. SYNC WATCHMAN BAR --- */}
+                    {/* --- 🌩 SYNC WATCHMAN BAR --- */}
                     <AnimatePresence>
-                        {(unsyncedCount > 0 || hasConflicts) && (
+                        {(getVaultStore().unsyncedCount > 0 || hasConflicts) && (
                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-6">
                                 <div className={cn(
                                     "rounded-[28px] p-4 flex items-center justify-between shadow-lg backdrop-blur-md",
@@ -199,15 +218,17 @@ const BooksSection = memo(({
                                                 "text-[10px] font-black uppercase tracking-[2px]",
                                                 hasConflicts ? "text-red-500" : "text-orange-500"
                                             )}>
-                                                {hasConflicts ? "Vault Conflicts Detected" : "Vault Buffer Active"}
+                                                {hasConflicts 
+                                                    ? `${toBn(conflictedCount, language)} conflicts found${getVaultStore().unsyncedCount > 0 ? `, ${toBn(getVaultStore().unsyncedCount, language)} items pending` : ''}` 
+                                                    : `${toBn(getVaultStore().unsyncedCount, language)} ${t('unsynced_units') || "UNITS SECURED IN LOCAL NODE"}`
+                                                }
                                             </p>
                                             <p className={cn(
                                                 "text-[9px] font-bold uppercase tracking-[1px]",
                                                 hasConflicts ? "text-red-500/60" : "text-orange-500/60"
                                             )}>
                                                 {hasConflicts 
-                                                    ? `${toBn(conflictedCount, language)} conflicts found${unsyncedCount > 0 ? `, ${toBn(unsyncedCount, language)} items pending` : ''}`
-                                                    : `${toBn(unsyncedCount, language)} ${t('unsynced_units') || "UNITS SECURED IN LOCAL NODE"}`
+                                                    ? "Vault Conflicts Detected" : "Vault Buffer Active"
                                                 }
                                             </p>
                                         </div>
@@ -281,10 +302,17 @@ const BooksSection = memo(({
                         )}
                     </AnimatePresence>
 
-                    {/* --- BOOKS LIST & DETAILS VIEW WITH MORPHIC TRANSITIONS --- */}
-                    <AnimatePresence mode="popLayout">
+                    {/* --- 📚 BOOKS LIST & DETAILS VIEW WITH HYBRID PERSISTENCE --- */}
+                    <AnimatePresence mode="popLayout" initial={false}>
                         {!activeBook ? (
-                            <motion.div key="list-view" layoutId="main-container">
+                            <motion.div 
+                                key="list-view"
+                                layoutId="main-vault-view"
+                                initial={{ opacity: 0, scale: 0.98, x: -30 }} 
+                                animate={{ opacity: 1, scale: 1, x: 0 }} 
+                                exit={{ opacity: 0, scale: 0.98, x: -30 }} 
+                                transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
+                            >
                                 <BooksList 
                                     onAddClick={() => openModal('addBook', { onSubmit: (data: any) => saveBook(data), currentUser })}
                                     onBookClick={(b: any) => { setActiveBook(b); setDetailsPage(1); }} 
@@ -298,21 +326,24 @@ const BooksSection = memo(({
                             </motion.div>
                         ) : (
                             <motion.div 
-                                key="details-view" 
-                                layoutId="main-container"
+                                key="details-view"
+                                layoutId="main-vault-view"
                                 initial={{ opacity: 0, scale: 0.98, x: 30 }} 
                                 animate={{ opacity: 1, scale: 1, x: 0 }} 
-                                exit={{ opacity: 0, x: 30 }} 
-                                transition={{ type: "spring", damping: 30, stiffness: 350 }}
+                                exit={{ opacity: 0, scale: 0.98, x: 30 }} 
+                                transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
                             >
                                 <BookDetails 
                                     currentBook={activeBook} 
                                     bookStats={globalStats} 
                                     currentUser={currentUser} 
-                                    onBack={() => getVaultStore().setActiveBook(null)}
+                                    onBack={() => {
+                                        router.push('?tab=books'); // Move to Dashboard URL first
+                                        requestAnimationFrame(() => getVaultStore().setActiveBook(null)); // Clear store at next frame
+                                    }}
                                     onAdd={() => openModal('addEntry', { currentUser, currentBook: activeBook, onSubmit: (data: any) => saveEntry(data) })}
                                     onEdit={(e: any) => openModal('addEntry', { entry: e, currentBook: activeBook, currentUser, onSubmit: (data: any) => saveEntry(data) })}
-                                    onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => deleteEntry(e) })}
+                                    onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => getVaultStore().deleteEntry(e) })}
                                     onToggleStatus={toggleEntryStatus}
                                     
                                     // 🔥 পিন ফাংশন পাস করা হলো (এন্ট্রির জন্য)

@@ -58,9 +58,14 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
 
   // 📝 REFRESH ENTRIES
   refreshEntries: async () => {
+    // 🛡️ IDENTITY SYNC: Get userId directly from identityManager
     const userId = identityManager.getUserId();
-    if (!userId) return;
-
+    if (!userId) {
+      console.warn('🚨 [ENTRY SLICE] No userId available, retrying in 100ms...');
+      setTimeout(() => get().refreshEntries(), 100);
+      return;
+    }
+    
     set({ isRefreshing: true });
     
     try {
@@ -74,65 +79,66 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
       const searchQuery = get().entrySearchQuery || '';
       const sortConfig = get().entrySortConfig || { key: 'createdAt', direction: 'desc' };
       
-      // 🎯 STRICT BOOK SCOPING: Get active book ID
-      const activeBookId = get().activeBook?._id || get().activeBook?.localId || '';
-      
-      // 🚨 EARLY RETURN: No active book = no entries
-      if (!activeBookId) {
-        set({
-          entries: [],
-          allEntries: [],
-          entryPagination: {
-            currentPage: 1,
-            totalPages: 0,
-            itemsPerPage
-          }
-        });
-        return;
-      }
-      
-      // Build base query with strict book filtering
-      let query = db.entries
+      // 🆕 ACTIVE FETCH: Get fresh data directly from Dexie
+      const allEntries = await db.entries
         .where('userId')
         .equals(String(userId))
-        .and((entry: any) => 
-          entry.isDeleted === 0 && 
-          String(entry.bookId || '') === String(activeBookId)
-        );
+        .and((entry: any) => entry.isDeleted === 0)
+        .reverse()
+        .sortBy('updatedAt');
       
-      // Apply category filter
-      if (categoryFilter !== 'all') {
-        query = query.and((entry: any) => entry.category === categoryFilter);
+      // Update store with fresh data
+      set({ allEntries });
+      
+      // 🎯 STRICT BOOK SCOPING: Get active book and all its identifiers
+      const activeBook = get().activeBook;
+      const activeBookId = activeBook?._id || activeBook?.localId || '';
+      
+      console.log('🔍 [ENTRY SLICE] Filtering entries for book:', activeBookId, 'Found:', allEntries.length);
+      
+      // 🆕 STEP C: Filter entries for UI display ONLY if activeBook exists
+      let entries = [];
+      if (activeBook) {
+        entries = allEntries.filter((entry: any) => {
+          const eBookId = String(entry.bookId || "");
+          const activeBookId = String(activeBook._id || activeBook.localId || "");
+          const activeBookCid = String(activeBook.cid || "");
+          return (eBookId === String(activeBook._id) || 
+                  eBookId === String(activeBook.localId) || 
+                  eBookId === activeBookCid) && entry.isDeleted === 0;
+        });
+        
+        // Apply category filter
+        if (categoryFilter !== 'all') {
+          entries = entries.filter((entry: any) => entry.category === categoryFilter);
+        }
+        
+        // Apply search filter
+        if (searchQuery.trim()) {
+          const searchLower = searchQuery.toLowerCase();
+          entries = entries.filter((entry: any) => 
+            entry.title.toLowerCase().includes(searchLower) ||
+            entry.note.toLowerCase().includes(searchLower) ||
+            entry.category.toLowerCase().includes(searchLower)
+          );
+        }
+        
+        // Apply sorting direction
+        if (sortConfig.direction === 'desc') {
+          entries = entries.reverse();
+        }
       }
-      
-      // Apply search filter
-      if (searchQuery.trim()) {
-        query = query.and((entry: any) => 
-          entry.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          entry.note.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          entry.category.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-      
-      // Get all filtered entries
-      const allFilteredEntries = await query.reverse().sortBy(sortConfig.key);
-      
-      // Apply sorting direction
-      const sortedEntries = sortConfig.direction === 'asc' 
-        ? allFilteredEntries 
-        : allFilteredEntries.reverse();
       
       // Calculate pagination
-      const totalItems = sortedEntries.length;
+      const totalItems = entries.length;
       const totalPages = Math.ceil(totalItems / itemsPerPage);
       const startIndex = (currentPage - 1) * itemsPerPage;
       const endIndex = startIndex + itemsPerPage;
-      const paginatedEntries = sortedEntries.slice(startIndex, endIndex);
+      const paginatedEntries = entries.slice(startIndex, endIndex);
       
       // Update state
       set({
         entries: paginatedEntries,
-        allEntries: sortedEntries,
         entryPagination: {
           currentPage,
           totalPages,
@@ -142,6 +148,11 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
       
       // Process entries for UI
       get().processEntries();
+      
+      // Apply filters and sorting if activeBookId is present
+      if (activeBookId) {
+        get().applyFiltersAndSort();
+      }
       
     } catch (error) {
       console.error('❌ [ENTRY SLICE] Entries refresh failed:', error);
@@ -219,6 +230,7 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
         isPinned: entryData.isPinned || false,  // ✅ ADDED isPinned FIELD
         userId: userId,
         bookId: bookId,
+        bookCid: get().activeBook?.cid || '', // 🆕 CRITICAL: Include book CID for future safety
         localId: finalLocalId,
         _id: editTarget?._id || entryData._id,
         cid: editTarget?.cid || entryData.cid || generateCID(),
@@ -271,11 +283,6 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
         orchestrator.triggerSync();
         console.log(`🚀 [SYNC TRIGGER] Manual sync ignited for TEXT-ONLY entry`);
       }
-      
-      // 🆕 DEFERRED REFRESH: Wait for transaction to settle
-      setTimeout(async () => {
-        await get().refreshEntries();
-      }, 100);
       
       return { success: true, entry: { ...normalized, localId: result.count || 0 } };
     } catch (error) {
@@ -567,9 +574,20 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
   },
 
   processEntries: () => {
-    const { allEntries, entrySortConfig, entryCategoryFilter, entrySearchQuery } = get();
+    const { entries, entrySortConfig, entryCategoryFilter, entrySearchQuery, allEntries, activeBook } = get();
     
-    let processed = [...allEntries];
+    // 🆕 TRIPLE-LINK PROTOCOL: Start with all entries and filter by active book
+    let processed = [];
+    if (activeBook) {
+      processed = allEntries.filter((entry: any) => {
+        const eBookId = String(entry.bookId || "");
+        return (eBookId === String(activeBook._id) || 
+                eBookId === String(activeBook.localId) || 
+                eBookId === String(activeBook.cid)) && entry.isDeleted === 0;
+      });
+    } else {
+      processed = [...entries]; // Fallback to already filtered entries if no active book
+    }
     
     // Apply category filter
     if (entryCategoryFilter !== 'all') {

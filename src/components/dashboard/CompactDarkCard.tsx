@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { 
@@ -9,7 +9,7 @@ import {
     X, CheckCircle2, AlertTriangle, Clock, ImageIcon, Loader2, CloudOff
 } from 'lucide-react';
 
-import { cn, toBn } from '@/lib/utils/helpers';
+import { cn } from '@/lib/utils/helpers';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useModal } from '@/context/ModalContext';
 import { useLocalPreview } from '@/hooks/useLocalPreview';
@@ -18,19 +18,18 @@ import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { db } from '@/lib/offlineDB';
 import { useLiveQuery } from 'dexie-react-hooks';
 
-interface BookCardProps {
+interface CompactDarkCardProps {
     book: any;
     onEdit: (book: any) => void;
     onDelete: (book: any) => void;
     onOpen: (book: any) => void;
     currentUser: any;
     isDimmed?: boolean;
-    balance?: number;
 }
 
-// 🚀 OPTIMIZED BOOK CARD: Memoized with custom comparison function
-const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDimmed = false, balance = 0 }: BookCardProps) => {
-    const { t, language } = useTranslation();
+// 🚀 OPTIMIZED COMPACT DARK CARD: Memoized to prevent unnecessary re-renders
+export const CompactDarkCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDimmed = false }: CompactDarkCardProps) => {
+    const { t } = useTranslation();
     const { openModal } = useModal();
     const router = useRouter();
     
@@ -72,7 +71,7 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
     
     // 🎯 STABLE PROPS: Memoize based on stable identifiers
     const bookId = book._id || book.localId;
-    const stableProps = useMemo(() => ({
+    const stableProps = React.useMemo(() => ({
         bookId: book._id || book.localId,
         bookVKey: book.vKey,
         bookUpdatedAt: book.updatedAt,
@@ -87,7 +86,7 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
         bookConflicted: book.conflicted,        // 🚨 CONFLICT TRACKING: 0 = no conflict, 1 = conflict detected
         bookConflictReason: book.conflictReason   // 🚨 CONFLICT REASON: "VERSION_CONFLICT", "MERGE_CONFLICT", etc.
     }), [
-        book._id, book.localId,
+        book._id || book.localId,
         book.vKey,
         book.updatedAt,
         book.name,
@@ -102,51 +101,51 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
         book.conflictReason
     ]);
 
-    // EVENT HANDLERS: Memoized to prevent function recreation on every render
-    const handleEdit = useCallback((e: React.MouseEvent) => {
+    // 🔄 EVENT HANDLERS: Memoized to prevent function recreation on every render
+    const handleEdit = React.useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         onEdit(book);
-    }, [book, onEdit]);
+    }, [onEdit, book]);
 
-    const handleDelete = useCallback((e: React.MouseEvent) => {
+    const handleDelete = React.useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         onDelete(book);
-    }, [book, onDelete]);
+    }, [onDelete, book]);
 
-    const handleOpen = useCallback((e: React.MouseEvent) => {
+    const handleOpen = React.useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         
-        // PRE-FETCH ENTRIES ON HOVER
+        // 🚀 PRE-FETCH ENTRIES ON HOVER
         getVaultStore().prefetchBookEntries(book.localId || book._id);
         
-        // SAVE SCROLL POSITION BEFORE NAVIGATION
+        // 🎯 SAVE SCROLL POSITION BEFORE NAVIGATION
         const scrollEl = document.querySelector('main[layoutId="main-container"]');
         if (scrollEl) {
             getVaultStore().setLastScrollPosition(scrollEl.scrollTop);
         }
         
-        // Z-INDEX INTERLOCK: Set this card to top layer during animation
+        // 🎯 Z-INDEX INTERLOCK: Set this card to top layer during animation
         if (!isGlobalAnimating) {
             setIsAnimating(true);
             getVaultStore().setGlobalAnimating(true);
         }
         
-        // URL-BASED NAVIGATION: Use Next.js router for book details
+        // 🎯 URL-BASED NAVIGATION: Use Next.js router for book details
         const bookId = book._id || book.localId;
         if (bookId) {
             router.push(`?tab=books&id=${bookId}`);
         }
         onOpen(book);
         
-        // RESET Z-INDEX: Reset after animation completes
+        // 🎯 RESET Z-INDEX: Reset after animation completes
         setTimeout(() => {
             setIsAnimating(false);
             getVaultStore().setGlobalAnimating(false);
         }, 500);
-    }, [book, router, isGlobalAnimating, onOpen]);
+    }, [onOpen, book, router, isGlobalAnimating]);
 
-    // CONFLICT RESOLUTION: Handle conflict modal opening
-    const handleConflictResolution = useCallback(async () => {
+    // 🛡️ CONFLICT RESOLUTION: Handle conflict modal opening
+    const handleConflictResolution = React.useCallback(async () => {
         if (!book.conflicted) return;
         
         openModal('conflictResolver', {
@@ -185,19 +184,19 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
     }, [book, openModal]);
 
     // 📊 ENTRY COUNT: Memoized calculation
-    const entryCountText = useMemo(() => {
+    const entryCountText = React.useMemo(() => {
         const count = stableProps.bookEntryCount || 0;
         return `${count} ${count === 1 ? 'entry' : 'entries'}`;
     }, [stableProps.bookEntryCount]);
 
     // 🎨 STATUS COLORS: Memoized status indicators
-    const statusColor = useMemo(() => {
+    const statusColor = React.useMemo(() => {
         if (stableProps.bookIsDeleted) return 'text-red-600';
         if (stableProps.bookSynced) return 'text-green-600';
         return 'text-gray-500';
     }, [stableProps.bookIsDeleted, stableProps.bookSynced]);
 
-    const statusIcon = useMemo(() => {
+    const statusIcon = React.useMemo(() => {
         // 🚨 PRIORITY: Conflict takes precedence over all other states
         if (stableProps.bookIsDeleted) return <X className="w-4 h-4" />;                                    // ❌ Deleted
         if (stableProps.bookConflicted) return <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />;      // 🚨 Conflict
@@ -206,7 +205,7 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
     }, [stableProps.bookIsDeleted, stableProps.bookConflicted, stableProps.bookSynced]);
 
     // 🎨 BOOK COLOR: Memoized color display
-    const bookColorClass = useMemo(() => {
+    const bookColorClass = React.useMemo(() => {
         const color = stableProps.bookColor || '#3B82F6';
         return {
             backgroundColor: color,
@@ -249,7 +248,7 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
                 filter: isDimmed ? "blur(2px) saturate(0.5) grayscale(0.5)" : "blur(0px) saturate(1)"
             }}
             exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
             whileHover={{ 
                 scale: 1.08, 
                 zIndex: 100, 
@@ -257,11 +256,22 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
                 transition: { duration: 0.2 } 
             }}
             whileTap={{ scale: 0.98 }}
-            onClick={handleOpen}
+            onClick={(e) => {
+                if (!isGlobalAnimating) {
+                    setIsAnimating(true);
+                    getVaultStore().setGlobalAnimating(true);
+                }
+                onOpen(book);
+                
+                // RESET Z-INDEX: Reset after animation completes
+                setTimeout(() => {
+                    setIsAnimating(false);
+                    getVaultStore().setGlobalAnimating(false);
+                }, 500);
+            }}
             style={{ 
                 zIndex: isAnimating ? 100 : 1,
-                willChange: "transform",
-                transform: 'translateZ(0)'
+                willChange: "transform" 
             }}
             className="group relative z-30 bg-[#1E1E1E] rounded-xl border border-white/5 hover:border-white/10 p-4 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] flex flex-col gap-4 overflow-hidden"
         >
@@ -269,17 +279,17 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
             <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                     <motion.div 
-                        layoutId={`book-hero-${bookId}`}
+                        layoutId={`title-${bookId}`}
                         layout
-                        transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
-                        style={{ willChange: "transform", transform: 'translateZ(0)' }}
+                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        style={{ willChange: "transform" }}
                         className="flex items-center gap-2 mb-1"
                     >
                         <motion.div 
-                            layoutId={`book-icon-${bookId}`}
+                            layoutId={`icon-${bookId}`}
                             layout
-                            transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
-                            style={{ willChange: "transform", transform: 'translateZ(0)', backgroundColor: book.color || '#3B82F6' }}
+                            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                            style={{ willChange: "transform", backgroundColor: book.color || '#3B82F6' }}
                             className="w-2 h-2 rounded-full shrink-0" 
                         />
                         <span className="text-sm font-medium text-slate-100 truncate">
@@ -300,13 +310,13 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
                 {/* ⚙️ ACTIONS */}
                 <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <button
-                        onClick={handleEdit}
+                        onClick={(e) => { e.stopPropagation(); onEdit(book); }}
                         className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
                     >
                         <Edit3 size={14} />
                     </button>
                     <button
-                        onClick={handleDelete}
+                        onClick={(e) => { e.stopPropagation(); onDelete(book); }}
                         className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
                     >
                         <Trash2 size={14} />
@@ -344,24 +354,8 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
                 </div>
             )}
 
-            {/* 📊 BALANCE DISPLAY - Net Asset / Total Surplus */}
-            <div className="mt-auto pt-4 border-t border-white/5">
-                <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">
-                        Net Asset
-                    </span>
-                    <div className={cn(
-                        "text-lg font-mono font-bold",
-                        balance >= 0 ? "text-green-500" : "text-red-500"
-                    )}>
-                        {balance >= 0 ? '+' : ''}
-                        {toBn(Math.abs(balance).toLocaleString(), language)}
-                    </div>
-                </div>
-            </div>
-
             {/* 📊 FOOTER STATS */}
-            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+            <div className="flex items-center justify-between mt-auto pt-4 border-t border-white/5">
                 <span className="text-[10px] text-slate-500 font-mono">
                     CID: {stableProps.bookId?.slice(0, 8)}...
                 </span>
@@ -373,18 +367,6 @@ const BookCard = React.memo(({ book, onEdit, onDelete, onOpen, currentUser, isDi
             </div>
         </motion.div>
     );
-}, (prev, next) => {
-    // 🚀 CUSTOM COMPARISON FUNCTION: Only re-render on critical changes
-    // Returns true if props are equal (skip re-render), false if different (re-render)
-    return (
-        prev.book.vKey === next.book.vKey &&
-        prev.balance === next.balance &&
-        prev.isDimmed === next.isDimmed &&
-        prev.book.updatedAt === next.book.updatedAt &&
-        prev.book.synced === next.book.synced
-    );
 });
 
-BookCard.displayName = 'BookCard';
-
-export default BookCard;
+CompactDarkCard.displayName = 'CompactDarkCard';

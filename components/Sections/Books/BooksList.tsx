@@ -7,9 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLocalPreview } from '@/hooks/useLocalPreview';
 import { useVaultState, getVaultStore } from '@/lib/vault/store/storeHelper';
-import { useBootStatus } from '@/lib/vault/store/storeHelper';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn, getTimeAgo } from '@/lib/utils/helpers';
+import { BookCardSkeleton } from './BookCardSkeleton';
 
 // --- 📦 OPTIMIZED BOOK LIST ITEM WITH REACT.MEMO ---
 interface BookListItemProps {
@@ -301,12 +301,14 @@ const BooksList = React.memo<BooksListProps>(({
     // 🎯 HOVER STATE MANAGEMENT
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     
-    // 🎯 ZUSTAND STORE INTEGRATION
-    const { filteredBooks, isLoading: isStoreLoading, pendingDeletion } = useVaultState();
-    const { isSystemInitializing } = useBootStatus();
+    // 🎯 ZUSTAND STORE INTEGRATION - Use isRefreshing instead of useBootStatus
+    const { filteredBooks, isRefreshing, books, activeBook } = useVaultState();
 
     // 🛡️ STABLE EVENT HANDLERS WITH useCallback
-    const handleBookClick = useCallback((book: any) => {
+    const handleBookClick = useCallback(async (book: any) => {
+        // 🎯 CRITICAL: Set active book in store and navigate
+        const store = getVaultStore();
+        await store.setActiveBook(book);
         onBookClick(book);
     }, [onBookClick]);
 
@@ -326,14 +328,9 @@ const BooksList = React.memo<BooksListProps>(({
         return getBookBalance(String(bookId));
     }, []);
 
-    // LOADING STATE CHECK
-    if (isSystemInitializing) {
-        return (
-            <div className="py-40 flex flex-col items-center justify-center gap-6 opacity-20">
-                <Loader2 className="animate-spin text-orange-500" size={48} />
-                <span className="text-[10px] font-black uppercase tracking-tight">{t('synchronizing_hub')}</span>
-            </div>
-        );
+    // 🎯 BULLETPROOF SKELETON GUARD: Check totalBookCount (Matrix) to prevent race conditions
+    if (getVaultStore().totalBookCount === 0 && isRefreshing && !activeBook) {
+        return <BookCardSkeleton count={4} />;
     }
 
     // 🕵️ VISUAL AUDIT: Log rendering books
@@ -341,13 +338,29 @@ const BooksList = React.memo<BooksListProps>(({
     console.log('Current Hovered ID:', hoveredId);
 
     return (
-        <motion.div layoutId="main-container" className="w-full relative z-20 isolate">
+        <motion.div 
+            layoutId="main-container" 
+            className="w-full relative z-20 isolate"
+            variants={{
+                hidden: { opacity: 0 },
+                show: { 
+                    opacity: 1,
+                    transition: {
+                        staggerChildren: 0.05,
+                        when: "beforeChildren"
+                    }
+                }
+            }}
+            initial="hidden"
+            animate="show"
+        >
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-10 mt-2 md:mt-6 md:px-8 lg:px-10">
                 <AnimatePresence>
                     
                     {/* DYNAMIC ADD CARD LOGIC */}
                     {(filteredBooks.length === 0 || typeof window !== 'undefined') && (
                         <motion.div 
+                            key="dummy-add-card"
                             initial={{ opacity: 0, scale: 0.9 }} 
                             animate={{ opacity: 1, scale: 1 }} 
                             whileHover={{ y: -6, scale: 1.02, zIndex: 50, transition: { duration: 0.2 } }}
@@ -369,23 +382,30 @@ const BooksList = React.memo<BooksListProps>(({
                         </motion.div>
                     )}
 
-                    {/* 🎯 OPTIMIZED BOOK LIST RENDERING - PRESERVE KEY LOGIC */}
+                    {/* 🎯 OPTIMIZED BOOK LIST RENDERING - USE BOOK LIST ITEM */}
                     {filteredBooks?.map((b: any, index: number) => {
-                        const bookId = b._id || b.localId || `temp-key-${index}`;
+                        const bookId = b.localId || b._id || b.cid || `temp-key-${index}`;
+                        const displayId = b._id ? (b._id.slice(-6).toUpperCase() || b._id) : (b.cid?.slice(-6).toUpperCase() || b.localId);
                         return (
-                            <BookListItem 
+                            <motion.div
                                 key={bookId}
-                                book={b} 
-                                onClick={handleBookClick} 
-                                onQuickAdd={handleQuickAdd} 
-                                balance={getBalance(b)} // ✅ PRESERVED: Complex balance logic
-                                currencySymbol={currencySymbol} 
-                                lang={language}
-                                t={t}
-                                isDimmed={hoveredId !== null && hoveredId !== bookId || (pendingDeletion?.bookId === bookId)}
-                                onMouseEnter={() => setHoveredId(bookId)}
-                                onMouseLeave={() => setHoveredId(null)}
-                            />
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            >
+                                <BookListItem 
+                                    book={b} 
+                                    onClick={handleBookClick} 
+                                    onQuickAdd={handleQuickAdd} 
+                                    balance={getBalance(b)} // ✅ PRESERVED: Complex balance logic
+                                    currencySymbol={currencySymbol} 
+                                    lang={language}
+                                    t={t}
+                                    isDimmed={hoveredId !== null && hoveredId !== bookId}
+                                    onMouseEnter={() => setHoveredId(bookId)}
+                                    onMouseLeave={() => setHoveredId(null)}
+                                />
+                            </motion.div>
                         );
                     })}
                 </AnimatePresence>
@@ -402,4 +422,4 @@ const BooksList = React.memo<BooksListProps>(({
 
 BooksList.displayName = 'BooksList';
 
-export { BooksList, BookListItem };
+export { BooksList };

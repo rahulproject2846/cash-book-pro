@@ -55,6 +55,9 @@ export const Sidebar = ({
         router.push(`?tab=${section}`); // 🆕 Sync URL with active section
         if (activeBook) clearActiveBook(); // Keep existing cleanup
         if (isMobile) setIsDrawerOpen(false); // Close drawer on mobile nav
+        
+        // 🆕 DECOUPLED NAVIGATION: No store refresh triggers
+        // Let the persistent component architecture handle data persistence
     };
 
     // 🎯 Apple Spring Variants

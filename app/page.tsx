@@ -91,7 +91,7 @@ function CashBookAppContent() {
     </div>
   );
 
-  // ✅ VIEW ROUTER - URL-AWARE LOGIC
+  // ✅ VIEW ROUTER - PERSISTENT COMPONENT ARCHITECTURE
   const renderView = () => {
     const effectiveBookId = bookIdFromUrl || activeBook?._id || activeBook?.localId;
 
@@ -103,22 +103,23 @@ function CashBookAppContent() {
     // Priority 2: URL-based Section Navigation (URL > State)
     const effectiveSection = tabFromUrl || activeSection || 'books';
     
-    switch (effectiveSection) {
-      case 'settings':
-        return <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />;
-      
-      case 'reports':
-        // 🆕 TODO: Replace with actual ReportsSection when available
-        return <div className="p-8 text-center text-(--text-muted)">Reports Section Coming Soon</div>;
-      
-      case 'timeline':
-        // 🆕 TODO: Replace with actual TimelineSection when available
-        return <div className="p-8 text-center text-(--text-muted)">Timeline Section Coming Soon</div>;
-      
-      case 'books':
-      default:
-        return <BooksSection />;
-    }
+    // 🆕 PERSISTENT RENDERING: Keep all sections mounted, use CSS display
+    return (
+      <div className="relative w-full h-full">
+        <div className={effectiveSection === 'books' ? 'block' : 'hidden'}>
+          <BooksSection currentUser={currentUser} router={router} />
+        </div>
+        <div className={effectiveSection === 'settings' ? 'block' : 'hidden'}>
+          <SettingsSection currentUser={currentUser} setCurrentUser={setCurrentUser} />
+        </div>
+        <div className={effectiveSection === 'reports' ? 'block' : 'hidden'}>
+          <div className="p-8 text-center text-(--text-muted)">Reports Section Coming Soon</div>
+        </div>
+        <div className={effectiveSection === 'timeline' ? 'block' : 'hidden'}>
+          <div className="p-8 text-center text-(--text-muted)">Timeline Section Coming Soon</div>
+        </div>
+      </div>
+    );
   };
 
   if (!isLoggedIn) return <AuthScreen onLoginSuccess={handleLoginSuccess} />;

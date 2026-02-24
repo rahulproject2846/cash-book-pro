@@ -626,7 +626,14 @@ export class PushService {
             updatedAt: book.updatedAt
           });
           
+          // 🆕 CASCADE ID UPDATE: Update all entries to reference new server ID
+          const updatedEntries = await db.entries
+            .where('bookId')
+            .equals(String(book.localId))
+            .modify({ bookId: String(serverId) });
+          
           console.log(`✅ [PUSH SERVICE] Book ${book.cid} marked as synced (ID: ${serverId})`);
+          console.log(`🔗 [CASCADE] Updated ${updatedEntries} entries to reference server ID: ${serverId}`);
         }
         
         return { success: true };
