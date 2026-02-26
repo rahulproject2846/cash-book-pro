@@ -29,7 +29,7 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                 String(e.status).toLowerCase() === 'completed'
             )
             .reduce((acc: any, curr) => {
-                const catName = (curr.category || 'GENERAL').toUpperCase();
+                const catName = (curr.category || 'GENERAL').to ();
                 const amount = Number(curr.amount) || 0;
                 const found = acc.find((item: any) => item.name === catName);
                 if (found) found.value += amount;
@@ -50,9 +50,9 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                 <div className="bg-black/80 border border-white/10 p-4 rounded-[20px] shadow-2xl backdrop-blur-2xl">
                     <div className="flex items-center gap-2 mb-2">
                         <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: payload[0].fill }} />
-                        <p className="text-[8px] font-black uppercase tracking-[3px] text-white/40">{payload[0].name}</p>
+                        <p className="text-[8px] font-black      text-white/40">{payload[0].name}</p>
                     </div>
-                    <p className="text-[14px] font-mono-finance font-black text-white tracking-tighter">
+                    <p className="text-[14px] font-mono-finance font-black text-white">
                          {toBn(payload[0].value.toLocaleString(), language)}
                     </p>
                 </div>
@@ -68,8 +68,8 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                     <PieIcon size={40} strokeWidth={1} />
                 </div>
                 <div className="text-center">
-                    <p className="text-[10px] font-black uppercase tracking-[5px]">{t('awaiting_intel') || "NO ANALYTICS DATA"}</p>
-                    <p className="text-[8px] font-bold uppercase tracking-[2px] mt-2">Registry is currently empty</p>
+                    <p className="text-[10px] font-black     ">{t('awaiting_intel') || "NO ANALYTICS DATA"}</p>
+                    <p className="text-[8px] font-bold      mt-2">Registry is currently empty</p>
                 </div>
             </div>
         );
@@ -105,15 +105,15 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
 
                 {/* --- 🎯 ৩. CENTER LABEL --- */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] opacity-30">
+                    <span className="text-[8px] font-black text-[var(--text-muted)]      opacity-30">
                         {t('total_expense') || "TOTAL"}
                     </span>
-                    <h3 className="text-2xl font-mono-finance font-black text-[var(--text-main)] tracking-tighter mt-1">
+                    <h3 className="text-2xl font-mono-finance font-black text-[var(--text-main)] mt-1">
                         {toBn(totalValue.toLocaleString(), language)}
                     </h3>
                     <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-app)] border border-[var(--border)] shadow-inner">
                         <ShieldCheck size={10} className="text-orange-500" />
-                        <span className="text-[7px] font-black text-orange-500 uppercase tracking-widest">Protocol Sync</span>
+                        <span className="text-[7px] font-black text-orange-500    ">Protocol Sync</span>
                     </div>
                 </div>
             </div>
@@ -131,14 +131,14 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                                 style={{backgroundColor: COLORS[i % COLORS.length]}} 
                             />
                             <div className="flex flex-col min-w-0">
-                                <span className="text-[9px] font-black uppercase text-[var(--text-main)] truncate tracking-wider leading-none mb-1">
+                                <span className="text-[9px] font-black   text-[var(--text-main)] truncate   leading-none mb-1">
                                     {item.name}
                                 </span>
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-[10px] font-mono-finance font-bold text-orange-500">
                                         {toBn(Math.round((item.value / (totalValue || 1)) * 100), language)}%
                                     </span>
-                                    <span className="text-[7px] font-black text-[var(--text-muted)] uppercase opacity-30">WEIGHT</span>
+                                    <span className="text-[7px] font-black text-[var(--text-muted)]   opacity-30">WEIGHT</span>
                                 </div>
                             </div>
                         </div>
@@ -150,7 +150,7 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
             <div className="mt-12 pt-6 border-t border-[var(--border)]/50 opacity-20 group-hover:opacity-50 flex justify-between items-center transition-opacity duration-1000">
                  <div className="flex items-center gap-2">
                     <GitCommit size={12} strokeWidth={3} className="text-orange-500" />
-                    <span className="text-[8px] font-black uppercase tracking-[4px]">Visual Intelligence V11.5</span>
+                    <span className="text-[8px] font-black     ">Visual Intelligence V11.5</span>
                  </div>
                  <Zap size={12} className="text-orange-500" fill="currentColor" strokeWidth={0} />
             </div>

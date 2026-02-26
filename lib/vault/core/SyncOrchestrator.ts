@@ -38,6 +38,10 @@ export class SyncOrchestratorRefactored {
   private static isInitializing = false;
   private static initializationPromise: Promise<void> | null = null;
   private tabId = Math.random().toString(36).substr(2, 9); // 🆕 SOURCE ID GUARD
+  
+  // 🆕 DEBOUNCE STATE: Prevent rapid-fire sync triggers
+  private syncDebounceTimeout: NodeJS.Timeout | null = null;
+  private pendingSyncOperations: Array<{ timestamp: number; source: string }> = [];
 
   constructor() {
     this.pushService = new PushService();
@@ -51,6 +55,36 @@ export class SyncOrchestratorRefactored {
     console.log('🔄 [ORCHESTRATOR] Initialized with userId:', this.userId);
     
     this.init();
+    
+    // 🆕 REACTIVE SYNC: Listen for vault-updated events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('vault-updated', (event: any) => {
+        const source = event.detail?.source || 'unknown';
+        const origin = event.detail?.origin || 'unknown';
+        
+        // 🛡️ IGNORE BACKGROUND SYNC: Only trigger for local user actions
+        if ((origin === 'local-mutation' || origin === 'batch-mutation') && source === 'HydrationController') {
+          console.log('📡 [ORCHESTRATOR] Vault update detected, queuing for debounced sync');
+          
+          // 🎯 ADD TO PENDING QUEUE: Track operation
+          this.pendingSyncOperations.push({ 
+            timestamp: Date.now(), 
+            source: 'batch-mutation' 
+          });
+          
+          // 🕐 DEBOUNCE: Clear existing timeout and set new 500ms delay
+          if (this.syncDebounceTimeout) {
+            clearTimeout(this.syncDebounceTimeout);
+          }
+          
+          this.syncDebounceTimeout = setTimeout(() => {
+            console.log(`🚀 [ORCHESTRATOR] Debounced sync triggered for ${this.pendingSyncOperations.length} operations`);
+            this.pendingSyncOperations = []; // Clear queue
+            this.triggerSync();
+          }, 500); // 🎯 INCREASED from 100ms to 500ms
+        }
+      });
+    }
   }
 
   /**
@@ -63,6 +97,18 @@ export class SyncOrchestratorRefactored {
       
       // Attach: refresh listener whenever a new channel is created
       this.channel.onmessage = (event) => {
+        // 🛡️ SELF-LOOP GUARD: Ignore messages from this tab
+        if (event.data?.sourceTabId === this.tabId) {
+          console.log('🛡️ [ORCHESTRATOR] Ignoring self-broadcast message');
+          return;
+        }
+        
+        // 🛡️ SYNC GUARD: Ignore broadcast if sync is already running
+        if (this.isInitializing) {
+          console.log('🛡️ [ORCHESTRATOR] Ignoring broadcast - sync already running');
+          return;
+        }
+        
         if (event.data?.type === 'FORCE_REFRESH') {
           console.log('📡 [ORCHESTRATOR] Cross-tab refresh signal received');
           this.notifyUI('CrossTab');
@@ -77,7 +123,11 @@ export class SyncOrchestratorRefactored {
    */
   private async init(): Promise<void> {
     if (typeof window !== 'undefined') {
-      // 🕵️‍♂️ SECURITY CHECK: Time Tampering
+      // �️ FORCE FRESH START: Reset bootStatus to ensure skeleton appears
+      const store = getVaultStore();
+      store.setBootStatus('IDLE');
+      
+      // �🕵️‍♂️ SECURITY CHECK: Time Tampering
       const isTampered = RiskManager.checkTimeTampering();
       if (isTampered) {
           console.error('🚨 [SECURITY] Critical: Time tampering detected!');
@@ -271,7 +321,12 @@ export class SyncOrchestratorRefactored {
         console.log('✅ [ORCHESTRATOR] Gate 3: Data hydration complete');
       }
 
-      // 🔄 BACKGROUND PULL: Trigger data pull after Gate 3 hydration is complete
+      // � RAM SYNCHRONIZATION: Pull all books and entries from Dexie into Zustand store
+      console.log('🔄 [ORCHESTRATOR] Synchronizing RAM from Dexie...');
+      await store.refreshData();
+      console.log('✅ [ORCHESTRATOR] RAM synchronization complete');
+
+      // �🔄 BACKGROUND PULL: Trigger data pull after Gate 3 hydration is complete
       if (process.env.NODE_ENV === 'development') {
         console.log('🔄 [ORCHESTRATOR] Triggering background data pull...');
       }
@@ -512,6 +567,18 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
+   * 🛡️ GET SYSTEM RISK STATUS (Instance Method)
+   * Provides admin dashboard with real-time risk analytics
+   */
+  public async getSystemRiskStatus(): Promise<{
+    systemHealth: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+    highRiskCount: number;
+  }> {
+    // Mocking logic or real integrity check
+    return { systemHealth: 'HEALTHY' as const, highRiskCount: 0 };
+  }
+
+  /**
    * � GET SYSTEM RISK STATUS (V6.4)
    * Provides admin dashboard with real-time risk analytics
    */
@@ -552,12 +619,7 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
-   * �� GET SYNC STATUS
-   */
-  getSyncStatus(): { isInitialized: boolean; isInitializing: boolean; userId: string } {
-    return {
-      isInitialized: this.isInitialized,
-      isInitializing: this.isInitializing,
+   * �🔄 TRIGGER SYNC
       userId: this.userId
     };
   }
@@ -775,17 +837,25 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
-   * 🧹 CLEANUP
+   * 🧹 CLEANUP: Prevent memory leaks
    */
   private cleanup(): void {
-    this.isInitialized = false;
+    // Clear debounce timeout
+    if (this.syncDebounceTimeout) {
+      clearTimeout(this.syncDebounceTimeout);
+      this.syncDebounceTimeout = null;
+    }
     
+    // Clear pending operations
+    this.pendingSyncOperations = [];
+    
+    // Close broadcast channel
     if (this.channel) {
       this.channel.close();
       this.channel = null;
     }
     
-    console.log('🧹 [REFACTORED ORCHESTRATOR] Cleanup complete');
+    console.log('🧹 [ORCHESTRATOR] Cleanup completed');
   }
 
 

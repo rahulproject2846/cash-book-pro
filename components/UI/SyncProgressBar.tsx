@@ -76,7 +76,7 @@ const SyncProgressBar: React.FC<SyncProgressBarProps> = ({ className }) => {
             )}
             
             {/* Progress Text */}
-            <span className="text-white text-sm font-medium tracking-wide">
+            <span className="text-white text-sm font-medium  ">
               {getProgressText()}
             </span>
           </div>

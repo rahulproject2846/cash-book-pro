@@ -119,13 +119,13 @@ return (
             <div className="flex gap-4 justify-center mb-6">
                 <button
                     onClick={() => resolveAll('local')}
-                    className="px-6 py-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-xl font-black text-[12px] uppercase tracking-wider hover:bg-blue-500/30 hover:border-blue-500/50 transition-all active:scale-95"
+                    className="px-6 py-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-xl font-black text-[12px]   hover:bg-blue-500/30 hover:border-blue-500/50 transition-all active:scale-95"
                 >
                     Resolve All (Keep Local)
                 </button>
                 <button
                     onClick={() => resolveAll('server')}
-                    className="px-6 py-3 bg-green-500/20 border border-green-500/30 text-green-400 rounded-xl font-black text-[12px] uppercase tracking-wider hover:bg-green-500/30 hover:border-green-500/50 transition-all active:scale-95"
+                    className="px-6 py-3 bg-green-500/20 border border-green-500/30 text-green-400 rounded-xl font-black text-[12px]   hover:bg-green-500/30 hover:border-green-500/50 transition-all active:scale-95"
                 >
                     Resolve All (Accept Server)
                 </button>
@@ -176,14 +176,14 @@ return (
                                     {/* Content */}
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-[10px] font-black text-red-500 uppercase tracking-wider">
+                                            <span className="text-[10px] font-black text-red-500  ">
                                                 {item.type === 'book' ? 'BOOK' : 'ENTRY'}
                                             </span>
                                             <span className="text-[10px] text-white/40 font-bold">
                                                 {formatDate(item.record.updatedAt)}
                                             </span>
                                             {isPending && (
-                                                <span className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">
+                                                <span className="text-[10px] font-black text-yellow-500  ">
                                                     PENDING
                                                 </span>
                                             )}
@@ -213,7 +213,7 @@ return (
                                         {/* Undo Button */}
                                         <button
                                             onClick={() => handleUndo(item)}
-                                            className="px-4 py-2 border border-yellow-500/30 text-yellow-400 bg-yellow-500/10 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-yellow-500/20 hover:border-yellow-500/50 transition-all active:scale-95 flex items-center gap-2 animate-pulse"
+                                            className="px-4 py-2 border border-yellow-500/30 text-yellow-400 bg-yellow-500/10 rounded-xl font-black text-[10px]   hover:bg-yellow-500/20 hover:border-yellow-500/50 transition-all active:scale-95 flex items-center gap-2 animate-pulse"
                                         >
                                             <RotateCcw className="w-3 h-3" />
                                             Undo ({remainingTime}s)
@@ -222,7 +222,7 @@ return (
                                 ) : (
                                     <button
                                         onClick={() => handleConflictResolution(item)}
-                                        className="ml-4 px-4 py-2 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-red-500 hover:text-white transition-all active:scale-95 shrink-0"
+                                        className="ml-4 px-4 py-2 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl font-black text-[10px]   hover:bg-red-500 hover:text-white transition-all active:scale-95 shrink-0"
                                     >
                                         Resolve
                                     </button>
@@ -239,7 +239,7 @@ return (
                     <button
                         onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                         disabled={currentPage === 1}
-                        className="px-4 py-2 bg-white/10 border border-white/20 text-white rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 bg-white/10 border border-white/20 text-white rounded-xl font-black text-[10px]   hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Previous
                     </button>
@@ -251,7 +251,7 @@ return (
                     <button
                         onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                         disabled={currentPage === totalPages}
-                        className="px-4 py-2 bg-white/10 border border-white/20 text-white rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 bg-white/10 border border-white/20 text-white rounded-xl font-black text-[10px]   hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Next
                     </button>

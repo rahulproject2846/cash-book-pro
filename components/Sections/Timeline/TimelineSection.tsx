@@ -192,7 +192,7 @@ export const TimelineSection = ({ currentUser }: any) => {
                     {entries.length === 0 && (
                         <div className="py-40 flex flex-col items-center justify-center opacity-20 gap-4 text-[var(--text-muted)]">
                             <Zap size={60} strokeWidth={1} />
-                            <p className="text-[10px] font-black uppercase tracking-[5px]">{t('empty_ledger')}</p>
+                            <p className="text-[10px] font-black     ">{t('empty_ledger')}</p>
                         </div>
                     )}
                 </div>

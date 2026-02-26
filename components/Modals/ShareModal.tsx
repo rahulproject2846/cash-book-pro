@@ -94,13 +94,13 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                         {/* --- 🏷️ HEADER --- */}
                         <div className="flex justify-between items-center mb-8 relative z-20">
                             <div>
-                                <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none flex items-center gap-2">
+                                <h2 className="text-[12px] font-black text-[var(--text-main)]      leading-none flex items-center gap-2">
                                     <Terminal size={14} className="text-orange-500" />
                                     {t('share_vault_title') || "Access Protocol"}
                                 </h2>
                                 <div className="flex items-center gap-2 mt-1.5 opacity-60">
                                     <ShieldCheck size={10} className="text-orange-500" />
-                                    <span className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px]">{t('identity_secured') || "IDENTITY VERIFIED"}</span>
+                                    <span className="text-[8px] font-bold text-orange-500   ">{t('identity_secured') || "IDENTITY VERIFIED"}</span>
                                 </div>
                             </div>
                             <button onClick={onClose} className="w-10 h-10 rounded-full bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-sm"><X size={20} /></button>
@@ -117,10 +117,10 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                             {isPublic ? <Globe size={28} className="animate-pulse" /> : <ShieldAlert size={28} />}
                                         </div>
                                         <div className="text-left">
-                                            <p className={`text-[10px] font-black uppercase tracking-[3px] transition-colors ${isPublic ? 'text-green-500' : 'text-[var(--text-muted)]'}`}>
+                                            <p className={`text-[10px] font-black    transition-colors ${isPublic ? 'text-green-500' : 'text-[var(--text-muted)]'}`}>
                                                 {isPublic ? t('status_live') : t('status_private')}
                                             </p>
-                                            <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest mt-1 opacity-40 leading-relaxed">
+                                            <p className="text-[8px] font-bold text-[var(--text-muted)]   mt-1 opacity-40 leading-relaxed">
                                                 {isPublic ? t('desc_public') : t('desc_private')}
                                             </p>
                                         </div>
@@ -129,7 +129,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                     {/* Action Trigger */}
                                     <button 
                                         onClick={handleToggle} disabled={loading}
-                                        className={`w-full py-4.5 rounded-2xl text-[10px] font-black uppercase tracking-[4px] shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 overflow-hidden border-none ${isPublic ? 'bg-[var(--bg-card)] text-red-500 shadow-red-500/5' : 'bg-orange-500 text-white shadow-orange-500/20'}`}
+                                        className={`w-full py-4.5 rounded-2xl text-[10px] font-black      shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 overflow-hidden border-none ${isPublic ? 'bg-[var(--bg-card)] text-red-500 shadow-red-500/5' : 'bg-orange-500 text-white shadow-orange-500/20'}`}
                                     >
                                         {loading ? <Loader2 size={18} className="animate-spin" /> : (
                                             <>
@@ -153,7 +153,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                         className="space-y-4 pt-2 overflow-hidden"
                                     >
                                         <div className="flex flex-col gap-3">
-                                            <span className="text-[8px] font-black text-orange-500 uppercase tracking-[3px] ml-1 flex items-center gap-2">
+                                            <span className="text-[8px] font-black text-orange-500      ml-1 flex items-center gap-2">
                                                 <Link2 size={12} strokeWidth={3} /> {t('label_access_url') || "PUBLIC ENDPOINT URL"}
                                             </span>
                                             
@@ -183,9 +183,9 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                                             <div className="flex items-center justify-between px-2 opacity-30">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                                    <span className="text-[8px] font-black uppercase tracking-widest text-green-500">{t('status_online') || "ONLINE"}</span>
+                                                    <span className="text-[8px] font-black     text-green-500">{t('status_online') || "ONLINE"}</span>
                                                 </div>
-                                                <span className="text-[8px] font-bold uppercase italic tracking-widest">EXT: {toBn('SHA256v5', language)}</span>
+                                                <span className="text-[8px] font-bold      ">EXT: {toBn('SHA256v5', language)}</span>
                                             </div>
                                         </div>
                                     </motion.div>
@@ -194,7 +194,7 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
 
                             {/* 3. SYSTEM FOOTER */}
                             <div className="pt-8 border-t border-[var(--border)] opacity-30 text-center">
-                                <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest leading-relaxed max-w-[280px] mx-auto">
+                                <p className="text-[8px] font-bold text-[var(--text-muted)]     leading-relaxed max-w-[280px] mx-auto">
                                     {t('share_info_footer')}
                                 </p>
                             </div>

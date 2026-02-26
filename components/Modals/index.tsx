@@ -83,12 +83,12 @@ export const ModalLayout = ({ title, children, onClose, isOpen = true }: any) =>
           {/* হেডার সেকশন */}
           <div className="px-8 py-6 flex justify-between items-center border-b border-[var(--border)] bg-[var(--bg-app)]/30 backdrop-blur-md">
             <div className="flex flex-col gap-1">
-              <h2 className="text-[11px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+              <h2 className="text-[11px] font-black text-[var(--text-main)]        leading-none">
                 {title}
               </h2>
               <div className="flex items-center gap-1.5 opacity-60">
                 <ShieldCheck size={10} className="text-orange-500" />
-                <p className="text-[7px] font-bold text-orange-500 uppercase tracking-[2px]">Secured Protocol Active</p>
+                <p className="text-[7px] font-bold text-orange-500     ">Secured Protocol Active</p>
               </div>
             </div>
             <button 
@@ -136,34 +136,34 @@ export const DeleteConfirmModal = ({ targetName, onConfirm, onClose }: any) => {
                 <div className="flex gap-4 p-5 rounded-[28px] bg-red-500/5 border border-red-500/20 text-red-500">
                     <AlertTriangle size={24} className="shrink-0 animate-pulse" />
                     <div className="space-y-1">
-                        <p className="text-xs font-black uppercase tracking-widest leading-tight">{t('label_termination')}</p>
-                        <p className="text-[10px] font-bold opacity-70 leading-relaxed uppercase">
-                            {t('term_warning')} <span className="underline italic text-red-600">"{targetName}"</span>
+                        <p className="text-xs font-black     leading-tight">{t('label_termination')}</p>
+                        <p className="text-[10px] font-bold opacity-70 leading-relaxed  ">
+                            {t('term_warning')} <span className="underline   text-red-600">"{targetName}"</span>
                         </p>
                     </div>
                 </div>
                 <div className="space-y-3">
-                    <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest ml-1 italic">
+                    <label className="text-[9px] font-black text-[var(--text-muted)]     ml-1  ">
                         {t('placeholder_identity_confirm')}
                     </label>
                     <input 
                         type="text" 
                         placeholder={targetName} 
-                        className="w-full h-15 bg-[var(--bg-app)] border border-[var(--border)] rounded-[22px] px-6 text-[13px] font-black uppercase tracking-widest text-red-500 focus:outline-none focus:border-red-500 transition-all shadow-inner" 
+                        className="w-full h-15 bg-[var(--bg-app)] border border-[var(--border)] rounded-[22px] px-6 text-[13px] font-black     text-red-500 focus:outline-none focus:border-red-500 transition-all shadow-inner" 
                         value={localConfirmName} 
                         onChange={(e) => setLocalConfirmName(e.target.value)} 
                         autoFocus 
                     />
                 </div>
                 <div className="flex gap-3 pt-2">
-                    <button onClick={onClose} disabled={isDeleting} className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[2px] text-[var(--text-muted)] bg-[var(--bg-app)] border border-[var(--border)] hover:bg-[var(--bg-card)] transition-all disabled:opacity-50 disabled:cursor-wait">
+                    <button onClick={onClose} disabled={isDeleting} className="flex-1 py-4 rounded-2xl font-black text-[10px]      text-[var(--text-muted)] bg-[var(--bg-app)] border border-[var(--border)] hover:bg-[var(--bg-card)] transition-all disabled:opacity-50 disabled:cursor-wait">
                         {t('cancel')}
                     </button>
                     <motion.button 
                         onClick={handleDelete}
                         disabled={!isMatch || isDeleting} 
                         whileTap={{ scale: 0.96 }}
-                        className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[2px] transition-all shadow-xl 
+                        className={`flex-1 py-4 rounded-2xl font-black text-[10px]      transition-all shadow-xl 
                             ${isMatch && !isDeleting
                                 ? 'bg-red-600 text-white shadow-red-600/30 hover:bg-red-700 active:scale-95' 
                                 : 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 shadow-none'}`}

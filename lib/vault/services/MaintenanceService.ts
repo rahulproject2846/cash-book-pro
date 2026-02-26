@@ -176,12 +176,30 @@ export class MaintenanceService {
       
       if (db.mediaStore && logIds.length > 0) {
         try {
-          // Find mediaStore records that reference these audit logs
-          const orphanedMedia = await db.mediaStore
-            .where('parentId')
-            .anyOf(logIds.map((id: number) => String(id)))
-            .and((media: any) => media.parentType === 'audit')
-            .toArray();
+          // 🚨 FIX: Separate numeric and string IDs to prevent anyOf type mismatch
+          const numericIds = logIds.filter((id: any) => typeof id === 'number');
+          const stringIds = logIds.filter((id: any) => typeof id === 'string');
+          
+          let orphanedMedia: any[] = [];
+          
+          // Execute separate queries and merge, DO NOT pass mixed array to anyOf
+          if (numericIds.length > 0) {
+            const numericMedia = await db.mediaStore
+              .where('parentId')
+              .anyOf(numericIds)
+              .and((media: any) => media.parentType === 'audit')
+              .toArray();
+            orphanedMedia.push(...numericMedia);
+          }
+          
+          if (stringIds.length > 0) {
+            const stringMedia = await db.mediaStore
+              .where('parentId')
+              .anyOf(stringIds)
+              .and((media: any) => media.parentType === 'audit')
+              .toArray();
+            orphanedMedia.push(...stringMedia);
+          }
           
           if (orphanedMedia.length > 0) {
             console.log(`🧹 [MAINTENANCE SERVICE] Found ${orphanedMedia.length} orphaned media blobs to cleanup`);

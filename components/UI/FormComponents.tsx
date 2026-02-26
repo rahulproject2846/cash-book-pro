@@ -58,7 +58,7 @@ export const OSInput = ({
                 autoFocus={autoFocus}
                 readOnly={readOnly}
                 className={cn(
-                    "w-full h-full bg-transparent text-[14px] font-bold text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/30 placeholder:uppercase placeholder:tracking-tight placeholder:font-bold",
+                    "w-full h-full bg-transparent text-[14px] font-bold text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/30 placeholder:  placeholder:  placeholder:font-bold",
                     iconPosition === 'left' ? "pl-14 pr-6" : "pl-6 pr-14"
                 )}
             />
@@ -79,7 +79,7 @@ interface EliteDropdownProps {
 
 export const ModalEliteDropdown = ({ label, placeholder, current, options, onChange, icon: Icon, ttKey }: EliteDropdownProps) => {
     const { t } = useTranslation();
-    const getDisplayLabel = (val: string) => t(`category_${val.toLowerCase()}`) || val.toUpperCase();
+    const getDisplayLabel = (val: string) => t(`category_${val.toLowerCase()}`) || val;
     const displayText = placeholder || label || 'Select option';
 
     return (
@@ -88,7 +88,7 @@ export const ModalEliteDropdown = ({ label, placeholder, current, options, onCha
             {label && (
                 <div className="flex items-center gap-2 px-1">
                     {Icon && <Icon size={12} className="text-orange-500/40" />}
-                    <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2px]">{label}</label>
+                    <label className="text-[9px] font-black text-[var(--text-muted)]   ">{label}</label>
                 </div>
             )}
 
@@ -104,7 +104,7 @@ export const ModalEliteDropdown = ({ label, placeholder, current, options, onCha
                                     "border-[var(--border)]"
                                 )}
                             >
-                                <span className="text-[11px] font-black uppercase tracking-[1px] text-[var(--text-main)]">
+                                <span className="text-[11px] font-black    text-[var(--text-main)]">
                                     {current ? getDisplayLabel(current) : displayText}
                                 </span>
                                 <ChevronDown size={14} className="opacity-30" />
@@ -125,7 +125,7 @@ export const ModalEliteDropdown = ({ label, placeholder, current, options, onCha
                             onClick={() => onChange(opt)} 
                             className={cn(
                                 "w-full flex items-center justify-between px-4 py-3.5 apple-card transition-all mb-1 last:mb-0",
-                                "text-[10px] font-black uppercase tracking-tight",
+                                "text-[10px] font-black  ",
                                 isSelected 
                                     ? "bg-orange-500 text-white shadow-lg" 
                                     : "text-[var(--text-muted)] hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]"

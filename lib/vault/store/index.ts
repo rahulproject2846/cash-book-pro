@@ -32,10 +32,14 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
     dailyReminder: boolean;
     weeklyReports: boolean;
     highExpenseAlert: boolean;
+    isMidnight?: boolean;
+    compactMode?: boolean;
+    autoLock?: boolean;
   };
   
   // Cross-cutting state
   userId: string;
+  currentUser: any;
   isLoading: boolean;
   activeSection: string;
   nextAction: string | null;
@@ -60,6 +64,10 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   
   // SESSION MANAGEMENT: Clear session cache on logout
   clearSessionCache: () => void;
+  
+  // USER AUTH ACTIONS
+  loginSuccess: (user: any) => void;
+  logout: () => void;
 }
 
 // MAIN VAULT STORE - COMBINES ALL SLICES
@@ -72,33 +80,6 @@ export const useVaultStore = create<VaultStore>()(
       const REFRESH_DEBOUNCE_MS = 5000; // 5 seconds unified cooldown
       let isBackgroundRefresh = false;
 
-      // Listen for vault update events
-      if (typeof window !== 'undefined') {
-        window.addEventListener('vault-updated', (event: any) => {
-          const now = Date.now();
-          const source = event.detail?.source || 'unknown';
-          const eventTabId = event.detail?.tabId;
-
-          // 🛡️ KILL INFINITE LOOP: Ignore if event came from this same tab
-          const { orchestrator } = require('../core/SyncOrchestrator');
-          if (eventTabId && eventTabId === orchestrator.tabId) {
-            return;
-          }
-          
-          if (source === lastRefreshSource && now - lastRefreshTime < 1000) {
-            return;
-          }
-
-          if (now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
-            set({ isLoading: false, isRefreshing: false });
-            return;
-          }
-          
-          lastRefreshSource = source;
-          lastRefreshTime = now;
-          get().refreshData();
-        });
-      }
 
       return {
         // BOOK SLICE
@@ -131,11 +112,15 @@ export const useVaultStore = create<VaultStore>()(
       preferences: {
         dailyReminder: false,
         weeklyReports: false,
-        highExpenseAlert: false
+        highExpenseAlert: false,
+        isMidnight: false,
+        compactMode: false,
+        autoLock: false
       },
       
       // Cross-cutting state
       userId: '',
+      currentUser: null,
       isLoading: false,
       activeSection: 'books',
       nextAction: null,
@@ -145,68 +130,17 @@ export const useVaultStore = create<VaultStore>()(
       // CROSS-CUTTING ACTIONS
       refreshData: async () => {
         const userId = identityManager.getUserId();
+        if (!userId) return;
         
-        if (!userId) {
-          console.warn('[MAIN STORE] No userId found, skipping refresh');
-          return;
-        }
-        
-        set({ isLoading: true, userId: String(userId) });
-        
+        set({ isLoading: true });
         try {
-          console.log('[MAIN STORE] Starting coordinated data refresh...');
-          
-          const [books, allEntries] = await Promise.all([
-            db.books
-              .where('userId')
-              .equals(String(userId))
-              .and((book: any) => book.isDeleted === 0)
-              .reverse()
-              .sortBy('updatedAt'),
-            
-            db.entries
-              .where('userId')
-              .equals(String(userId))
-              .and((entry: any) => entry.isDeleted === 0)
-              .reverse()
-              .sortBy('updatedAt'),
-          ]);
-
-          // STATS: Defer to refreshCounters to prevent duplicate calculations
-          // get().calculateGlobalStats(allEntries); // REMOVED
-
-          const activeBook = get().activeBook;
-          const entries = activeBook 
-            ? allEntries.filter((entry: any) => {
-                const eBookId = String(entry.bookId || "");
-                return (eBookId === String(activeBook._id) || 
-                        eBookId === String(activeBook.localId) || 
-                        eBookId === String(activeBook.cid)) && entry.isDeleted === 0;
-              })
-            : [];
-
-          console.log('[MAIN STORE] Coordinated refresh complete:', {
-            booksCount: books.length,
-            entriesCount: entries.length,
-            allEntriesCount: allEntries.length,
-            performance: 'coordinated parallel queries'
-          });
-
-          set({
-            books,
-            allEntries,
-            entries,
-            isLoading: false,
-            userId: String(userId),
-            bookId: activeBook?._id || activeBook?.localId || ''
-          });
-
-          get().applyFiltersAndSort();
-          get().processEntries();
-          get().refreshCounters();
-
+          // 🛡️ DELEGATE TO DOMAIN SLICES: Respect the Matrix Architecture
+          await get().refreshBooks();
+          await get().refreshEntries();
+          await get().refreshCounters();
         } catch (error) {
-          console.error('[MAIN STORE] Refresh failed:', error);
+          console.error('❌ [MAIN STORE] Data refresh failed:', error);
+        } finally {
           set({ isLoading: false });
         }
       },
@@ -349,6 +283,26 @@ export const useVaultStore = create<VaultStore>()(
       clearSessionCache: () => {
         console.log('[SESSION GUARD] Clearing session cache');
         sessionCleanup();
+      },
+
+      // USER AUTH ACTIONS
+      loginSuccess: (user: any) => {
+        console.log('[MAIN STORE] Login success:', user._id);
+        identityManager.setIdentity(user);
+        set({ 
+          userId: user._id,
+          currentUser: user 
+        });
+      },
+
+      logout: () => {
+        console.log('[MAIN STORE] Logout triggered');
+        identityManager.clearIdentity();
+        set({ 
+          userId: '',
+          currentUser: null 
+        });
+        sessionCleanup();
       }
     };
   })
@@ -378,9 +332,11 @@ if (typeof window !== 'undefined') {
 
   // Listen for identity changes
   if (identityManager.subscribe) {
-    identityManager.subscribe((newUserId) => {
+    identityManager.subscribe(async (newUserId) => {
       console.log('[MAIN STORE] Identity changed:', newUserId);
-      useVaultStore.getState().refreshData();
+      // ✅ CRITICAL: Update store's userId state BEFORE refreshing data
+      useVaultStore.setState({ userId: newUserId || undefined });
+      await useVaultStore.getState().refreshData();
     });
   }
 }

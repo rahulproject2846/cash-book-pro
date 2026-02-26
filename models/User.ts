@@ -117,7 +117,7 @@ const UserSchema = new Schema<IUser>({
   categories: { 
     type: [String], 
     default: ['GENERAL', 'SALARY', 'FOOD', 'RENT', 'SHOPPING', 'LOAN'],
-    set: (cats: string[]) => cats.map(c => c.trim().toUpperCase())
+    set: (cats: string[]) => cats.map(c => c.trim())
   },
   currency: { 
     type: String, 

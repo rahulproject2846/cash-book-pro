@@ -28,10 +28,10 @@ export const RegionModule = ({ currency, updateCurrency }: any) => {
                             <Languages size={22} strokeWidth={2.5} />
                         </div>
                         <div>
-                            <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                            <h4 className="text-base font-black text-[var(--text-main)]        leading-none">
                                 {t('system_language') || "IDENTITY LANGUAGE"}
                             </h4>
-                            <p className="text-[8px] font-bold text-blue-500 uppercase tracking-[2px] mt-2 opacity-60">Localization Protocol</p>
+                            <p className="text-[8px] font-bold text-blue-500      mt-2 opacity-60">Localization Protocol</p>
                         </div>
                     </div>
                     
@@ -43,7 +43,7 @@ export const RegionModule = ({ currency, updateCurrency }: any) => {
                                 language === 'en' ? "bg-orange-500 text-white shadow-xl" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
                             )}
                         >
-                            <span className="text-[12px] font-black uppercase tracking-widest">English</span>
+                            <span className="text-[12px] font-black    ">English</span>
                         </button>
                         <button 
                             onClick={() => setLanguage('bn')}
@@ -64,10 +64,10 @@ export const RegionModule = ({ currency, updateCurrency }: any) => {
                             <Coins size={22} strokeWidth={2.5} />
                         </div>
                         <div>
-                            <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                            <h4 className="text-base font-black text-[var(--text-main)]        leading-none">
                                 {t('base_currency') || "FINANCIAL SYMBOL"}
                             </h4>
-                            <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-2 opacity-60">Currency Registry</p>
+                            <p className="text-[8px] font-bold text-orange-500      mt-2 opacity-60">Currency Registry</p>
                         </div>
                     </div>
 
@@ -75,7 +75,7 @@ export const RegionModule = ({ currency, updateCurrency }: any) => {
                         <select 
                             value={currency}
                             onChange={(e) => updateCurrency(e.target.value)}
-                            className="w-full h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[22px] px-6 text-[11px] font-black uppercase tracking-widest appearance-none cursor-pointer focus:border-blue-500/40 transition-all outline-none text-[var(--text-main)] shadow-inner"
+                            className="w-full h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[22px] px-6 text-[11px] font-black     appearance-none cursor-pointer focus:border-blue-500/40 transition-all outline-none text-[var(--text-main)] shadow-inner"
                         >
                             <option value="BDT (৳)">BDT (৳) - Bangladesh Taka</option>
                             <option value="USD ($)">USD ($) - US Dollar</option>

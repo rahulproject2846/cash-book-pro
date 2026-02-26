@@ -10,6 +10,13 @@ import { getVaultStore } from '../store/storeHelper';
 import { LicenseVault, RiskManager } from '../security';
 import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../utils/security';
 
+// 🛡️ API PATH MAPPING - Prevent pluralization typos
+const API_PATH_MAP: Record<string, string> = {
+  'BOOK': 'books',
+  'ENTRY': 'entries',
+  'USER': 'user/profile'
+};
+
 /**
  * 🚀 SMART BATCH PROCESSOR - Intelligent batching with payload size detection
  */
@@ -318,6 +325,8 @@ export class PushService {
       const unsyncedBooks = await db.books.where('synced').equals(0).toArray();
       const unsyncedEntries = await db.entries.where('synced').equals(0).toArray();
       const totalItems = unsyncedBooks.length + unsyncedEntries.length;
+      
+      console.log('📡 [PUSH] Found pending items:', totalItems);
       
       this._progressTracker.start(totalItems);
       
@@ -642,6 +651,27 @@ export class PushService {
         const conflictData = await res.json();
         console.log('🚨 [PUSH SERVICE] Version conflict detected for CID:', book.cid);
         
+        // 🆕 AUTOMATIC CONFLICT REPAIR: For soft-delete books, increment vKey to win next sync
+        if (book.isDeleted === 1) {
+          console.log(`🔧 [AUTO REPAIR] Soft-delete conflict detected for ${book.cid}, incrementing vKey to force resolution`);
+          
+          const repairedRecord = normalizeRecord({
+            ...book,
+            conflicted: 0, // Clear conflict flag
+            conflictReason: '',
+            serverData: null,
+            synced: 0,
+            vKey: (book.vKey || 0) + 100, // 🛡️ VKEY UPGRADE: +100 ensures override
+            updatedAt: getTimestamp()
+          }, this.userId);
+          
+          await db.books.update(book.localId!, repairedRecord);
+          console.log(`✅ [AUTO REPAIR] Book ${book.cid} vKey incremented to ${repairedRecord.vKey} for next sync attempt`);
+          
+          return { success: false, error: `Version conflict for book ${book.cid} - Auto-repair applied` };
+        }
+        
+        // Standard conflict handling for non-deleted books
         const conflictedRecord = normalizeRecord({
           ...book,
           conflicted: 1,
@@ -734,6 +764,27 @@ export class PushService {
         const conflictData = await res.json();
         console.log('🚨 [PUSH SERVICE] Version conflict detected for CID:', entry.cid);
         
+        // 🆕 AUTOMATIC CONFLICT REPAIR: For soft-delete entries, increment vKey to win next sync
+        if (entry.isDeleted === 1) {
+          console.log(`🔧 [AUTO REPAIR] Soft-delete conflict detected for ${entry.cid}, incrementing vKey to force resolution`);
+          
+          const repairedRecord = normalizeRecord({
+            ...entry,
+            conflicted: 0, // Clear conflict flag
+            conflictReason: '',
+            serverData: null,
+            synced: 0,
+            vKey: (entry.vKey || 0) + 100, // 🛡️ VKEY UPGRADE: +100 ensures override of any server drift
+            updatedAt: getTimestamp()
+          }, this.userId);
+          
+          await db.entries.update(entry.localId!, repairedRecord);
+          console.log(`✅ [AUTO REPAIR] Entry ${entry.cid} vKey incremented to ${repairedRecord.vKey} for next sync attempt`);
+          
+          return { success: false, error: `Version conflict for entry ${entry.cid} - Auto-repair applied` };
+        }
+        
+        // Standard conflict handling for non-deleted entries
         const conflictedRecord = normalizeRecord({
           ...entry,
           conflicted: 1,

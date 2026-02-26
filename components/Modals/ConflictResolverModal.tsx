@@ -192,13 +192,13 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                     {/* Common Fields */}
                     <div className="space-y-2">
                       <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Name</label>
+                        <label className="text-xs font-semibold text-white/50    ">Name</label>
                         <p className="text-white font-medium">{localData.name}</p>
                       </div>
 
                       {type === 'book' && (
                         <div>
-                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Phone</label>
+                          <label className="text-xs font-semibold text-white/50    ">Phone</label>
                           <p className="text-white font-medium">{localData.phone || 'Not set'}</p>
                         </div>
                       )}
@@ -206,18 +206,18 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                       {type === 'entry' && (
                         <>
                           <div>
-                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Type</label>
+                            <label className="text-xs font-semibold text-white/50    ">Type</label>
                             <p className="text-white font-medium capitalize">{localData.type}</p>
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Amount</label>
+                            <label className="text-xs font-semibold text-white/50    ">Amount</label>
                             <p className="text-white font-medium">
                               {localData.amount < 0 ? '-' : '+'}
                               {formatAmount(localData.amount)}
                             </p>
                           </div>
                           <div>
-                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Status</label>
+                            <label className="text-xs font-semibold text-white/50    ">Status</label>
                             <p className="text-white font-medium capitalize">
                               {localData.status || 'unknown'}
                             </p>
@@ -226,21 +226,21 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                       )}
 
                       <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Description</label>
+                        <label className="text-xs font-semibold text-white/50    ">Description</label>
                         <p className="text-white/80 text-sm">
                           {localData.description || 'No description'}
                         </p>
                       </div>
 
                       <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Last Modified</label>
+                        <label className="text-xs font-semibold text-white/50    ">Last Modified</label>
                         <p className="text-white/60 text-sm">
                           {formatDate(localData.updatedAt)}
                         </p>
                       </div>
 
                       <div>
-                        <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Version</label>
+                        <label className="text-xs font-semibold text-white/50    ">Version</label>
                         <p className="text-white/60 text-sm font-mono">v{localData.vKey}</p>
                       </div>
                     </div>
@@ -280,13 +280,13 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                       /* Common Fields */
                       <div className="space-y-2">
                         <div>
-                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Name</label>
+                          <label className="text-xs font-semibold text-white/50    ">Name</label>
                           <p className="text-white font-medium">{serverDisplay.name}</p>
                         </div>
 
                         {type === 'book' && (
                           <div>
-                            <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Phone</label>
+                            <label className="text-xs font-semibold text-white/50    ">Phone</label>
                             <p className="text-white font-medium">{serverDisplay.phone || 'Not set'}</p>
                           </div>
                         )}
@@ -294,18 +294,18 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                         {type === 'entry' && (
                           <>
                             <div>
-                              <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Type</label>
+                              <label className="text-xs font-semibold text-white/50    ">Type</label>
                               <p className="text-white font-medium capitalize">{serverDisplay.type}</p>
                             </div>
                             <div>
-                              <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Amount</label>
+                              <label className="text-xs font-semibold text-white/50    ">Amount</label>
                               <p className="text-white font-medium">
                                 {serverDisplay.amount < 0 ? '-' : '+'}
                                 {formatAmount(serverDisplay.amount)}
                               </p>
                             </div>
                             <div>
-                              <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Status</label>
+                              <label className="text-xs font-semibold text-white/50    ">Status</label>
                               <p className="text-white font-medium capitalize">
                                 {serverDisplay.status || 'unknown'}
                               </p>
@@ -314,21 +314,21 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                         )}
 
                         <div>
-                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Description</label>
+                          <label className="text-xs font-semibold text-white/50    ">Description</label>
                           <p className="text-white/80 text-sm">
                             {serverDisplay.description || 'No description'}
                           </p>
                         </div>
 
                         <div>
-                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Last Modified</label>
+                          <label className="text-xs font-semibold text-white/50    ">Last Modified</label>
                           <p className="text-white/60 text-sm">
                             {formatDate(serverDisplay.updatedAt)}
                           </p>
                         </div>
 
                         <div>
-                          <label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Version</label>
+                          <label className="text-xs font-semibold text-white/50    ">Version</label>
                           <p className="text-white/60 text-sm font-mono">v{serverDisplay.vKey}</p>
                         </div>
                       </div>

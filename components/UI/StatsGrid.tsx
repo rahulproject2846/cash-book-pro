@@ -53,14 +53,14 @@ export const StatsGrid = ({
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1.5 opacity-60">
                                 <Zap size={12} className="text-orange-500" fill="currentColor" strokeWidth={0} />
-                                <span className="text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)]">{t('label_surplus')}</span>
+                                <span className="text-[9px] font-black    text-[var(--text-muted)]">{t('label_surplus')}</span>
                             </div>
-                            <h3 className={cn("text-3xl font-mono-finance font-black tracking-tighter leading-none", finalSurplus >= 0 ? 'text-blue-500' : 'text-red-500')}>
+                            <h3 className={cn("text-3xl font-mono-finance font-black leading-none", finalSurplus >= 0 ? 'text-blue-500' : 'text-red-500')}>
                                 <span className="text-sm mr-1 opacity-50 font-sans">{symbol}</span>
                                 {toBn(Math.abs(finalSurplus).toLocaleString(), language)}
                             </h3>
                             <div className="mt-4">
-                                <span className="px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-color)] text-[7px] font-black text-green-500 uppercase tracking-tight">
+                                <span className="px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-color)] text-[7px] font-black text-green-500  ">
                                     {t('status_secured') || "PROTOCOL SECURED"}
                                 </span>
                             </div>
@@ -71,9 +71,9 @@ export const StatsGrid = ({
                                 <div key={idx} className="flex flex-col items-end">
                                     <div className="flex items-center gap-1.5 mb-0.5 opacity-40">
                                         <item.icon size={10} className={item.color} />
-                                        <span className="text-[7px] font-black uppercase tracking-tight text-[var(--text-muted)]">{item.label}</span>
+                                        <span className="text-[7px] font-black   text-[var(--text-muted)]">{item.label}</span>
                                     </div>
-                                    <p className={cn("text-[12px] font-mono-finance font-bold tracking-tight", item.color)}>
+                                    <p className={cn("text-[12px] font-mono-finance font-bold  ", item.color)}>
                                         {toBn(item.value.toLocaleString(), language)}
                                     </p>
                                 </div>
@@ -101,17 +101,17 @@ export const StatsGrid = ({
                                         <card.icon size={16} className={card.color} strokeWidth={2.5} />
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="text-[9px] font-black uppercase tracking-[2px] text-[var(--text-muted)] italic leading-none flex items-center gap-1.5">
+                                        <span className="text-[9px] font-black    text-[var(--text-muted)] leading-none flex items-center gap-1.5">
                                             <Zap size={10} className="text-orange-500" fill="currentColor" strokeWidth={0} />
                                             {card.label}
                                         </span>
-                                        <span className="text-[7px] font-bold uppercase tracking-[1px] text-[var(--text-muted)] opacity-30 mt-1">{card.desc}</span>
+                                        <span className="text-[7px] font-bold    text-[var(--text-muted)] opacity-30 mt-1">{card.desc}</span>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="mt-auto relative z-10">
-                                <h3 className={cn("text-3xl font-mono-finance font-black tracking-tighter", card.id === 'surplus' ? card.color : 'text-[var(--text-main)]')}>
+                                <h3 className={cn("text-3xl font-mono-finance font-black", card.id === 'surplus' ? card.color : 'text-[var(--text-main)]')}>
                                     <span className="text-sm mr-1 opacity-50 font-bold">{symbol}</span>
                                     {toBn(Math.abs(card.value).toLocaleString(), language)}
                                 </h3>

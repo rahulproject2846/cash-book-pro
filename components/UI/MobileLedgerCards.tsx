@@ -101,13 +101,13 @@ const LedgerRow = memo(({ e, onEdit, onDelete, onToggleStatus, activeId, setActi
                         {isIncome ? <ArrowDownLeft size={24} strokeWidth={3} /> : <ArrowUpRight size={24} strokeWidth={3} />}
                     </div>
                     <div className="min-w-0 space-y-1">
-                        <h4 className="text-[15px] font-black uppercase italic tracking-tighter text-[var(--text-main)] truncate">{e.title}</h4>
+                        <h4 className="text-[15px] font-black text-[var(--text-main)] truncate">{e.title}</h4>
                         <div className="flex items-center gap-2">
-                            <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest bg-orange-500/5 px-2 py-0.5 rounded-md border border-orange-500/10">
-                                {e.category?.toUpperCase()}
+                            <span className="text-[8px] font-black text-orange-500   bg-orange-500/5 px-2 py-0.5 rounded-md border border-orange-500/10">
+                                {e.category?.to ()}
                             </span>
-                            <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase opacity-30">
-                                {toBn(String(rowId).slice(-4).toUpperCase(), lang)}
+                            <span className="text-[8px] font-bold text-[var(--text-muted)] opacity-30">
+                                {toBn(String(rowId).slice(-4), lang)}
                             </span>
                         </div>
                     </div>
@@ -115,7 +115,7 @@ const LedgerRow = memo(({ e, onEdit, onDelete, onToggleStatus, activeId, setActi
 
                 <div className="text-right shrink-0">
                     <div className={cn(
-                        "text-[20px] font-mono-finance font-black tracking-tighter leading-none mb-2",
+                        "text-[20px] font-mono-finance font-black leading-none mb-2",
                         isIncome ? 'text-green-500' : 'text-red-500'
                     )}>
                         {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), lang)}
@@ -123,7 +123,7 @@ const LedgerRow = memo(({ e, onEdit, onDelete, onToggleStatus, activeId, setActi
                     <button 
                         onClick={(event) => { event.stopPropagation(); onToggleStatus(e); }}
                         className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[8px] font-black uppercase transition-all active:scale-90 ml-auto",
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[8px] font-black transition-all active:scale-90 ml-auto",
                             isCompleted ? "text-orange-500 border-orange-500/20 bg-orange-500/5" : "text-[var(--text-muted)] opacity-40 border-transparent"
                         )}
                     >
@@ -173,7 +173,7 @@ const MobileLedgerCards = memo(({ items, groupedEntries, isGrouped = false, onEd
                 Object.keys(groupedEntries).map((date) => (
                     <div key={date} className="relative">
                         <div className="flex items-center gap-4 mb-5 px-3">
-                            <div className="px-4 py-1.5 bg-orange-500 text-white rounded-full text-[9px] font-black uppercase tracking-[2px] shadow-lg flex items-center gap-2">
+                            <div className="px-4 py-1.5 bg-orange-500 text-white rounded-full text-[9px] font-black    shadow-lg flex items-center gap-2">
                                 <GitCommit size={12} strokeWidth={3} />
                                 {date}
                             </div>

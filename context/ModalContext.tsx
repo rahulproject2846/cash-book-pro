@@ -48,6 +48,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
 
   // ২. মডাল ওপেন প্রোটোকল (Memoized for performance)
   const openModal = useCallback((targetView: ModalView, modalData: any = null) => {
+    console.log(' [MODAL TRACE] Opening view:', targetView, 'with data:', modalData);
     setData(modalData);
     setView(targetView);
     setIsOpen(true); // SYNC: Set isOpen immediately

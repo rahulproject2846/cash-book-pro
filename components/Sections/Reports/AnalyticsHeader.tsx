@@ -37,18 +37,18 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                 </Tooltip>
 
                 <div>
-                    <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[var(--text-main)] leading-none">
+                    <h2 className="text-2xl md:text-3xl font-black   text-[var(--text-main)] leading-none">
                         {t('nav_analytics') || "INTELLIGENCE"}<span className="text-orange-500">.</span>
                     </h2>
                     
                     <div className="flex items-center gap-2 mt-2.5">
                         <div className="flex items-center gap-2 px-2.5 py-1 bg-orange-500/10 text-orange-500 rounded-lg border border-orange-500/20">
                             <Zap size={11} fill="currentColor" strokeWidth={0} />
-                            <span className="text-[8px] font-black uppercase tracking-[2px]">
+                            <span className="text-[8px] font-black   ">
                                 {toBn(count, language)} {t('protocols_label') || "RECORDS ANALYZED"}
                             </span>
                         </div>
-                        <span className="text-[9px] font-bold text-[var(--text-muted)] opacity-30 uppercase tracking-[3px] ml-1">
+                        <span className="text-[9px] font-bold text-[var(--text-muted)] opacity-30      ml-1">
                             ENV V11.0
                         </span>
                     </div>
@@ -61,7 +61,7 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                     <button 
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
                         className={cn(
-                            "h-12 md:h-14 px-5 md:px-7 rounded-[22px] bg-[var(--bg-card)] border border-[var(--border)] flex items-center gap-4 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm",
+                            "h-12 md:h-14 px-5 md:px-7 rounded-[22px] bg-[var(--bg-card)] border border-[var(--border)] flex items-center gap-4 text-[10px] font-black     transition-all active:scale-95 shadow-sm",
                             isMenuOpen 
                                 ? "border-orange-500 text-orange-500 shadow-xl ring-4 ring-orange-500/5" 
                                 : "text-[var(--text-muted)] hover:border-orange-500/30"
@@ -69,8 +69,8 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                     >
                         <Clock size={18} strokeWidth={2.5} className={cn(isMenuOpen ? "text-orange-500" : "opacity-60")} />
                         <div className="flex flex-col items-start leading-none">
-                            <span className="text-[8px] opacity-40 mb-1 tracking-[2px]">{t('range_selector') || "RANGE"}</span>
-                            <span className="text-[11px] font-bold text-[var(--text-main)] tracking-widest">
+                            <span className="text-[8px] opacity-40 mb-1   ">{t('range_selector') || "RANGE"}</span>
+                            <span className="text-[11px] font-bold text-[var(--text-main)]  ">
                                 {toBn(timeRange, language)}{t('label_days_short') || "D"}
                             </span>
                         </div>
@@ -87,7 +87,7 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                             className="absolute right-0 mt-3 w-60 bg-[var(--bg-card)]/95 backdrop-blur-2xl border border-[var(--border)] rounded-[28px] p-2 z-[1000] shadow-2xl"
                         >
                             <div className="px-4 py-2 border-b border-[var(--border)] mb-1 opacity-40">
-                                <span className="text-[8px] font-black uppercase tracking-[3px]">{t('filter_class') || "CYCLE SELECTION"}</span>
+                                <span className="text-[8px] font-black     ">{t('filter_class') || "CYCLE SELECTION"}</span>
                             </div>
                             <div className="py-1">
                                 {ranges.map((r) => {
@@ -97,7 +97,7 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
                                             key={r.value}
                                             onClick={() => { setTimeRange(r.value); setIsMenuOpen(false); }}
                                             className={cn(
-                                                "w-full flex items-center justify-between px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 last:mb-0",
+                                                "w-full flex items-center justify-between px-5 py-4 rounded-2xl text-[10px] font-black     transition-all mb-1 last:mb-0",
                                                 isSelected 
                                                     ? "text-orange-500 bg-orange-500/10 shadow-sm" 
                                                     : "text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--text-main)]"

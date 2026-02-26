@@ -172,7 +172,7 @@ export const Sidebar = ({
                                 exit="collapsed"
                                 className={cn("pl-8", isMobile && "pl-8")}
                             >
-                                <h1 className="text-xl font-black uppercase italic text-(--text-main) tracking-tighter">
+                                <h1 className="text-xl font-black   text-(--text-main)">
                                     {t('vault_pro_split_1')}<span className="text-orange-500">{t('vault_pro_split_2')}</span>
                                 </h1>
                             </motion.div>
@@ -208,7 +208,7 @@ export const Sidebar = ({
                                             initial="collapsed"
                                             animate="expanded"
                                             exit="collapsed"
-                                            className="text-[11px] font-black uppercase tracking-[3px]"
+                                            className="text-[11px] font-black"
                                         >
                                             {t(item.name)}
                                         </motion.span>
@@ -234,7 +234,7 @@ export const Sidebar = ({
                                     initial="collapsed"
                                     animate="expanded"
                                     exit="collapsed"
-                                    className="text-[10px] font-black uppercase tracking-widest"
+                                    className="text-[10px] font-black"
                                 >
                                     {t('nav_signout')}
                                 </motion.span>

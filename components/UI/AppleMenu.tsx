@@ -76,7 +76,7 @@ export const AppleMenu = ({
             {/* Apple-style Header */}
             {headerText && (
               <div className="px-4 py-2.5 border-b border-(--border) mb-1.5 flex items-center justify-between opacity-40">
-                <span className="text-[8px] font-black uppercase tracking-[3px]">{headerText}</span>
+                <span className="text-[8px] font-black   ">{headerText}</span>
                 <Zap size={10} fill="currentColor" strokeWidth={0} />
               </div>
             )}

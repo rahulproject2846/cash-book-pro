@@ -157,7 +157,7 @@ export const AppleToast: React.FC<AppleToastProps> = ({
             {message}
           </p>
           {type === 'undo' && (
-            <p className="text-[10px] uppercase tracking-widest opacity-60 mt-1 font-bold" style={{ color: colors.text }}>
+            <p className="text-[10px]     opacity-60 mt-1 font-bold" style={{ color: colors.text }}>
               Tap to cancel deletion
             </p>
           )}

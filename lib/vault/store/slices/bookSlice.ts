@@ -3,9 +3,11 @@
 import { getTimestamp } from '@/lib/shared/utils';
 import { identityManager } from '../../core/IdentityManager';
 import { db } from '@/lib/offlineDB';
+import { financeService } from '../../services/FinanceService';
 import { LocalEntry } from '@/lib/offlineDB';
 import { snipedInSession } from '../sessionGuard';
 import { immer } from 'zustand/middleware/immer';
+import { HydrationController } from '../../hydration/HydrationController';
 
 // 📚 BOOK STATE INTERFACE
 export interface BookState {
@@ -67,9 +69,8 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     // 🛡️ IDENTITY SYNC: Get userId directly from identityManager
     const userId = identityManager.getUserId();
     if (!userId) {
-      console.warn('🚨 [BOOK SLICE] No userId available, retrying in 100ms...');
-      setTimeout(() => get().refreshBooks(), 100);
-      return true;
+      console.warn('⚠️ [BOOK SLICE] Refresh blocked: No userId available.');
+      return false;
     }
     
     // 🆕 INTELLIGENT LOADING GUARD: Only show loading if NO data exists
@@ -141,13 +142,19 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       .anyOf(currentPageIds)
       .toArray();
     
-    // Update state with full objects
+    // 🛡️ OPTIMISTIC RETENTION: Don't wipe UI if we already have data and the new fetch is mysteriously empty during a background process
+    if (fullBooks.length === 0 && get().books.length > 0 && get().isRefreshing) {
+       console.warn('🛡️ [BOOK SLICE] Guarded against UI wipe during background refresh.');
+       return;
+    }
+    
+    // Update state with full objects - IMMEDIATE fallback before sorting
     set({ 
       books: fullBooks,
-      filteredBooks: fullBooks // Temporary, will be updated by applyFiltersAndSort
+      filteredBooks: fullBooks // Immediate fallback for UI
     });
     
-    // Trigger filtering and sorting on chunk
+    // Trigger filtering and sorting on chunk (async, but UI already has data)
     get().applyFiltersAndSort();
   },
 
@@ -184,7 +191,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         _id: editTarget?._id || bookData?._id,
         cid: editTarget?.cid || bookData?.cid || (await import('@/lib/offlineDB')).generateCID(),
         userId: String(userId),
-        vKey: (editTarget?.vKey || 0) + 1,
+        vKey: editTarget ? Number(editTarget.vKey || 0) + 1 : 1,
         synced: 0,
         syncAttempts: 0, // ✅ Ensure initialization
         updatedAt: getTimestamp()
@@ -228,11 +235,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       const isNewBook = !editTarget?._id;
       const hasNoImageChange = !bookData.image || !bookData.image.startsWith('cid_');
 
-      if (isNewBook || hasNoImageChange) {
-        const { orchestrator } = await import('../../core/SyncOrchestrator');
-        orchestrator.triggerSync();
-        console.log(`🚀 [SYNC TRIGGER] Manual sync ignited for ${isNewBook ? 'NEW' : 'TEXT-ONLY'} book`);
-      }
+      // Sync will be triggered by HydrationController's vault-updated event
       
       // 🆕 SILENT SAVE: No sync trigger - let MediaStore handle it
       // const { orchestrator } = await import('../../core/SyncOrchestrator');
@@ -329,7 +332,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         isDeleted: 0,
         synced: 0,
         updatedAt: getTimestamp(),
-        vKey: getTimestamp()
+        vKey: Number(book.vKey || 0) + 1, // Rigid sequential
       };
       
       const result = await controller.ingestLocalMutation('BOOK', [restorePayload]);
@@ -337,8 +340,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         throw new Error(result.error || 'Failed to restore book via HydrationController');
       }
 
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
+      // Sync will be triggered by HydrationController's vault-updated event
 
       get().refreshBooks();
       
@@ -406,6 +408,12 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       .anyOf(filteredIds)
       .toArray();
     
+    // 🛡️ OPTIMISTIC RETENTION: Don't wipe UI if we already have data and the new fetch is mysteriously empty during a background process
+    if (fullBooks.length === 0 && get().books.length > 0 && get().isRefreshing) {
+       console.warn('🛡️ [BOOK SLICE] Guarded against UI wipe during background refresh.');
+       return;
+    }
+    
     // Update state with full objects
     set({ books: fullBooks });
   },
@@ -413,54 +421,17 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
   // 🎯 ACTIVE BOOK MANAGEMENT
   setActiveBook: async (book: any) => {
-    // 🛡️ NULL GUARD: Prevent crash during back-navigation
     if (!book) {
       set({ activeBook: null, bookId: '' });
       return;
     }
     
-    // Handle both book ID string and full book object
-    let bookToSet = book;
-    let bookId = String(book?._id || book?.localId || book || '');
+    // 🚀 HYDRATE: Find full book in Dexie to get its _id and cid
+    const { db } = await import('@/lib/offlineDB');
+    const fullBook = await db.books.get(book.localId) || book;
+    set({ activeBook: fullBook, bookId: String(fullBook._id || fullBook.localId) });
     
-    // If only an ID was passed, find the full book
-    if (typeof book === 'string' || (typeof book === 'object' && !book.name && !book._id && !book.localId)) {
-      const state = get();
-      bookToSet = state.books.find((b: any) => 
-        String(b._id) === bookId || 
-        String(b.localId) === bookId
-      );
-      
-      // Search DB if not in current memory chunk
-      if (!bookToSet) {
-        try {
-          const { db } = await import('@/lib/offlineDB');
-          bookToSet = await db.books.where('localId').equals(bookId).first() || 
-                      await db.books.where('_id').equals(bookId).first();
-        } catch (error) {
-          console.error('🚨 [BOOK SLICE] Database search failed:', error);
-        }
-      }
-      
-      if (!bookToSet) {
-        console.warn('🚨 [BOOK SLICE] Book not found for ID:', bookId);
-        return;
-      }
-    }
-    
-    console.log('🎯 [BOOK SLICE] Active book set:', { 
-      bookId, 
-      bookName: bookToSet?.name
-    });
-
-    set({
-      activeBook: bookToSet,
-      bookId
-    });
-    
-    // 🆕 TRIGGER ENTRY REFRESH: Auto-fetch entries when book is selected
-    // Ensure state is fully set before triggering refresh
-    setTimeout(() => get().refreshEntries(), 50);
+    setTimeout(() => get().processEntries(), 50);
   },
 
   clearActiveBook: () => {
@@ -472,32 +443,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
   // 💰 BALANCE CALCULATION
   getBookBalance: (id: string) => {
-    const state = get();
-    const bookId = String(id);
-    
-    // 🆕 MATRIX SEARCH: Search in allBookIds matrix to ensure all cards get balance
-    const book = state.allBookIds?.find((b: any) => 
-      String(b._id) === bookId || String(b.localId) === bookId || String(b.cid) === bookId
-    ) || state.books?.find((b: any) => 
-      String(b._id) === bookId || String(b.localId) === bookId || String(b.cid) === bookId
-    );
-    
-    if (!book) {
-      console.warn(`🚨 [BOOK SLICE] Book not found for balance calculation: ${bookId}`);
-      return 0;
-    }
-    
-    // Triple-Link Protocol: Match entries with ANY of the book's possible IDs
-    const bookEntries = (state.allEntries || []).filter((entry: any) => {
-      const eBookId = String(entry.bookId || "");
-      return (eBookId === String(book._id) || 
-              eBookId === String(book.localId) || 
-              eBookId === String(book.cid)) && entry.isDeleted === 0;
-    }) || [];
-    
-    const income = bookEntries.filter((e: any) => e.type === 'income').reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
-    const expense = bookEntries.filter((e: any) => e.type === 'expense').reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
-    return income - expense;
+    return financeService.getBookBalance(get, id);
   },
 
   // 🛡️ RESURRECT BOOK CHAIN: Handle parent_deleted conflict resolution
@@ -644,10 +590,10 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         localId: book.localId,
         cid: book.cid,
         name: book.name || 'Deleted Ledger', // ✅ MANDATORY for Validator
-        userId: book.userId,
+        userId: String(userId || get().userId || book.userId || ''),
         isDeleted: 1,
         synced: 0,
-        vKey: getTimestamp(),
+        vKey: Number(book.vKey || 0) + 1,
         updatedAt: getTimestamp()
       };
       
@@ -665,9 +611,12 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         console.log(`✅ [BOOK SLICE] Book ${bookId} and entries marked as deleted`);
       });
       
-      // b. Trigger orchestrator.triggerSync() (Fire-and-forget sync)
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
+      // b. Fire sync event to trigger 7-second auto-sync
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('vault-updated', { 
+          detail: { source: 'HydrationController', origin: 'batch-mutation' } 
+        }));
+      }
       
       // c. Call get().refreshBooks() to update the local list
       get().refreshBooks();

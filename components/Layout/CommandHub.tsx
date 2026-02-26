@@ -152,7 +152,7 @@ export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUse
                             />
                             <div className="px-2 py-1 rounded-md bg-black/5 border flex items-center gap-1" style={{ borderColor: 'var(--border-soft)' }}>
                                 <Command size={10} className="opacity-40" />
-                                <span className="text-[10px] font-bold opacity-40 uppercase">ESC</span>
+                                <span className="text-[10px] font-bold opacity-40  ">ESC</span>
                             </div>
                         </div>
 
@@ -176,8 +176,8 @@ export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUse
                                                 <item.icon size={18} />
                                             </div>
                                             <div className="text-left">
-                                                <p className="text-[13px] font-semibold tracking-tight" style={{ color: 'var(--text-main)' }}>{item.label}</p>
-                                                <p className="text-[10px] font-medium opacity-50 uppercase tracking-wider mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                                <p className="text-[13px] font-semibold  " style={{ color: 'var(--text-main)' }}>{item.label}</p>
+                                                <p className="text-[10px] font-medium opacity-50     mt-0.5" style={{ color: 'var(--text-muted)' }}>
                                                     {item.type === 'book' ? 'Vault Protocol' : 'System Command'}
                                                 </p>
                                             </div>
@@ -193,7 +193,7 @@ export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUse
                                     <div className="p-4 rounded-full bg-black/5 text-gray-300">
                                         <Zap size={32} />
                                     </div>
-                                    <p className="text-[11px] font-bold uppercase tracking-widest opacity-30" style={{ color: 'var(--text-main)' }}>
+                                    <p className="text-[11px] font-bold     opacity-30" style={{ color: 'var(--text-main)' }}>
                                         {t('no_match_found') || "No Protocols Found"}
                                     </p>
                                 </div>
@@ -202,10 +202,10 @@ export const CommandHub = ({ isOpen: externalOpen, onClose, onAction, currentUse
 
                         {/* Footer Hints */}
                         <div className="px-6 py-3 border-t flex items-center gap-6" style={{ backgroundColor: 'rgba(0,0,0,0.02)', borderColor: 'var(--border-soft)' }}>
-                            <div className="flex items-center gap-1.5 text-[9px] font-bold opacity-40 uppercase tracking-tighter" style={{ color: 'var(--text-main)' }}>
+                            <div className="flex items-center gap-1.5 text-[9px] font-bold opacity-40" style={{ color: 'var(--text-main)' }}>
                                 <span className="px-1 py-0.5 rounded border bg-white" style={{ borderColor: 'var(--border-soft)' }}>↑↓</span> Navigate
                             </div>
-                            <div className="flex items-center gap-1.5 text-[9px] font-bold opacity-40 uppercase tracking-tighter" style={{ color: 'var(--text-main)' }}>
+                            <div className="flex items-center gap-1.5 text-[9px] font-bold opacity-40" style={{ color: 'var(--text-main)' }}>
                                 <span className="px-1 py-0.5 rounded border bg-white" style={{ borderColor: 'var(--border-soft)' }}>ENTER</span> Execute
                             </div>
                         </div>

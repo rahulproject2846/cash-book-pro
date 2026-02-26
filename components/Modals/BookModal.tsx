@@ -96,7 +96,6 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
         return () => {
             if (localPreview) {
                 URL.revokeObjectURL(localPreview);
-                console.log(`🧹 [BOOK MODAL] Cleaned up local preview: ${localPreview}`);
             }
         };
     }, [localPreview]);
@@ -162,12 +161,12 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
                 {/* হেডার */}
                 <div className="px-8 pt-6 pb-2 flex justify-between items-center shrink-0">
                     <div>
-                        <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                        <h2 className="text-[12px] font-black text-[var(--text-main)]        leading-none">
                             {initialData ? t('title_vault_upgrade') : t('title_initialize_vault')}
                         </h2>
                         <div className="flex items-center gap-1.5 mt-1 opacity-70">
                             <ShieldCheck size={10} className="text-orange-500" />
-                            <span className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px]">{t('sync_ready')}</span>
+                            <span className="text-[8px] font-bold text-orange-500     ">{t('sync_ready')}</span>
                         </div>
                     </div>
                     <Tooltip text={t('close_modal')}>
@@ -214,7 +213,7 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
                                     }
                                 }
                             }} />
-                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[4px] mt-4 opacity-50">{t('label_visual_id')}</p>
+                            <p className="text-[8px] font-black text-[var(--text-muted)]      mt-4 opacity-50">{t('label_visual_id')}</p>
                         </div>
 
                         {/* টাইপ সিলেক্টর */}
@@ -236,7 +235,7 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
                                         )}
                                     >
                                         <type.icon size={14} strokeWidth={2.5} />
-                                        <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">{type.label}</span>
+                                        <span className="text-[9px] font-black     hidden sm:inline">{type.label}</span>
                                     </button>
                                 </Tooltip>
                             ))}
@@ -251,7 +250,7 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
                                 <input 
                                     ref={nameInputRef} // 🔥 অটো-ফোকাস রেফারেন্স
                                     placeholder={form.type === 'general' ? t('placeholder_ledger_name') : t('placeholder_identity_name')} 
-                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] apple-card text-[13px] font-bold uppercase outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-inner" 
+                                    className="w-full h-16 pl-14 bg-[var(--bg-input)] border border-[var(--border)] apple-card text-[13px] font-bold   outline-none focus:border-orange-500/50 transition-all text-[var(--text-main)] shadow-inner" 
                                     value={form.name} 
                                     onChange={e => setForm({...form, name: e.target.value})} 
                                     onKeyDown={handleKeyDown} // 🔥 এন্টার বাটন হ্যান্ডলার
@@ -291,7 +290,7 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
                                 <button 
                                     disabled={isLoading || !form.name} 
                                     className={cn(
-                                        "w-full h-16 apple-card font-black text-[11px] uppercase tracking-tight shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 mt-4",
+                                        "w-full h-16 apple-card font-black text-[11px]     shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 mt-4",
                                         form.name ? "bg-orange-500 text-white shadow-orange-500/30 hover:bg-orange-600" : "bg-zinc-800 text-zinc-500 opacity-50"
                                     )}
                                 >

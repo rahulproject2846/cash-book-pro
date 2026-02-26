@@ -44,11 +44,11 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                 <div className="bg-black/80 border border-white/10 p-4 rounded-[20px] shadow-2xl backdrop-blur-2xl">
                     <div className="flex items-center gap-2 mb-2">
                         <GitCommit size={12} className="text-orange-500" />
-                        <p className="text-[8px] font-black uppercase tracking-[3px] text-white/40">{payload[0].payload.name}</p>
+                        <p className="text-[8px] font-black    text-white/40">{payload[0].payload.name}</p>
                     </div>
                     <div className="flex items-center gap-3">
                         <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.8)]" />
-                        <p className="text-[14px] font-mono-finance font-black text-white tracking-tighter">
+                        <p className="text-[14px] font-mono-finance font-black text-white">
                             {symbol}{toBn(payload[0].value.toLocaleString(), language)}
                         </p>
                     </div>
@@ -72,15 +72,15 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                 </div>
                             </Tooltip>
                             <div>
-                                <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                                <h4 className="text-base font-black text-[var(--text-main)]    leading-none">
                                     {t('flow_velocity') || "FLOW VELOCITY TREND"}
                                 </h4>
-                                <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-50">Sequential Intelligence Engine</p>
+                                <p className="text-[8px] font-bold text-[var(--text-muted)]    mt-2 opacity-50">Sequential Intelligence Engine</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-xl">
                             <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-[8px] font-black uppercase text-green-500 tracking-widest">LIVE FEED</span>
+                            <span className="text-[8px] font-black text-green-500  ">LIVE FEED</span>
                         </div>
                     </div>
                     
@@ -109,10 +109,10 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                             <PieIcon size={24} strokeWidth={2.5} />
                         </div>
                         <div className="min-w-0">
-                            <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none truncate">
+                            <h4 className="text-base font-black text-[var(--text-main)]    leading-none truncate">
                                 {t('capital_split') || "CAPITAL SPLIT"}
                             </h4>
-                            <p className="text-[8px] font-bold text-blue-500 uppercase tracking-[2px] mt-2 opacity-50">Categorical Nodes</p>
+                            <p className="text-[8px] font-bold text-blue-500    mt-2 opacity-50">Categorical Nodes</p>
                         </div>
                     </div>
                     
@@ -128,8 +128,8 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                     </PieChart>
                                 </ResponsiveContainer>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                    <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[3px] opacity-40">{t('total_expense')}</p>
-                                    <h5 className="text-[20px] font-mono-finance font-black text-[var(--text-main)] mt-1 tracking-tighter">
+                                    <p className="text-[8px] font-black text-[var(--text-muted)]    opacity-40">{t('total_expense')}</p>
+                                    <h5 className="text-[20px] font-mono-finance font-black text-[var(--text-main)] mt-1">
                                         {symbol}{toBn(totalExpense.toLocaleString(), language)}
                                     </h5>
                                 </div>
@@ -137,7 +137,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                         ) : (
                             <div className="text-center flex flex-col items-center gap-4 opacity-10">
                                 <Zap size={48} className="text-orange-500" />
-                                <p className="text-[10px] font-black uppercase tracking-[5px]">{t('awaiting_intel')}</p>
+                                <p className="text-[10px] font-black   ">{t('awaiting_intel')}</p>
                             </div>
                         )}
                     </div>
@@ -147,7 +147,7 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                             <div key={i} className="flex justify-between items-center p-4 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] group/item hover:border-orange-500/30 transition-all">
                                 <div className="flex items-center gap-3 max-w-[70%]">
                                     <div className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor: PIE_COLORS[i % PIE_COLORS.length]}} />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] truncate">{item.name}</span>
+                                    <span className="text-[10px] font-black   text-[var(--text-main)] truncate">{item.name}</span>
                                 </div>
                                 <div className="flex items-baseline gap-1">
                                     <span className="text-[12px] font-black text-[var(--text-main)] group-hover/item:text-orange-500">
@@ -168,10 +168,10 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                         <CreditCard size={22} strokeWidth={2.5} />
                     </div>
                     <div>
-                        <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[4px] italic leading-none">
+                        <h4 className="text-base font-black text-[var(--text-main)]    leading-none">
                             {t('liquidity_protocol') || "LIQUIDITY ANALYSIS"}
                         </h4>
-                        <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-50">Physical Asset Verification</p>
+                        <p className="text-[8px] font-bold text-[var(--text-muted)]    mt-2 opacity-50">Physical Asset Verification</p>
                     </div>
                 </div>
 
@@ -201,23 +201,23 @@ export const AnalyticsVisuals = ({ areaData, pieData, viaData, totalExpense, sym
                                             {isCash ? <Wallet size={26} strokeWidth={2.5} /> : <CreditCard size={26} strokeWidth={2.5} />}
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-[12px] font-black uppercase tracking-[3px] text-[var(--text-main)]">
+                                            <p className="text-[12px] font-black    text-[var(--text-main)]">
                                                 {t(isCash ? 'cash_archive' : 'bank_archive') || method}
                                             </p>
                                             <div className="flex items-center gap-2">
                                                 <BadgeCheck size={10} className="text-orange-500 opacity-60" />
-                                                <p className="text-[8px] font-bold text-orange-500 uppercase tracking-widest opacity-60">Verified Node</p>
+                                                <p className="text-[8px] font-bold text-orange-500   opacity-60">Verified Node</p>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="text-right">
                                         <h4 className={cn(
-                                            "text-2xl font-mono-finance font-black tracking-tighter leading-none mb-2",
+                                            "text-2xl font-mono-finance font-black leading-none mb-2",
                                             isCash ? "text-green-500" : "text-blue-500"
                                         )}>
                                             {symbol}{toBn(amount.toLocaleString(), language)}
                                         </h4>
-                                        <span className="text-[9px] font-black uppercase text-[var(--text-muted)] opacity-30 tracking-widest">{toBn(Math.round(percentage), language)}% UNIT WEIGHT</span>
+                                        <span className="text-[9px] font-black text-[var(--text-muted)] opacity-30  ">{toBn(Math.round(percentage), language)}% UNIT WEIGHT</span>
                                     </div>
                                 </div>
 

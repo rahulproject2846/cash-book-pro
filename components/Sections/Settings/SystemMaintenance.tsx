@@ -34,10 +34,10 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         </div>
                     </Tooltip>
                     <div>
-                        <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                        <h4 className="text-base font-black text-[var(--text-main)]      leading-none">
                             {t('hardware_health') || "HARDWARE HEALTH"}
                         </h4>
-                        <p className="text-[8px] font-bold text-green-500 uppercase tracking-[2px] mt-2 opacity-60">Storage Registry Safe</p>
+                        <p className="text-[8px] font-bold text-green-500    mt-2 opacity-60">Storage Registry Safe</p>
                     </div>
                 </div>
                 
@@ -47,9 +47,9 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         <div className="p-4 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] flex justify-between items-center group/item hover:border-orange-500/30 transition-all cursor-help">
                             <div className="flex items-center gap-3">
                                 <HardDrive size={16} className="text-[var(--text-muted)] group-hover/item:text-orange-500 transition-colors" />
-                                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{t('data_weight') || "DATA WEIGHT"}</span>
+                                <span className="text-[9px] font-black   text-[var(--text-muted)]">{t('data_weight') || "DATA WEIGHT"}</span>
                             </div>
-                            <span className="text-xs font-black text-[var(--text-main)] font-mono tracking-tighter">
+                            <span className="text-xs font-black text-[var(--text-main)] font-mono">
                                 {toBn(dbStats.storageUsed, language)}
                             </span>
                         </div>
@@ -60,13 +60,13 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         <div className="p-4 bg-[var(--bg-app)] rounded-2xl border border-[var(--border)] flex justify-between items-center group/item hover:border-orange-500/30 transition-all cursor-help">
                             <div className="flex items-center gap-3">
                                 <Database size={16} className="text-[var(--text-muted)] group-hover/item:text-orange-500 transition-colors" />
-                                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{t('local_registry') || "LOCAL REGISTRY"}</span>
+                                <span className="text-[9px] font-black   text-[var(--text-muted)]">{t('local_registry') || "LOCAL REGISTRY"}</span>
                             </div>
                             <div className="flex items-baseline gap-1">
-                                <span className="text-xs font-black text-[var(--text-main)] font-mono tracking-tighter">
+                                <span className="text-xs font-black text-[var(--text-main)] font-mono">
                                     {toBn(dbStats.totalEntries, language)}
                                 </span>
-                                <span className="text-[7px] font-black text-[var(--text-muted)] uppercase tracking-tighter opacity-40">UNITs</span>
+                                <span className="text-[7px] font-black text-[var(--text-muted)] opacity-40">UNITs</span>
                             </div>
                         </div>
                     </Tooltip>
@@ -88,19 +88,19 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         </div>
                     </Tooltip>
                     <div>
-                        <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                        <h4 className="text-base font-black text-[var(--text-main)]      leading-none">
                             {t('recovery_protocol') || "RECOVERY PROTOCOL"}
                         </h4>
-                        <p className="text-[8px] font-bold text-blue-500 uppercase tracking-[2px] mt-2 opacity-60">Identity Restoration</p>
+                        <p className="text-[8px] font-bold text-blue-500    mt-2 opacity-60">Identity Restoration</p>
                     </div>
                 </div>
                 
-                <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase leading-relaxed mb-10 opacity-40 tracking-wider">
+                <p className="text-[10px] font-bold text-[var(--text-muted)] leading-relaxed mb-10 opacity-40  ">
                     {t('recovery_desc') || "Generate an encrypted hash key to restore your vault across decentralized nodes."}
                 </p>
 
                 <Tooltip text={t('tt_generate_hash') || "Create Secure Migration Key"}>
-                    <button className="w-full h-14 rounded-[22px] border-2 border-dashed border-blue-500/30 text-blue-500 text-[10px] font-black uppercase tracking-[3px] hover:bg-blue-500/5 hover:border-blue-500 transition-all active:scale-95 flex items-center justify-center gap-3 group/btn">
+                    <button className="w-full h-14 rounded-[22px] border-2 border-dashed border-blue-500/30 text-blue-500 text-[10px] font-black    hover:bg-blue-500/5 hover:border-blue-500 transition-all active:scale-95 flex items-center justify-center gap-3 group/btn">
                         <RefreshCw size={16} className="group-hover/btn:rotate-180 transition-transform duration-700" />
                         {t('generate_key') || "GENERATE HASH KEY"}
                     </button>
@@ -122,14 +122,14 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         </div>
                     </Tooltip>
                     <div>
-                        <h4 className="text-base font-black text-red-500 uppercase tracking-[3px] italic leading-none">
+                        <h4 className="text-base font-black text-red-500      leading-none">
                             {t('hard_reset') || "DANGER ZONE"}
                         </h4>
-                        <p className="text-[8px] font-bold text-red-500/60 uppercase tracking-[2px] mt-2">Irreversible Operations</p>
+                        <p className="text-[8px] font-bold text-red-500/60    mt-2">Irreversible Operations</p>
                     </div>
                 </div>
 
-                <p className="text-[10px] font-bold text-red-500/40 uppercase leading-relaxed mb-10 tracking-wider">
+                <p className="text-[10px] font-bold text-red-500/40 leading-relaxed mb-10  ">
                     {t('purge_desc') || "Permanently wipe local disk cache. This action is irreversible within the current session."}
                 </p>
 
@@ -138,7 +138,7 @@ export const SystemMaintenance = ({ dbStats, clearLocalCache, isCleaning }: any)
                         onClick={clearLocalCache}
                         disabled={isCleaning}
                         className={cn(
-                            "w-full h-16 text-white rounded-[25px] text-[11px] font-black uppercase tracking-[4px] shadow-xl",
+                            "w-full h-16 text-white rounded-[25px] text-[11px] font-black    shadow-xl",
                             "active:scale-95 transition-all flex items-center justify-center gap-3",
                             isCleaning ? "bg-zinc-800" : "bg-red-500 hover:bg-red-600 shadow-red-500/20"
                         )}

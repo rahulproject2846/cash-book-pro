@@ -194,7 +194,7 @@ export const EntryCard = React.memo(({ entry, onEdit, onDelete, onStatusToggle, 
             'INVESTMENT': 'text-teal-600'
         };
         return (
-            <span className={cn('text-xs font-bold uppercase', categoryColors[category] || 'text-gray-500')}>
+            <span className={cn('text-xs font-bold  ', categoryColors[category] || 'text-gray-500')}>
                 {category}
             </span>
         );

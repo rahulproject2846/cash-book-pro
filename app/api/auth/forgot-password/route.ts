@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       html: `
         <div style="background:#0F0F0F; color:#FFF; padding:40px; font-family:sans-serif; text-align:center; border-radius:20px;">
           <h1 style="color:#F97316; letter-spacing:5px;">VAULT PRO</h1>
-          <p style="text-transform:uppercase; font-size:10px; letter-spacing:2px; opacity:0.6;">Security Recovery Protocol Issued</p>
+          <p style="font-size:10px; letter-spacing:2px; opacity:0.6;">Security Recovery Protocol Issued</p>
           <div style="background:#1A1A1B; padding:20px; border:1px solid #2D2D2D; border-radius:15px; margin:30px 0;">
             <span style="font-size:32px; font-weight:900; letter-spacing:10px; color:#F97316;">${otp}</span>
           </div>

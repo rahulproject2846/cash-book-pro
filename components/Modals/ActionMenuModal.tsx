@@ -76,7 +76,7 @@ export const ActionMenuModal = ({ isOpen, onClose }: { isOpen: boolean; onClose:
             <Book size={28} strokeWidth={2.5} />
           </div>
           <div className="flex-1 text-left">
-            <h3 className="font-black text-lg tracking-wide">
+            <h3 className="font-black text-lg  ">
               {t('create_new_book') || 'Create New Book'}
             </h3>
             <p className="text-sm opacity-90 font-medium mt-1">
@@ -101,7 +101,7 @@ export const ActionMenuModal = ({ isOpen, onClose }: { isOpen: boolean; onClose:
             <Zap size={28} strokeWidth={2.5} />
           </div>
           <div className="flex-1 text-left">
-            <h3 className="font-black text-lg tracking-wide">
+            <h3 className="font-black text-lg  ">
               {t('quick_entry') || 'Quick Entry'}
             </h3>
             <p className="text-sm opacity-90 font-medium mt-1">

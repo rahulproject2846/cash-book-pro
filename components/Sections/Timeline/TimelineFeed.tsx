@@ -15,7 +15,7 @@ import { cn, toBn } from '@/lib/utils/helpers'; // তোর নতুন helper
 // তারিখকে সম্পূর্ণ বাংলায় রূপান্তর করার এলিট হেল্পার
 const formatDateBn = (dateStr: string, lang: string) => {
     const date = new Date(dateStr);
-    if (lang !== 'bn') return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+    if (lang !== 'bn') return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     
     const day = toBn(date.getDate().toString().padStart(2, '0'), 'bn');
     const year = toBn(date.getFullYear().toString(), 'bn');
@@ -32,7 +32,7 @@ export const TimelineFeed = ({
     if (isEmpty) return (
         <div className="py-40 flex flex-col items-center justify-center text-[var(--text-muted)] gap-6 opacity-20">
             <Inbox size={60} strokeWidth={1} />
-            <p className="font-black uppercase text-[11px] tracking-[5px]">{t('no_timeline_records')}</p>
+            <p className="font-black   text-[11px]   ">{t('no_timeline_records')}</p>
         </div>
     );
 
@@ -61,7 +61,7 @@ export const TimelineFeed = ({
                         )}>
                             <table className="w-full border-collapse">
                                 <thead className="border-b border-[var(--border)] bg-[var(--bg-app)]/30">
-                                    <tr className="text-[9px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-50">
+                                    <tr className="text-[9px] font-black      text-[var(--text-muted)] opacity-50">
                                         <th className="py-6 px-6 text-left w-14">#</th>
                                         <th className="py-6 px-4 text-left w-36">{t('label_date')}</th>
                                         <th className="py-6 px-4 text-left w-24">{t('label_time')}</th>
@@ -96,14 +96,14 @@ export const TimelineFeed = ({
 
                                                 {/* 2. DATE */}
                                                 <td className="py-6 px-4">
-                                                    <span className="text-[12px] font-black uppercase text-[var(--text-main)] whitespace-nowrap">
+                                                    <span className="text-[12px] font-black   text-[var(--text-main)] whitespace-nowrap">
                                                         {formatDateBn(e.date, language)}
                                                     </span>
                                                 </td>
 
                                                 {/* 3. TIME */}
                                                 <td className="py-6 px-4">
-                                                    <span className="text-[11px] font-bold text-[var(--text-muted)] tracking-widest">
+                                                    <span className="text-[11px] font-bold text-[var(--text-muted)]  ">
                                                         {toBn(e.time || '00:00', language)}
                                                     </span>
                                                 </td>
@@ -111,23 +111,23 @@ export const TimelineFeed = ({
                                                 {/* 4. REF ID (With Shield) */}
                                                 <td className="py-6 px-4">
                                                     <Tooltip text={t('tt_verified_node') || "Registry Unit Verified"}>
-                                                        <div className="flex items-center gap-1.5 text-[9px] font-black text-orange-500/40 uppercase tracking-[2px] cursor-help">
+                                                        <div className="flex items-center gap-1.5 text-[9px] font-black text-orange-500/40      cursor-help">
                                                             <ShieldCheck size={11} strokeWidth={3} />
-                                                            {toBn(String(e.localId || e._id).slice(-6).toUpperCase(), language)}
+                                                            {toBn(String(e.localId || e._id).slice(-6), language)}
                                                         </div>
                                                     </Tooltip>
                                                 </td>
 
                                                 {/* 5. PROTOCOL (Title) */}
                                                 <td className="py-6 px-4">
-                                                    <h4 className="text-[13px] font-black uppercase italic tracking-tighter text-[var(--text-main)] group-hover:text-orange-500 transition-colors truncate max-w-[180px]">
+                                                    <h4 className="text-[13px] font-black   text-[var(--text-main)] group-hover:text-orange-500 transition-colors truncate max-w-[180px]">
                                                         {e.title}
                                                     </h4>
                                                 </td>
 
                                                 {/* 6. MEMO */}
                                                 <td className="py-6 px-4">
-                                                    <span className="text-[10px] font-bold italic text-[var(--text-muted)] opacity-30 truncate max-w-[150px] block">
+                                                    <span className="text-[10px] font-bold text-[var(--text-muted)] opacity-30 truncate max-w-[150px] block">
                                                         {e.note ? `"${e.note}"` : "—"}
                                                     </span>
                                                 </td>
@@ -135,15 +135,15 @@ export const TimelineFeed = ({
                                                 {/* 7. TAG (Category) */}
                                                 <td className="py-6 px-4">
                                                     <Tooltip text={`${t('tt_classification')}: ${e.category}`}>
-                                                        <span className="px-3 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-black uppercase tracking-[2px] cursor-default">
-                                                            {e.category?.toUpperCase() || 'GENERAL'}
+                                                        <span className="px-3 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-black    cursor-default">
+                                                            {e.category?.to () || 'GENERAL'}
                                                         </span>
                                                     </Tooltip>
                                                 </td>
 
                                                 {/* 8. VIA */}
                                                 <td className="py-6 px-4">
-                                                    <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[2px] bg-[var(--bg-app)] px-3 py-1.5 rounded-xl border border-[var(--border)]">
+                                                    <span className="text-[9px] font-black text-[var(--text-muted)]    bg-[var(--bg-app)] px-3 py-1.5 rounded-xl border border-[var(--border)]">
                                                         {t(e.paymentMethod || 'cash')}
                                                     </span>
                                                 </td>
@@ -151,7 +151,7 @@ export const TimelineFeed = ({
                                                 {/* 9. AMOUNT */}
                                                 <td className="py-6 px-4 text-right">
                                                     <div className={cn(
-                                                        "text-[20px] font-mono-finance font-black tracking-tighter",
+                                                        "text-[20px] font-mono-finance font-black",
                                                         isIncome ? "text-green-500" : "text-red-500"
                                                     )}>
                                                         {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), language)}
@@ -164,7 +164,7 @@ export const TimelineFeed = ({
                                                         <button 
                                                             onClick={() => onToggleStatus(e)}
                                                             className={cn(
-                                                                "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-[2px] transition-all active:scale-95",
+                                                                "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[8px] font-black    transition-all active:scale-95",
                                                                 isCompleted 
                                                                     ? "bg-green-500/5 text-green-500 border-green-500/20 shadow-lg shadow-green-500/5" 
                                                                     : "bg-yellow-500/5 text-yellow-500 border-yellow-500/20 shadow-lg shadow-yellow-500/5"
@@ -214,8 +214,8 @@ export const TimelineFeed = ({
                         <Database size={24} />
                     </div>
                     <div className="text-left">
-                        <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[4px] leading-none">{t('protocol_index')}</p>
-                        <p className="text-[13px] font-black text-[var(--text-main)] uppercase tracking-[2px] mt-2">
+                        <p className="text-[10px] font-black text-[var(--text-muted)]      leading-none">{t('protocol_index')}</p>
+                        <p className="text-[13px] font-black text-[var(--text-main)]      mt-2">
                             {toBn(pagination.currentPage, language)} <span className="opacity-20 mx-2">/</span> {toBn(pagination.totalPages, language)}
                         </p>
                     </div>
@@ -232,7 +232,7 @@ export const TimelineFeed = ({
                         </button>
                     </Tooltip>
 
-                    <div className="px-10 h-16 flex items-center justify-center bg-orange-500 text-white rounded-[28px] text-[14px] font-black uppercase tracking-[5px] shadow-2xl shadow-orange-500/40">
+                    <div className="px-10 h-16 flex items-center justify-center bg-orange-500 text-white rounded-[28px] text-[14px] font-black      shadow-2xl shadow-orange-500/40">
                         {toBn(pagination.currentPage, language)}
                     </div>
 

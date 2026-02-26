@@ -1,73 +1,52 @@
 "use client";
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, Plus, Sun, Moon, MoreVertical, 
-    Share2, Download, Edit2, Trash2, UserCog, 
-    LogOut, ShieldCheck, BarChart3, User, Zap
+    Share2, Download, Edit2, Trash2, User, Zap, ShieldCheck, BarChart3
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
-import { cn } from '@/lib/utils/helpers'; // তোর নতুন helpers
+import { cn } from '@/lib/utils/helpers';
 import { useLocalPreview } from '@/hooks/useLocalPreview';
-import { useVaultState } from '@/lib/vault/store/storeHelper';
+import { useVaultState, getVaultStore } from '@/lib/vault/store/storeHelper';
 import { useVaultStore } from '@/lib/vault/store/index';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { SafeButton } from '@/components/UI/SafeButton';
 import { useModal } from '@/context/ModalContext';
 
+/**
+ * 🏆 DYNAMIC HEADER V16.0 (PRODUCTION READY)
+ * ----------------------------------------------------
+ * Fix: Absolute Fixed Height to prevent layout jumps.
+ * Identity: Reactive Store-driven Profile.
+ * Polish: Premium Apple-style button spacing.
+ */
 export const DynamicHeader = () => {
     const { t } = useTranslation();
-
     const router = useRouter();
     const searchParams = useSearchParams();
-    const bookIdFromUrl = searchParams.get('id');
-
     const headerRef = useRef<HTMLElement | null>(null);
+    const { theme, setTheme } = useTheme();
+    const { openModal } = useModal();
 
+    // 🚀 STABLE STORE ACCESS
     const {
-        activeSection,
-        activeBook,
-        setActiveBook,
-        setActiveSection,
-        registerOverlay,
-        unregisterOverlay,
-        setDynamicHeaderHeight,
-        activeOverlays,
+        activeSection, activeBook, setActiveBook, setActiveSection,
+        registerOverlay, unregisterOverlay, setDynamicHeaderHeight,
+        activeOverlays, currentUser, logout // 🛡️ Directly from store
     } = useVaultState();
 
     const { deleteBook } = useVaultStore();
-
     const currentSection = activeSection || 'books';
 
-    const safeT = (key: string, fallbackKey: string) => {
-        const value = t(key);
-        if (value === key) return t(fallbackKey);
-        return value;
-    };
-
-    // 🎯 AUTONOMOUS MODAL ACCESS - NO MORE DEAD PROPS
-    const { openModal } = useModal();
-
-    const { theme, setTheme } = useTheme();
-
-    const [currentUser, setCurrentUser] = useState<any>(null);
-    useEffect(() => {
-        try {
-            const savedUser = localStorage.getItem('cashbookUser');
-            if (savedUser) setCurrentUser(JSON.parse(savedUser));
-        } catch {
-            setCurrentUser(null);
-        }
-    }, []);
-
-    // 🖼️ PROFILE IMAGE PREVIEW - HOISTED TO TOP
+    // 🖼️ PROFILE IMAGE PREVIEW - Reactive to Store
     const userProfilePreview = useLocalPreview(currentUser?.image);
 
-    // 📱 DETECT MOBILE
+    // 📱 MOBILE DETECTION
     const [isMobile, setIsMobile] = useState(false);
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -76,264 +55,186 @@ export const DynamicHeader = () => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    // 🎯 AUTONOMOUS ACTION HANDLERS
-    const handleFabClick = () => {
+    // 📏 FIXED HEIGHT SYNC: ResizeObserver for child layout calculation
+    useEffect(() => {
+        if (!headerRef.current) return;
+        const observer = new ResizeObserver(() => {
+            const height = headerRef.current?.getBoundingClientRect().height || 0;
+            if (height > 0) setDynamicHeaderHeight(height);
+        });
+        observer.observe(headerRef.current);
+        return () => observer.disconnect();
+    }, [setDynamicHeaderHeight]);
+
+    // 🎯 ACTION HANDLERS
+    const handleFabClick = useCallback(() => {
         if (activeBook) {
             openModal('addEntry', { currentBook: activeBook });
         } else {
             openModal('addBook');
         }
-    };
+    }, [activeBook, openModal]);
 
-    const handleLogout = () => {
-        const { orchestrator } = require('@/lib/vault/core/SyncOrchestrator');
-        orchestrator.logout();
-    };
+    const handleLogout = useCallback(() => {
+        logout(); // 🚀 Clean store logout
+    }, [logout]);
 
-    useEffect(() => {
-        if (!headerRef.current) return;
-        if (typeof ResizeObserver === 'undefined') return;
-
-        let lastHeight = -1;
-        const observer = new ResizeObserver(() => {
-            if (!headerRef.current) return;
-            const height = headerRef.current.getBoundingClientRect().height;
-            if (!Number.isFinite(height)) return;
-
-            // Avoid render loops due to sub-pixel jitter
-            const rounded = Math.round(height * 10) / 10;
-            if (Math.abs(rounded - lastHeight) < 0.5) return;
-            lastHeight = rounded;
-            setDynamicHeaderHeight(rounded);
-        });
-
-        observer.observe(headerRef.current);
-        return () => observer.disconnect();
-    }, [setDynamicHeaderHeight, bookIdFromUrl]);
-
-    // 🎯 CENTRALIZED OVERLAY MANAGEMENT
-    const openOverlay = (overlayId: string) => {
-        registerOverlay(overlayId);
-    };
-
-    const closeOverlay = (overlayId: string) => {
-        unregisterOverlay(overlayId);
-    };
-
-    const isOverlayActive = (overlayId: string) => {
-        return activeOverlays.includes(overlayId);
-    };
-
-    // Optimized Menu Handler (Closes menus after action)
-    const handleAction = (action: () => void) => {
-        // Close all overlays first
-        activeOverlays.forEach(overlayId => {
-            unregisterOverlay(overlayId);
-        });
+    const handleAction = useCallback((action: () => void) => {
+        activeOverlays.forEach(id => unregisterOverlay(id));
         if (action) action(); 
-    };
+    }, [activeOverlays, unregisterOverlay]);
 
-    // 🎯 CONDITIONAL RENDERING LOGIC - AFTER ALL HOOKS
+    const isOverlayActive = (id: string) => activeOverlays.includes(id);
+
+    // 🎨 UI CONSTANTS
     const isBookActive = !!activeBook;
-    const isGlobalView = !isBookActive;
+    const royalGlide = { type: "spring", stiffness: 300, damping: 35, mass: 1 };
 
     return (
         <motion.header 
-            ref={headerRef as any}
+            ref={headerRef}
             layout
-            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            transition={royalGlide as any}
             className={cn(
-                "grid-area-header sticky top-0 z-[100] w-full bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-[var(--border)]",
-                "flex justify-between items-center",
-                isBookActive ? "py-3 px-6" : "py-6 px-8"
+                "sticky top-0 z-[500] w-full bg-[var(--bg-app)]/80 backdrop-blur-xl border-b border-[var(--border)]",
+                "flex justify-between items-center transition-all duration-500",
+                // 🔥 FIXED HEIGHT: Always same padding to prevent jumping
+                "h-24 md:h-20 px-6 md:px-10" 
             )}
         >
-            <div className="flex items-center gap-4">
-                {/* --- LEFT SECTION: BRANDING & TITLES --- */}
-                <div className="flex items-center gap-4">
-                    {/* Mobile Brand Logo */}
-                    {isGlobalView && (
-                        <div className="md:hidden flex items-center gap-3">
-                            <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-500/30">V</div>
-                            <h1 className="text-xl font-black uppercase italic text-[var(--text-main)] tracking-tighter leading-none">
-                                {t('vault_pro_split_1')}<span className="text-orange-500">{t('vault_pro_split_2')}</span>
-                            </h1>
-                        </div>
-                    )}
-                </div>
-
-                {/* Contextual Title Logic with Morphic Transitions */}
-                {isBookActive ? (
-                    <motion.div 
-                        layoutId={`book-hero-${activeBook?._id || activeBook?.localId || 'active'}`}
-                        transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
-                        className="flex items-center gap-4 relative z-50 will-change-transform"
-                        style={{ transform: 'translateZ(0)' }}
-                    >
-                        <Tooltip text={t('tt_back_dashboard')}>
-                            <SafeButton
-                                actionId="header-back"
-                                onAction={() => {
-                                    setActiveBook(null);
-                                    router.push('?');
-                                }}
-                                variant="ghost"
-                                size="sm"
-                                className="p-3 bg-[var(--bg-app)] border border-[var(--border)] apple-card text-[var(--text-muted)] hover:text-orange-500 shadow-sm"
-                                shakeOnBlock={false}
-                            >
-                                <ChevronLeft size={20} strokeWidth={3}/>
-                            </SafeButton>
-                        </Tooltip>
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+                <AnimatePresence mode="wait">
+                    {isBookActive ? (
+                        /* --- 📚 BOOK VIEW HEADER --- */
                         <motion.div 
-                            layoutId="book-title-content"
-                            className="min-w-0"
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            key="book-title"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={royalGlide  as any}
+                            className="flex items-center gap-4 relative z-50 w-full"
                         >
-                            <h2 className="text-xl md:text-2xl font-black uppercase tracking-tighter italic leading-none text-[var(--text-main)] truncate max-w-[150px] md:max-w-xs">
-                                {activeBook?.name || t('ledger_hub')}
+                            <Tooltip text={t('tt_back_dashboard')}>
+                                <SafeButton
+                                    actionId="header-back"
+                                    onAction={() => {
+                                        setActiveBook(null);
+                                        router.push('?tab=books');
+                                    }}
+                                    variant="ghost"
+                                    className="p-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all"
+                                >
+                                    <ChevronLeft size={20} strokeWidth={3}/>
+                                </SafeButton>
+                            </Tooltip>
+                            <div className="min-w-0">
+                                <h2 className="text-xl md:text-2xl font-black text-[var(--text-main)] leading-none truncate">
+                                    {activeBook?.name}
+                                </h2>
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <ShieldCheck size={12} className="text-green-500" strokeWidth={3} />
+                                    <p className="text-[9px] font-black text-green-500 opacity-80">
+                                        {t('protocol_active')}
+                                    </p>
+                                </div>
+                            </div>
+                        </motion.div>
+                    ) : (
+                        /* --- 🏠 DASHBOARD VIEW HEADER --- */
+                        <motion.div 
+                            key="global-title"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            transition={royalGlide  as any}
+                            className="flex flex-col text-left"
+                        >
+                            <h2 className="text-2xl font-black text-[var(--text-main)] leading-none">
+                                {currentSection === 'books' ? t('financial_dashboard') : t(`nav_${currentSection}`)}
                             </h2>
-                            <motion.div 
-                                layoutId="book-status"
-                                className="flex items-center gap-2 mt-1"
-                                transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                            >
-                                <ShieldCheck size={12} className="text-green-500" strokeWidth={3} />
-                                <p className="text-[9px] font-black text-green-500 uppercase tracking-[2.5px] opacity-80">
-                                    {t('protocol_active')}
+                            <div className="flex items-center gap-2 mt-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                                <p className="text-[9px] font-bold text-[var(--text-muted)] opacity-60">
+                                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                                 </p>
-                            </motion.div>
+                            </div>
                         </motion.div>
-                    </motion.div>
-                ) : (
-                    // TITLE STATE: Normal title display
-                    <motion.div 
-                        layoutId="header-branding"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        className="text-left hidden md:block"
-                    >
-                        <motion.h2 
-                            layoutId="global-title"
-                            className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[var(--text-main)]"
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        >
-                            {currentSection === 'books'
-                                ? safeT('financial_dashboard', 'nav_dashboard')
-                                : safeT(`nav_${currentSection}`, 'nav_dashboard')}
-                        </motion.h2>
-                        <motion.div 
-                            layoutId="global-status"
-                            className="flex items-center gap-2 mt-2"
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        >
-                             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                             <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[3px] opacity-60">
-                                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                             </p>
-                        </motion.div>
-                    </motion.div>
-                )}
+                    )}
+                </AnimatePresence>
             </div>
             
             {/* --- RIGHT SECTION: OS CONTROLS --- */}
             <div className="flex items-center gap-3 md:gap-4 shrink-0">
                 
-                {/* Primary Action Button (Add Entry/Vault) */}
-                <Tooltip text={activeBook ? t('tt_add_entry') : t('tt_initialize_ledger')} position="bottom">
+                {/* ➕ PRIMARY FAB (Desktop Only) */}
+                <Tooltip text={isBookActive ? t('tt_add_entry') : t('tt_initialize_ledger')} position="bottom">
                     <SafeButton
                         actionId="header-add-entry"
                         onAction={handleFabClick}
                         variant="primary"
-                        size="md"
-                        className="hidden md:flex items-center gap-3 px-6 py-3.5"
-                        loadingText="Adding..."
-                        blockedText="System Busy"
+                        className="hidden md:flex items-center gap-3 px-6 py-4 rounded-2xl shadow-lg shadow-orange-500/20"
                     >
                         <Plus size={18} strokeWidth={3.5} /> 
-                        {activeBook && currentSection === 'books' ? t('btn_new_entry') : t('btn_create_vault')}
+                        <span className="text-[11px] font-black  ">
+                            {isBookActive ? t('btn_new_entry') : t('btn_create_vault')}
+                        </span>
                     </SafeButton>
                 </Tooltip>
 
-                {/* Theme Toggle */}
+                {/* 🌓 THEME TOGGLE */}
                 <Tooltip text={t('tt_toggle_theme')} position="bottom">
-                    <SafeButton
-                        actionId="header-theme-toggle"
-                        onAction={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        variant="ghost"
-                        size="sm"
-                        className="p-3.5 rounded-2xl border border-[var(--bg-app)] bg-[var(--bg-app)] text-[var(--text-muted)] hover:text-orange-500 shadow-sm"
-                        shakeOnBlock={false}
+                    <button
+                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                        className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all active:scale-90"
                     >
                         {theme === 'dark' ? <Sun size={20} strokeWidth={2.5} /> : <Moon size={20} strokeWidth={2.5} />}
-                    </SafeButton>
+                    </button>
                 </Tooltip>
 
-                {/* Contextual Menus */}
+                {/* 🍔 CONTEXTUAL MENUS */}
                 {isBookActive ? (
-                    // Book Context Menu
-                    <div className="relative inline-flex items-center justify-center">
-                        <Tooltip text={t('tt_more_options')} position="bottom">
-                            <SafeButton
-                                actionId="header-menu"
-                                onAction={() => isOverlayActive('SuperMenu') ? closeOverlay('SuperMenu') : openOverlay('SuperMenu')}
-                                variant="ghost"
-                                size="sm"
-                                className={cn(
-                                    "p-3.5 rounded-2xl border transition-all shadow-sm",
-                                    isOverlayActive('SuperMenu')
-                                        ? "bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20" 
-                                        : "bg-[var(--bg-app)] border border-[var(--border)] text-[var(--text-muted)] hover:text-orange-500"
-                                )}
-                                shakeOnBlock={false}
-                            >
-                                <MoreVertical size={20} strokeWidth={2.5} />
-                            </SafeButton>
-                        </Tooltip>
+                    <div className="relative">
+                        <button 
+                            onClick={() => isOverlayActive('SuperMenu') ? unregisterOverlay('SuperMenu') : registerOverlay('SuperMenu')}
+                            className={cn(
+                                "p-4 rounded-2xl border transition-all shadow-sm",
+                                isOverlayActive('SuperMenu')
+                                    ? "bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20" 
+                                    : "bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-muted)] hover:text-orange-500"
+                            )}
+                        >
+                            <MoreVertical size={20} strokeWidth={2.5} />
+                        </button>
                         
-                        <AnimatePresence mode="wait">
+                        <AnimatePresence>
                             {isOverlayActive('SuperMenu') && (
                                 <>
-                                    <div className="fixed inset-0 z-[499] pointer-events-none" onClick={() => closeOverlay('SuperMenu')} />
+                                    <div className="fixed inset-0 z-[499]" onClick={() => unregisterOverlay('SuperMenu')} />
                                     <motion.div 
                                         initial={{ opacity: 0, scale: 0.9, y: 15 }} 
                                         animate={{ opacity: 1, scale: 1, y: 0 }} 
                                         exit={{ opacity: 0, scale: 0.9, y: 15 }} 
                                         className="absolute right-0 top-16 w-72 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden"
                                     >
-                                        <div className="px-5 py-3 border-b border-[var(--border)] mb-1 flex items-center justify-between opacity-60">
-                                            <span className="text-[8px] font-black uppercase tracking-[3px]">{t('action_quick_protocol')}</span>
-                                            <Zap size={10} fill="currentColor" />
-                                        </div>
-                                        
                                         {[
                                             { label: 'nav_analytics', icon: BarChart3, color: 'text-blue-500', bg: 'hover:bg-blue-500/10', action: () => openModal('analytics', { currentBook: activeBook }) },
                                             { label: 'action_share_access', icon: Share2, color: 'text-purple-500', bg: 'hover:bg-purple-500/10', action: () => openModal('share', { currentBook: activeBook }) },
                                             { label: 'action_export_report', icon: Download, color: 'text-green-500', bg: 'hover:bg-green-500/10', action: () => openModal('export', { currentBook: activeBook }) },
                                             { label: 'action_edit_ledger', icon: Edit2, color: 'text-yellow-500', bg: 'hover:bg-yellow-500/10', action: () => openModal('editBook', { currentBook: activeBook }) },
                                         ].map((item) => (
-                                            <button key={item.label} onClick={() => handleAction(item.action)} className={cn("w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] group", item.bg)}>
+                                            <button key={item.label} onClick={() => handleAction(item.action)} className={cn("w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black   rounded-2xl transition-all text-left text-[var(--text-muted)] group", item.bg)}>
                                                 <item.icon size={18} className={`${item.color} group-hover:scale-110 transition-transform`} strokeWidth={2.5} /> 
                                                 <span className="group-hover:text-[var(--text-main)]">{t(item.label)}</span>
                                             </button>
                                         ))}
-                                        
-                                        <div className="h-px bg-[var(--border)] mx-4 my-2 opacity-50" />
-                                        
+                                        <div className="h-px bg-[var(--border)] mx-4 my-2 opacity-30" />
                                         <button onClick={() => handleAction(() => {
-                                            if (!activeBook) return;
                                             openModal('deleteConfirm', { 
                                               targetName: activeBook.name, 
                                               title: "modal_terminate_book_title",
-                                              desc: "modal_terminate_book_desc",
-                                              onConfirm: async () => {
-                                                const result = await deleteBook(activeBook, router);
-                                                // 🚫 NO IMMEDIATE REDIRECT: Let 9s timer handle navigation
-                                              }
+                                              onConfirm: () => deleteBook(activeBook, router)
                                             });
-                                        })} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-[22px] transition-all text-left text-red-500 hover:bg-red-500/10 hover:text-red-600">
+                                        })} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black   rounded-2xl transition-all text-left text-red-500 hover:bg-red-500/10">
                                             <Trash2 size={18} strokeWidth={2.5} /> <span>{t('action_terminate_vault')}</span>
                                         </button>
                                     </motion.div>
@@ -342,42 +243,38 @@ export const DynamicHeader = () => {
                         </AnimatePresence>
                     </div>
                 ) : (
-                    // User Profile Menu
+                    /* 👤 USER PROFILE MENU */
                     <div className="relative">
-                        <Tooltip text={t('tt_account_settings')} position="bottom">
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); isOverlayActive('UserMenu') ? closeOverlay('UserMenu') : openOverlay('UserMenu'); }} 
-                                className={cn(
-                                    "w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-black",
-                                    "flex items-center justify-center text-white text-lg font-black",
-                                    "border border-[var(--border)] overflow-hidden transition-all active:scale-90 shadow-lg",
-                                    isOverlayActive('UserMenu') ? "ring-4 ring-orange-500/20 border-orange-500" : ""
-                                )}
-                            >
-                                {userProfilePreview.previewUrl ? (
-                                    <img src={userProfilePreview.previewUrl} alt="U" className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="opacity-80">{(currentUser?.username?.charAt(0) || "U").toUpperCase()}</span>
-                                )}
-                            </button>
-                        </Tooltip>
+                        <button 
+                            onClick={() => isOverlayActive('UserMenu') ? unregisterOverlay('UserMenu') : registerOverlay('UserMenu')} 
+                            className={cn(
+                                "w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-black flex items-center justify-center border transition-all active:scale-90 shadow-lg overflow-hidden",
+                                isOverlayActive('UserMenu') ? "border-orange-500 ring-4 ring-orange-500/10" : "border-[var(--border)]"
+                            )}
+                        >
+                            {userProfilePreview.previewUrl ? (
+                                <img src={userProfilePreview.previewUrl} alt="U" className="w-full h-full object-cover" />
+                            ) : (
+                                <span className="text-white font-black text-lg">{(currentUser?.username?.charAt(0) || "U").toUpperCase ()}</span>
+                            )}
+                        </button>
                         
-                        <AnimatePresence mode="wait">
+                        <AnimatePresence>
                             {isOverlayActive('UserMenu') && (
                                 <>
-                                    <div className="fixed inset-0 z-[499] pointer-events-none" onClick={() => closeOverlay('UserMenu')} />
+                                    <div className="fixed inset-0 z-[499]" onClick={() => unregisterOverlay('UserMenu')} />
                                     <motion.div 
                                         initial={{ opacity: 0, scale: 0.9, y: 15 }} 
                                         animate={{ opacity: 1, scale: 1, y: 0 }} 
                                         exit={{ opacity: 0, scale: 0.9, y: 15 }} 
                                         className="absolute right-0 top-16 w-64 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden"
                                     >
-                                        <button onClick={() => handleAction(() => setActiveSection('profile'))} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-blue-500/10 hover:text-blue-500">
+                                        <button  onClick={() => handleAction(() => {setActiveSection('profile');  router.push('?tab=profile');})} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black   rounded-2xl transition-all text-left text-[var(--text-muted)] hover:bg-orange-500/10 hover:text-orange-500">
                                             <User size={18} strokeWidth={2.5} /> <span>{t('action_account_settings')}</span>
                                         </button>
-                                        <div className="mt-2 pt-2 border-t border-[var(--border)] opacity-30 mx-4" />
-                                        <button onClick={() => handleAction(handleLogout)} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all text-left text-red-500 hover:bg-red-500/10 hover:text-red-600">
-                                            <LogOut size={18} strokeWidth={2.5} /> <span>{t('nav_signout')}</span>
+                                        <div className="h-px bg-[var(--border)] mx-4 my-2 opacity-30" />
+                                        <button onClick={() => handleAction(handleLogout)} className="w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black   rounded-2xl transition-all text-left text-red-500 hover:bg-red-500/10">
+                                            <Zap size={18} strokeWidth={2.5} /> <span>{t('nav_signout')}</span>
                                         </button>
                                     </motion.div>
                                 </>

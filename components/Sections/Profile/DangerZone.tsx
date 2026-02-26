@@ -42,10 +42,10 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                             </div>
                         </Tooltip>
                         <div>
-                            <h4 className="text-base font-black text-red-500 uppercase tracking-[3px] italic leading-none">
+                            <h4 className="text-base font-black text-red-500        leading-none">
                                 {t('danger_zone_title') || "CRITICAL PROTOCOLS"}
                             </h4>
-                            <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] mt-2 opacity-50">
+                            <p className="text-[8px] font-bold text-[var(--text-muted)]      mt-2 opacity-50">
                                 Irreversible System Termination
                             </p>
                         </div>
@@ -63,10 +63,10 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                 <ShieldX size={24} />
                             </div>
                             <div className="text-center md:text-left space-y-1.5">
-                                <p className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[2px]">
+                                <p className="text-[12px] font-black text-[var(--text-main)]     ">
                                     {t('label_termination') || "IDENTITY TERMINATION"}
                                 </p>
-                                <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[1px] opacity-40">
+                                <p className="text-[9px] font-bold text-[var(--text-muted)]      opacity-40">
                                     {t('desc_termination') || "Wipe all ledgers and cloud backup records."}
                                 </p>
                             </div>
@@ -75,7 +75,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                         <Tooltip text={t('tt_termination_warning') || "Initialize deletion sequence"}>
                             <button 
                                 onClick={() => setShowConfirm(true)}
-                                className="w-full md:w-auto px-10 h-14 bg-zinc-800 text-red-500 rounded-[20px] font-black text-[10px] uppercase tracking-[3px] hover:bg-red-600 hover:text-white active:scale-95 transition-all shadow-xl"
+                                className="w-full md:w-auto px-10 h-14 bg-zinc-800 text-red-500 rounded-[20px] font-black text-[10px]      hover:bg-red-600 hover:text-white active:scale-95 transition-all shadow-xl"
                             >
                                 {t('btn_delete_identity') || "DELETE IDENTITY"}
                             </button>
@@ -102,7 +102,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-3">
                                         <BadgeAlert size={16} className="text-red-500 animate-pulse" />
-                                        <h4 className="text-[11px] font-black uppercase tracking-[4px] text-red-500 italic">
+                                        <h4 className="text-[11px] font-black      text-red-500  ">
                                             {t('term_confirm_title') || "TERMINATION PROTOCOL"}
                                         </h4>
                                     </div>
@@ -117,10 +117,10 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                     <div className="w-20 h-20 rounded-[28px] bg-red-500/10 flex items-center justify-center text-red-500 mb-6 shadow-2xl">
                                         <AlertOctagon size={40} className="animate-pulse" />
                                     </div>
-                                    <h4 className="text-sm font-black uppercase tracking-[3px] text-red-500 mb-5">
+                                    <h4 className="text-sm font-black      text-red-500 mb-5">
                                         {t('critical_auth') || "SECURITY AUTHENTICATION"}
                                     </h4>
-                                    <ul className="text-[10px] font-bold uppercase leading-relaxed text-red-500/50 text-left space-y-3 list-none px-2 tracking-widest">
+                                    <ul className="text-[10px] font-bold   leading-relaxed text-red-500/50 text-left space-y-3 list-none px-2  ">
                                         <li className="flex items-start gap-3"><Zap size={10} className="shrink-0 mt-0.5" /> {t('warn_ledger_loss')}</li>
                                         <li className="flex items-start gap-3"><Zap size={10} className="shrink-0 mt-0.5" /> {t('warn_backup_loss')}</li>
                                         <li className="flex items-start gap-3"><Zap size={10} className="shrink-0 mt-0.5" /> {t('warn_irreversible')}</li>
@@ -130,16 +130,16 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                 {/* Smart Verification Input */}
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between px-1">
-                                        <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] flex items-center gap-2">
+                                        <label className="text-[9px] font-black text-[var(--text-muted)]      flex items-center gap-2">
                                             <Fingerprint size={12} className="text-orange-500" /> {t('label_type_email')}
                                         </label>
-                                        <span className="text-[8px] font-black text-red-500/40 uppercase tracking-widest">Identity Match Required</span>
+                                        <span className="text-[8px] font-black text-red-500/40    ">Identity Match Required</span>
                                     </div>
                                     <div className="group relative">
                                         <input 
                                             type="text" 
                                             placeholder={userEmail}
-                                            className="w-full h-16 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[25px] px-8 text-[13px] font-black tracking-widest text-red-500 outline-none focus:border-red-500 transition-all shadow-inner placeholder:opacity-10"
+                                            className="w-full h-16 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[25px] px-8 text-[13px] font-black   text-red-500 outline-none focus:border-red-500 transition-all shadow-inner placeholder:opacity-10"
                                             value={confirmationText}
                                             onChange={(e) => setConfirmationText(e.target.value)}
                                         />
@@ -152,7 +152,7 @@ export const DangerZone = ({ onDeleteAccount, isLoading, userEmail }: any) => {
                                         onClick={onDeleteAccount}
                                         disabled={!isMatch || isLoading}
                                         className={cn(
-                                            "w-full h-18 py-6 rounded-[28px] font-black text-[12px] uppercase tracking-[6px] transition-all active:scale-95 flex items-center justify-center gap-5 shadow-2xl",
+                                            "w-full h-18 py-6 rounded-[28px] font-black text-[12px]      transition-all active:scale-95 flex items-center justify-center gap-5 shadow-2xl",
                                             isMatch 
                                                 ? "bg-red-600 text-white shadow-red-600/40 hover:bg-red-700" 
                                                 : "bg-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed border border-white/5"

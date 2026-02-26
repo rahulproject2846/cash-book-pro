@@ -82,6 +82,15 @@
     --apple-glass-heavy-blur: blur(24px) saturate(120%);
   }
 
+  /* --- মিডনাইট মোডে স্ক্রলবার অ্যাডজাস্টমেন্ট */
+.midnight-mode ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.midnight-mode ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+}
+
+
   /* 🎯 ELITE UI HOVER EFFECTS */
   .book-grid:hover .book-card:not(:hover) { 
     opacity: 0.4; 
@@ -102,7 +111,7 @@
 @layer components {
   /* লগইন পেজের মত স্মার্ট ইনপুট স্টাইল */
   .vault-glass-input {
-    @apply w-full h-15 pl-14 font-bold text-xs tracking-widest uppercase rounded-3xl border transition-all outline-none;
+    @apply w-full h-15 pl-14 font-bold text-xs     rounded-3xl border transition-all outline-none;
     background-color: var(--bg-input);
     border-color: var(--border);
     color: var(--text-main);
@@ -115,7 +124,7 @@
 
   /* এলিট বাটন */
   .vault-btn-elite {
-    @apply w-full py-5 rounded-[24px] font-black text-[11px] uppercase tracking-[4px] transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-xl;
+    @apply w-full py-5 rounded-[24px] font-black text-[11px] transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-xl;
   }
 
   /* 🍎 APPLE NATIVE DESIGN SYSTEM */
@@ -376,13 +385,6 @@ html {
   }
 }
 
-/* ৬. মিডনাইট মোডে স্ক্রলবার অ্যাডজাস্টমেন্ট */
-.midnight-mode ::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-.midnight-mode ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--accent);
-}
 
 
 * {

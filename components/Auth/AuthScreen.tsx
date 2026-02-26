@@ -82,12 +82,12 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             <div className="flex justify-between items-center mb-8 px-5">
                 <div className="flex items-center gap-2.5">
                     <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(249,115,22,0.5)]" />
-                    <span className="text-[10px] font-black uppercase tracking-[3px] text-[var(--text-muted)]">{t('auth_security_portal')}</span>
+                    <span className="text-[10px] font-black      text-[var(--text-muted)]">{t('auth_security_portal')}</span>
                 </div>
                 {isVerifying && (
                     <div className="flex items-center gap-2 text-orange-500">
                         <Loader2 size={12} className="animate-spin" />
-                        <span className="text-[8px] font-black uppercase tracking-widest">Verifying...</span>
+                        <span className="text-[8px] font-black    ">Verifying...</span>
                     </div>
                 )}
             </div>
@@ -114,8 +114,8 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             </div>
 
             <div className="mt-12 flex justify-center items-center gap-10 opacity-30">
-                <div className="flex items-center gap-2.5"><Fingerprint size={14} strokeWidth={2.5} /><span className="text-[8px] font-black uppercase tracking-[3px]">{t('biometric_id')}</span></div>
-                <div className="flex items-center gap-2.5"><Globe size={14} strokeWidth={2.5} /><span className="text-[8px] font-black uppercase tracking-[3px]">{t('cloud_sync')}</span></div>
+                <div className="flex items-center gap-2.5"><Fingerprint size={14} strokeWidth={2.5} /><span className="text-[8px] font-black     ">{t('biometric_id')}</span></div>
+                <div className="flex items-center gap-2.5"><Globe size={14} strokeWidth={2.5} /><span className="text-[8px] font-black     ">{t('cloud_sync')}</span></div>
             </div>
         </motion.div>
       </div>

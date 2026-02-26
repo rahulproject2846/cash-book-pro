@@ -169,7 +169,7 @@ export const Pagination = ({
         className="px-4 py-2 bg-[var(--bg-app)] rounded-xl border border-[var(--border)]/20"
       >
         <div className="text-center">
-          <div className="text-xs font-black text-[var(--text-muted)] uppercase tracking-wider mb-1">
+          <div className="text-xs font-black text-[var(--text-muted)]     mb-1">
             {t('showing')}
           </div>
           <div className="text-sm font-bold text-[var(--text-main)]">

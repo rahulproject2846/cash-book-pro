@@ -9,6 +9,13 @@ import { getVaultStore } from '../store/storeHelper';
 import { LicenseVault, RiskManager } from '../security';
 import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../utils/security';
 
+// 🛡️ API PATH MAPPING - Prevent pluralization typos
+const API_PATH_MAP: Record<string, string> = {
+  'BOOK': 'books',
+  'ENTRY': 'entries',
+  'USER': 'user/profile'
+};
+
 /**
  * 🚀 SMART BATCH PROCESSOR - Intelligent batching with payload size detection
  * Reused from PushService for consistency
@@ -622,8 +629,9 @@ export class PullService {
         
         try {
           // 🎯 BATCHED NETWORK REQUEST (not local batching)
+          // 🚨 FORCE FULL SYNC: Hardcode since parameter to '0' to get all entries
           const response = await fetch(
-            `/api/entries?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}`
+            `/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}&since=0`
           );
           
           if (!response.ok) {
@@ -1003,7 +1011,7 @@ export class PullService {
     try {
       console.log(`🎯 [PULL SERVICE] Single item pull for ${type} ${id}`);
       
-      const response = await fetch(`/api/${type.toLowerCase()}s/${id}`, { method: 'GET' });
+      const response = await fetch(`/api/${API_PATH_MAP[type]}/${id}`, { method: 'GET' });
       
       if (!response.ok) {
         if (response.status === 404) {

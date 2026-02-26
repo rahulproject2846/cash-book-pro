@@ -1,30 +1,46 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTheme } from 'next-themes';
-import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
-import { PushService } from '@/lib/vault/services/PushService';
-import { getVaultStore } from '@/lib/vault/store/storeHelper';
+import { useVaultStore } from '@/lib/vault/store/index';
+import { identityManager } from '@/lib/vault/core/IdentityManager';
 
 /**
- * VAULT PRO: SETTINGS ENGINE (V25.0 - TURBO OPTIMIZED)
+ * 🛡️ VAULT PRO: MASTER SETTINGS ENGINE (V26.0)
  * ---------------------------------------------------
- * Logic: Manages System Preferences & DOM Side-effects.
- * Turbo Mode: Injects 'turbo-active' class for performance.
+ * Architecture: Atomic Store-Driven Updates.
+ * Handshake: Dispatches 'local-mutation' for SyncOrchestrator.
+ * Performance: Zero-Flicker DOM Injection.
  */
 
-export const useSettings = (currentUser: any, setCurrentUser: any) => {
+export const useSettings = () => {
     const { theme, setTheme } = useTheme();
     const [isCleaning, setIsCleaning] = useState(false);
     const [dbStats, setDbStats] = useState({ storageUsed: '0 KB', totalEntries: 0 });
-    const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // ১. ইউজার ডাটা থেকে সলিড স্টেট জেনারেট (Derived States)
-    const preferences = currentUser?.preferences || {};
-    const categories = currentUser?.categories || [];
-    const currency = currentUser?.currency || 'BDT (৳)';
+    // 🚀 STORE INTEGRATION: Single Source of Truth
+    const { 
+        currentUser, 
+        setPreferences, 
+        setCategories, 
+        setCurrency 
+    } = useVaultStore();
 
-    // ২. DOM side-effects (এটি রিলোড দিলেও Compact/Midnight/Turbo ধরে রাখবে)
+    // 🎯 DERIVED STATES: Memoized for Performance
+    const preferences = useMemo(() => currentUser?.preferences || {}, [currentUser]);
+    const categories = useMemo(() => currentUser?.categories || [], [currentUser]);
+    const currency = useMemo(() => currentUser?.currency || 'BDT (৳)', [currentUser]);
+
+    // 🤝 THE ATOMIC HANDSHAKE: Notify Sync Engine
+    const dispatchHandshake = useCallback(() => {
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('vault-updated', { 
+                detail: { source: 'useSettings', origin: 'local-mutation' } 
+            }));
+        }
+    }, []);
+
+    // 🎨 DOM SIDE-EFFECTS: Real-time Theme & Turbo Sync
     useEffect(() => {
         if (!currentUser) return;
         
@@ -32,10 +48,10 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
         const body = document.body;
         const prefs = currentUser.preferences || {};
 
-        // Compact Mode Apply
+        // 1. Compact Mode
         prefs.compactMode ? root.classList.add('compact-deck') : root.classList.remove('compact-deck');
 
-        // Midnight Mode Apply
+        // 2. Midnight OLED Logic
         if (prefs.isMidnight) {
             root.classList.add('midnight-mode');
             if (theme !== 'dark') setTheme('dark');
@@ -43,20 +59,15 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
             root.classList.remove('midnight-mode');
         }
 
-        // 🚀 Turbo Mode Apply (Intelligence for Low-end Devices)
-        if (prefs.turboMode) {
-            body.classList.add('turbo-active');
-        } else {
-            body.classList.remove('turbo-active');
-        }
+        // 3. Turbo Mode (Class matches your Global CSS)
+        prefs.turboMode ? body.classList.add('turbo-active') : body.classList.remove('turbo-active');
 
-        // Language apply
-        if (prefs.language) {
-            localStorage.setItem('vault_lang', prefs.language);
-        }
+        // 4. Persistence Guard
+        if (prefs.language) localStorage.setItem('vault_lang', prefs.language);
+        
     }, [currentUser, setTheme, theme]);
 
-    // ৩. ডাটাবেজ স্ট্যাটস ক্যালকুলেশন
+    // 📊 DATABASE STORAGE AUDIT
     const calculateStorage = useCallback(async () => {
         try {
             const count = await db.entries.count();
@@ -68,90 +79,70 @@ export const useSettings = (currentUser: any, setCurrentUser: any) => {
 
     useEffect(() => { calculateStorage(); }, [calculateStorage]);
 
-    // ৪. সলিড সিঙ্ক ইঞ্জিন (Secure Sync Gateway)
-    const performServerSync = useCallback(async (updatedUser: any) => {
-        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-
-        syncTimeoutRef.current = setTimeout(async () => {
-            try {
-                // 🚀 SECURE GATEWAY: Use PushService instead of direct fetch
-                const pushService = new PushService();
-                const userId = currentUser._id || currentUser.userId || '';
-                
-                if (!userId) {
-                    console.warn("Settings Sync Failed: No user ID available");
-                    return;
-                }
-                
-                pushService.setUserId(userId);
-                
-                const result = await pushService.pushSystemConfig({
-                    type: 'SETTINGS_SYNC',
-                    data: {
-                        categories: updatedUser.categories,
-                        currency: updatedUser.currency,
-                        preferences: updatedUser.preferences
-                    },
-                    priority: 'HIGH',
-                    metadata: {
-                        timestamp: Date.now(),
-                        sessionId: 'settings_hook',
-                        userId: userId
-                    }
-                });
-                
-                if (result.success) {
-                    console.log("📡 Settings: Cloud Registry Synchronized via secure gateway.");
-                } else {
-                    console.warn("Settings Sync Failed via secure gateway:", result.error);
-                }
-            } catch (error) {
-                console.warn("Settings Sync Pending (Network/Server)", error);
-            }
-        }, 1000);
-    }, []);
-
-    // ৫. কোর আপডেট লজিক (Optimistic Update)
-    const masterUpdate = (updates: any) => {
+    /**
+     * 🚀 ATOMIC UPDATE CORE
+     * এটি সরাসরি স্টোর এবং আইডেন্টিটি ম্যানেজার আপডেট করে এবং সিঙ্ক ট্রিগার করে।
+     */
+    const atomicUpdate = async (patch: { preferences?: any, categories?: string[], currency?: string }) => {
         if (!currentUser) return;
 
-        const updatedUser = { 
-            ...currentUser, 
-            ...updates,
-            preferences: { ...currentUser.preferences, ...(updates.preferences || {}) }
+        // 1. Prepare New User State
+        const updatedUser = {
+            ...currentUser,
+            preferences: { ...currentUser.preferences, ...(patch.preferences || {}) },
+            categories: patch.categories || currentUser.categories,
+            currency: patch.currency || currentUser.currency
         };
 
-        setCurrentUser(updatedUser);
-        localStorage.setItem('cashbookUser', JSON.stringify(updatedUser));
-        performServerSync(updatedUser);
+        // 2. Commit to Zustand Store (UI Reaction)
+        if (patch.preferences) setPreferences(updatedUser.preferences);
+        if (patch.categories) setCategories(updatedUser.categories);
+        if (patch.currency) setCurrency(updatedUser.currency);
+
+        // 3. Sync IdentityManager (Local Persistence & Multi-tab Sync)
+        identityManager.setIdentity(updatedUser);
+
+        // 4. Trigger Sync Handshake (Background Server Sync)
+        dispatchHandshake();
     };
 
+    // 🛠️ EXPOSED ACTIONS
     const updatePreference = (key: string, value: any) => {
-        masterUpdate({ preferences: { [key]: value } });
+        atomicUpdate({ preferences: { [key]: value } });
     };
 
     const addCategory = (tag: string) => {
         const trimmed = tag.trim();
         if (!trimmed || categories.includes(trimmed)) return;
-        masterUpdate({ categories: [...categories, trimmed] });
+        atomicUpdate({ categories: [...categories, trimmed] });
     };
 
     const removeCategory = (tag: string) => {
-        masterUpdate({ categories: categories.filter((c: string) => c !== tag) });
+        atomicUpdate({ categories: categories.filter((c: string) => c !== tag) });
     };
 
     const updateCurrency = (val: string) => {
-        masterUpdate({ currency: val });
+        atomicUpdate({ currency: val });
     };
 
     const clearLocalCache = async () => {
-        if (!confirm("DANGER: This will wipe local data and force re-sync. Proceed?")) return;
+        if (!confirm("🚨 DANGER: Full System Wipe! All local data will be deleted. Proceed?")) return;
         setIsCleaning(true);
         try {
+            // 🛑 1. Clear In-memory State
+            const { logout } = useVaultStore.getState();
+            logout();
+            
+            // 🧹 2. Atomic Database Destruction
+            const { db } = await import('@/lib/offlineDB');
             await db.delete();
-            localStorage.clear();
-            window.location.reload();
-        } catch (e) { setIsCleaning(false); }
+            
+            // 🔄 3. Nuclear Restart
+            window.location.href = '/';
+        } catch (e) { 
+            setIsCleaning(false);
+            console.error('Hard reset failed:', e);
+        }
     };
 
     return {

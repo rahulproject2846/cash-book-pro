@@ -177,7 +177,7 @@ export const SafeButton: React.FC<SafeButtonProps> = ({
       className={cn(
         getVariantClasses(),
         getSizeClasses(),
-        "apple-card font-bold uppercase tracking-[2px] flex items-center justify-center gap-2",
+        "apple-card font-bold    flex items-center justify-center gap-2",
         className
       )}
       disabled={disabled || isCurrentlyInProgress || actionState === 'loading'}

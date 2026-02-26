@@ -65,7 +65,7 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
         if (initialData) {
             setAmountStr(initialData.amount.toString());
             setActiveInput(initialData.type);
-            setForm({ ...initialData, category: initialData.category?.toUpperCase() || 'GENERAL' });
+            setForm({ ...initialData, category: initialData.category?.to () || 'GENERAL' });
             setIsExpanded(true);
         } else {
             setAmountStr('');
@@ -161,7 +161,7 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
                             {previewUrl ? <img src={previewUrl} className="w-full h-full object-cover rounded-2xl" /> : <Calculator size={22} />}
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[3px] mb-0.5">{currentBook?.name || "LEDGER ENTRY"}</p>
+                            <p className="text-[10px] font-black text-[var(--text-muted)]      mb-0.5">{currentBook?.name || "LEDGER ENTRY"}</p>
                             <p className="text-[13px] font-bold text-[var(--text-main)]">{activeInput === 'income' ? 'Cash Inflow' : 'Cash Outflow'}</p>
                         </div>
                     </div>
@@ -183,7 +183,7 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
                                     : "bg-[var(--bg-input)] border-transparent opacity-40"
                                 )}
                             >
-                                <span className="absolute top-3 right-4 text-[9px] font-black uppercase tracking-widest opacity-60">{type}</span>
+                                <span className="absolute top-3 right-4 text-[9px] font-black     opacity-60">{type}</span>
                                 {type === 'expense' ? <ArrowDownLeft size={16} className="text-red-400 mb-1" /> : <ArrowUpRight size={16} className="text-green-400 mb-1" />}
                                 {activeInput === type && !isMobile ? (
                                     <input
@@ -218,7 +218,7 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
                             className="w-full h-14 bg-[var(--bg-input)] rounded-[24px] border border-[var(--border)] flex items-center justify-center gap-3 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
                         >
                             <SlidersHorizontal size={16} />
-                            <span className="text-xs font-bold uppercase tracking-widest">{isExpanded ? 'Fewer Details' : 'More Options'}</span>
+                            <span className="text-xs font-bold    ">{isExpanded ? 'Fewer Details' : 'More Options'}</span>
                             <ChevronDown size={16} className={cn("transition-transform duration-500", isExpanded && "rotate-180")} />
                         </motion.button>
 
@@ -278,7 +278,7 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
                                 {showDuplicate && (
                                     <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center gap-3">
                                         <AlertTriangle size={16} className="text-orange-500" />
-                                        <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">{t('duplicate_warning')}</span>
+                                        <span className="text-[10px] font-black text-orange-500    ">{t('duplicate_warning')}</span>
                                     </div>
                                 )}
                                 <Keypad 
@@ -293,7 +293,7 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
                     <SafeButton
                         actionId="save-entry" onAction={handleSave}
                         disabled={isLoading || !amountStr}
-                        className="w-full h-14 bg-[var(--orange-main)] text-white rounded-[24px] font-black uppercase tracking-[3px] shadow-[0_8px_20px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all"
+                        className="w-full h-14 bg-[var(--orange-main)] text-white rounded-[24px] font-black      shadow-[0_8px_20px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all"
                     >
                         <CheckCircle2 size={18} /> {t('save_entry')}
                     </SafeButton>

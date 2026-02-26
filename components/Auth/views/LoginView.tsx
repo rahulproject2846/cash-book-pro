@@ -28,7 +28,7 @@ const EliteInput = ({ icon: Icon, type, placeholder, value, name, id, autoComple
             type={type} 
             autoComplete={autoComplete}
             placeholder={placeholder} 
-            className="app-input h-15 pl-14 font-bold text-xs tracking-widest uppercase outline-none w-full bg-transparent text-[var(--text-main)] placeholder:text-[var(--text-muted)]/20"
+            className="app-input h-15 pl-14 font-bold text-xs   outline-none w-full bg-transparent text-[var(--text-main)] placeholder:text-[var(--text-muted)]/20"
             value={value} 
             onChange={onChange} 
             required 
@@ -100,11 +100,11 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                 <motion.h2 
                     initial={{ letterSpacing: "10px", opacity: 0 }}
                     animate={{ letterSpacing: "1px", opacity: 1 }}
-                    className="text-5xl font-black text-[var(--text-main)] italic tracking-tighter uppercase leading-none"
+                    className="text-5xl font-black text-[var(--text-main)]   leading-none"
                 >
                     {t('vault_pro_split_1')}<span className="text-[var(--accent)]">{t('vault_pro_split_2')}</span>
                 </motion.h2>
-                <p className="text-[9px] font-black text-[var(--text-muted)] mt-4 uppercase tracking-[6px] opacity-60">
+                <p className="text-[9px] font-black text-[var(--text-muted)] mt-4    opacity-60">
                     {t('auth_tagline')}
                 </p>
             </div>
@@ -150,7 +150,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
 
                 {/* Forgot Link */}
                 <div className="flex justify-end px-2">
-                    <button type="button" onClick={onForgot} className="text-[9px] font-black text-[var(--text-muted)] hover:text-[var(--text-main)] uppercase tracking-widest transition-all opacity-60 hover:opacity-100">
+                    <button type="button" onClick={onForgot} className="text-[9px] font-black text-[var(--text-muted)] hover:text-[var(--text-main)]     transition-all opacity-60 hover:opacity-100">
                         {t('auth_forgot_key')}
                     </button>
                 </div>
@@ -181,7 +181,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                 <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t border-white/5"></span>
                 </div>
-                <div className="relative flex justify-center text-[7px] uppercase font-black tracking-[4px]">
+                <div className="relative flex justify-center text-[7px]   font-black   ">
                     <span className="bg-[var(--bg-app)] px-4 text-[var(--text-muted)] opacity-50">
                         {t('auth_middleware')}
                     </span>
@@ -191,7 +191,7 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
             <SocialAuth onGoogleAuth={onGoogleAuth} />
             
             <div className="mt-auto pt-10 text-center">
-                <button onClick={onSwitch} className="group text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[4px] transition-all">
+                <button onClick={onSwitch} className="group text-[var(--text-muted)] text-[10px] font-black      transition-all">
                     {t('auth_new_operator')} 
                     <span className="ml-2 text-[var(--text-main)] underline underline-offset-8 decoration-orange-500/30 group-hover:text-[var(--accent)] transition-all font-black">
                         {t('btn_initialize')}

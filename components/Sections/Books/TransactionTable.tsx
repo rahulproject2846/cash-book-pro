@@ -1,65 +1,88 @@
 "use client";
-import React, { useState, useDeferredValue, useCallback, useMemo } from 'react';
+import React, { useState, useDeferredValue, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-    Edit2, Trash2, Zap, Clock, ShieldCheck, GitCommit, Copy, MoreHorizontal 
+    Edit2, Trash2, Zap, Clock, ShieldCheck, GitCommit, Copy, 
+    MoreHorizontal, ArrowUpRight, ArrowDownLeft, Tag
 } from 'lucide-react';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { useModal } from '@/context/ModalContext';
 import { useVaultStore } from '@/lib/vault/store/index';
-import { useVaultState, useInteractionGuard } from '@/lib/vault/store/storeHelper';
+import { useInteractionGuard } from '@/lib/vault/store/storeHelper';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { cn, toBn } from '@/lib/utils/helpers';
 
-interface Transaction {
-    _id?: string;
-    localId?: string | number;
-    title: string;
-    amount: number;
-    type: 'income' | 'expense';
-    status: 'completed' | 'pending';
-    date: string | Date;
-    time?: string;
-    category: string;
-    note?: string;
-    paymentMethod?: string; // ডাটাবেজ ফিল্ড
-    via?: string; // লিগ্যাসি সাপোর্ট
-}
+// --- 📱 MOBILE TRANSACTION CARD COMPONENT ---
+const TransactionCard = memo(({ e, idx, onEdit, onDelete, onContextMenu, language, formatDate, t, currencySymbol }: any) => {
+    const isIncome = e.type === 'income';
+    const isCompleted = e.status?.toLowerCase() === 'completed';
 
-interface TableProps {
-    items: Transaction[];
-    onEdit: (item: Transaction) => void;
-    onDelete: (item: Transaction) => void;
-    onToggleStatus: (item: Transaction) => void;
-    currencySymbol: string;
-}
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.03 }}
+            onContextMenu={(event) => onContextMenu(event, e)}
+            className="relative bg-[var(--bg-card)] border border-[var(--border)] rounded-[28px] p-5 shadow-sm active:scale-[0.98] transition-all"
+        >
+            <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-3">
+                    <div className={cn(
+                        "w-10 h-10 rounded-2xl flex items-center justify-center shadow-inner",
+                        isIncome ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
+                    )}>
+                        {isIncome ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+                    </div>
+                    <div>
+                        <h4 className="text-[13px] font-black text-[var(--text-main)]     line-clamp-1">{e.title}</h4>
+                        <p className="text-[9px] font-bold text-[var(--text-muted)]     opacity-50">{formatDate(e.date)}</p>
+                    </div>
+                </div>
+                <div className={cn(
+                    "text-lg font-mono-finance font-black",
+                    isIncome ? "text-green-500" : "text-red-500"
+                )}>
+                    {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), language)}
+                </div>
+            </div>
 
-export const TransactionTable = () => {
+            <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]/50">
+                <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full bg-[var(--bg-app)] border border-[var(--border)] text-[8px] font-black text-orange-500  ">
+                        {e.category || 'GENERAL'}
+                    </span>
+                    <div className={cn(
+                        "flex items-center gap-1.5 text-[8px] font-bold    ",
+                        isCompleted ? "text-green-500" : "text-yellow-500"
+                    )}>
+                        <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", isCompleted ? "bg-green-500" : "bg-yellow-500")} />
+                        {t(e.status?.toLowerCase() || 'completed')}
+                    </div>
+                </div>
+                
+                <button 
+                    onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); onEdit(e); }}
+                    className="w-8 h-8 rounded-full bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] active:bg-orange-500 active:text-white transition-all"
+                >
+                    <Edit2 size={14} />
+                </button>
+            </div>
+        </motion.div>
+    );
+});
+
+// --- 🏛️ MAIN TRANSACTION TABLE COMPONENT ---
+export const TransactionTable = ({ items, onEdit, onDelete, onToggleStatus, currencySymbol }: any) => {
     const { t, language } = useTranslation();
     const { isInteractionBlocked } = useInteractionGuard();
     const { openModal } = useModal();
-    const { deleteEntry } = useVaultStore();
+    const { deleteEntry, userId } = useVaultStore();
     
-    // AUTONOMOUS STORE ACCESS - NO PROPS
-    const {
-        processedEntries,
-        activeBook
-    } = useVaultState();
-    
-    // PERFORMANCE: useDeferredValue for 100k data
-    const deferredEntries = useDeferredValue(processedEntries);
-    
-    // Context Menu State
+    const deferredEntries = useDeferredValue(items);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry: any } | null>(null);
-    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-    const [isLoading, setIsLoading] = useState(false);
-    
-    // Get currency symbol from active book or default
-    const currencySymbol = activeBook?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
-    // তারিখ ফরম্যাটিং প্রোটোকল
     const formatDate = useCallback((dateStr: any) => {
         const date = new Date(dateStr);
         return date.toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-GB', { 
@@ -67,109 +90,59 @@ export const TransactionTable = () => {
         });
     }, [language]);
 
-    // Context Menu Handler
     const handleContextMenu = useCallback((e: React.MouseEvent, entry: any) => {
         e.preventDefault();
-        if (isInteractionBlocked) return;
-        
         setContextMenu({ x: e.clientX, y: e.clientY, entry });
-    }, [isInteractionBlocked]);
-
-    // Close Context Menu
-    const closeContextMenu = useCallback(() => {
-        setContextMenu(null);
     }, []);
 
-    // Copy CID Handler
-    const copyToClipboard = useCallback(async (cid: string) => {
-        try {
-            await navigator.clipboard.writeText(cid);
-            // Visual feedback could be added here
-        } catch (error) {
-            console.error('Failed to copy CID:', error);
-        }
-        closeContextMenu();
-    }, [closeContextMenu]);
+    const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
-    // Toggle Row Expansion
-    const toggleRowExpansion = useCallback((entryId: string) => {
-        setExpandedRows(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(entryId)) {
-                newSet.delete(entryId);
-            } else {
-                newSet.add(entryId);
-            }
-            return newSet;
-        });
-    }, []);
-
-    // Global click handler for context menu
     React.useEffect(() => {
-        const handleClick = () => closeContextMenu();
-        document.addEventListener('click', handleClick);
-        return () => document.removeEventListener('click', handleClick);
+        document.addEventListener('click', closeContextMenu);
+        return () => document.removeEventListener('click', closeContextMenu);
     }, [closeContextMenu]);
-
-    // Memoized grid columns for responsive design
-    const gridColumns = useMemo(() => ({
-        desktop: '60px 120px 80px 100px 1fr 200px 120px 100px 140px 100px 120px',
-        tablet: '50px 100px 70px 90px 1fr 150px 100px 80px 120px 90px 100px'
-    }), []);
 
     return (
-        <>
-            {/* Context Menu */}
+        <div className="w-full">
+            {/* 🌑 CONTEXT MENU */}
             <AnimatePresence>
                 {contextMenu && (
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="fixed z-50 apple-glass rounded-xl border border-[var(--border)] shadow-2xl py-2 min-w-[160px]"
+                        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed z-[3000] apple-glass rounded-2xl border border-[var(--border)] shadow-2xl py-2 min-w-[180px]"
                         style={{ left: contextMenu.x, top: contextMenu.y }}
                     >
-                        <button
-                            onClick={() => {
-                                // TODO: Connect to store action
-                                console.log('Edit entry:', contextMenu.entry);
-                                closeContextMenu();
-                            }}
-                            className="w-full px-4 py-2 flex items-center gap-3 text-left hover:bg-[var(--bg-app)]/50 transition-colors"
-                        >
-                            <Edit2 size={16} className="text-[var(--text-muted)]" />
-                            <span className="text-sm font-medium">{t('edit_entry')}</span>
+                        <button onMouseDown={(e) => { e.preventDefault(); onEdit(contextMenu.entry); closeContextMenu(); }} className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-orange-500/10 transition-colors">
+                            <Edit2 size={16} className="text-orange-500" />
+                            <span className="text-[11px] font-black    ">{t('edit_entry')}</span>
                         </button>
-                        <button
-                            onClick={() => {
-                                // TODO: Connect to store action
-                                console.log('Delete entry:', contextMenu.entry);
-                                closeContextMenu();
-                            }}
-                            className="w-full px-4 py-2 flex items-center gap-3 text-left hover:bg-[var(--bg-app)]/50 transition-colors"
-                        >
+                        <button onClick={() => { 
+                            openModal('deleteConfirm', { targetName: contextMenu.entry.title, onConfirm: () => deleteEntry(contextMenu.entry) }); 
+                            closeContextMenu(); 
+                        }} className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-red-500/10 transition-colors border-t border-[var(--border)]/50">
                             <Trash2 size={16} className="text-red-500" />
-                            <span className="text-sm font-medium text-red-500">{t('delete_entry')}</span>
-                        </button>
-                        <button
-                            onClick={() => copyToClipboard(contextMenu.entry.cid || contextMenu.entry._id)}
-                            className="w-full px-4 py-2 flex items-center gap-3 text-left hover:bg-[var(--bg-app)]/50 transition-colors"
-                        >
-                            <Copy size={16} className="text-[var(--text-muted)]" />
-                            <span className="text-sm font-medium">{t('copy_cid')}</span>
+                            <span className="text-[11px] font-black     text-red-500">{t('delete_entry')}</span>
                         </button>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Main Container */}
-            <div className={cn(
-                "hidden xl:block w-full overflow-hidden transition-all duration-500",
-                "apple-glass rounded-[40px] border border-[var(--border)] shadow-2xl"
-            )}>
-                {/* Grid Header */}
-                <div className="grid-header px-6 py-4 bg-[var(--bg-app)]/30 border-b border-[var(--border)]">
-                    <div className="grid grid-cols-11 gap-4 text-[10px] font-medium text-[var(--text-muted)]">
+            {/* 📱 MOBILE VIEW (Visible on Small Screens) */}
+            <div className="xl:hidden grid grid-cols-1 gap-4 p-4">
+                {deferredEntries.map((e: any, idx: number) => (
+                    <TransactionCard 
+                        key={e.cid || e.localId || idx}
+                        e={e} idx={idx} onEdit={onEdit} onDelete={onDelete} 
+                        onContextMenu={handleContextMenu} language={language}
+                        formatDate={formatDate} t={t} currencySymbol={currencySymbol}
+                    />
+                ))}
+            </div>
+
+            {/* 🖥️ DESKTOP VIEW (Visible on Large Screens Only) */}
+            <div className="hidden xl:block w-full overflow-hidden apple-glass rounded-[40px] border border-[var(--border)] shadow-2xl">
+                <div className="grid-header px-8 py-5 bg-[var(--bg-app)]/30 border-b border-[var(--border)]">
+                    <div className="grid grid-cols-11 gap-4 text-[10px] font-black      text-[var(--text-muted)] opacity-50">
                         <div className="text-left">#</div>
                         <div className="text-left">{t('label_date')}</div>
                         <div className="text-left">{t('label_time')}</div>
@@ -184,199 +157,52 @@ export const TransactionTable = () => {
                     </div>
                 </div>
 
-                {/* Grid Body */}
                 <div className="divide-y divide-[var(--border)]/10">
-                    {isLoading ? (
-                        // Skeleton Loader
-                        Array.from({ length: 10 }).map((_, index) => (
-                            <div key={`skeleton-${index}`} className="grid grid-cols-11 gap-4 px-6 py-4">
-                                {Array.from({ length: 11 }).map((_, cellIndex) => (
-                                    <div
-                                        key={cellIndex}
-                                        className="h-4 bg-[var(--bg-app)]/30 rounded animate-pulse"
-                                        style={{
-                                            animationDelay: `${cellIndex * 0.1}s`,
-                                            background: 'linear-gradient(90deg, var(--bg-app)/30 0%, var(--bg-card) 50%, var(--bg-app)/30 100%)',
-                                            backgroundSize: '200% 100%',
-                                            animation: 'shimmer 1.5s infinite'
-                                        }}
-                                    />
-                                ))}
-                            </div>
-                        ))
-                    ) : (
-                        deferredEntries.map((e, idx) => {
-                            const isIncome = e.type === 'income';
-                            const isCompleted = e.status.toLowerCase() === 'completed';
-                            const rowKey = e.localId || e._id || idx;
-                            const isExpanded = expandedRows.has(rowKey);
-
-                            return (
-                                <React.Fragment key={rowKey}>
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ 
-                                            type: "spring", 
-                                            stiffness: 400, 
-                                            damping: 30,
-                                            delay: idx * 0.05
-                                        }}
-                                        whileHover={{ 
-                                            scale: 0.98,
-                                            boxShadow: "0 8px 24px rgba(251, 146, 60, 0.15)"
-                                        }}
-                                        onContextMenu={(event) => handleContextMenu(event, e)}
-                                        className="group grid grid-cols-11 gap-4 px-6 py-4 items-center transition-all duration-200 cursor-pointer"
-                                        onClick={() => toggleRowExpansion(rowKey)}
-                                    >
-                                        {/* 1. Index */}
-                                        <h1 className="text-2xl md:text-3xl font-variant-numeric: tabular-nums leading-none text-[var(--text-main)] truncate">
-                                            {toBn(String(idx + 1).padStart(2, '0'), language)}
-                                        </h1>
-
-                                        {/* 2. Date */}
-                                        <div className="text-[12px] font-medium text-[var(--text-main)]">
-                                            {formatDate(e.date)}
-                                        </div>
-
-                                        {/* 3. Time */}
-                                        <div className="text-[11px] font-medium text-[var(--text-muted)] opacity-60">
-                                            {toBn(e.time || '00:00', language)}
-                                        </div>
-                                       
-                                        {/* 4. Ref ID */}
-                                        <Tooltip text={t('tt_verified_node')}>
-                                            <div className="flex items-center gap-1.5 text-[9px] font-medium text-orange-500/30 cursor-pointer">
-                                                <ShieldCheck size={11} strokeWidth={3} />
-                                                {toBn(String(e.localId || e._id).slice(-6), language)}
-                                            </div>
-                                        </Tooltip>
-
-                                        {/* 5. Protocol (Title) */}
-                                        <div className="text-[13px] font-medium text-[var(--text-main)] group-hover:text-orange-500 transition-colors truncate">
-                                            {e.title}
-                                        </div>
-
-                                        {/* 6. Memo (Note) */}
-                                        <div className="text-[10px] font-medium text-[var(--text-muted)] opacity-30 truncate">
-                                            {e.note || "—"}
-                                        </div>
-
-                                        {/* 7. Category (Tag) */}
-                                        <div className="px-3 py-1 rounded-lg bg-orange-500/5 border border-orange-500/10 text-orange-500 text-[8px] font-medium">
-                                            {e.category || 'General'}
-                                        </div>
-
-                                        {/* 8. Via (Payment Method) */}
-                                        <div className="text-[9px] font-medium text-[var(--text-muted)] bg-[var(--bg-app)] px-3 py-1 rounded-lg border border-[var(--border)]">
-                                            {t((e.paymentMethod || e.via || 'cash').toLowerCase())}
-                                        </div>
-
-                                        {/* 9. Amount (Fintech Tabular) */}
-                                        <div className={cn(
-                                            "text-[18px] font-mono-finance font-bold text-right",
-                                            isIncome ? "text-green-500" : "text-red-500"
-                                        )}>
-                                            {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), language)}
-                                        </div>
-
-                                        {/* 10. Status Toggle */}
-                                        <div className="flex justify-center">
-                                            <Tooltip text={t('tt_toggle_status')}>
-                                                <button 
-                                                    onClick={(event) => { 
-                                                        event.stopPropagation(); 
-                                                        // TODO: Connect to store action
-                                                    }}
-                                                    className={cn(
-                                                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[8px] font-medium transition-all active:scale-95",
-                                                        isCompleted 
-                                                            ? "bg-green-500/10 text-green-500 border-green-500/20 shadow-lg shadow-green-500/20" 
-                                                            : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-lg shadow-yellow-500/20"
-                                                    )}
-                                                >
-                                                    {isCompleted ? <Zap size={10} fill="currentColor" strokeWidth={0} /> : <Clock size={10} strokeWidth={3} />}
-                                                    {t(e.status.toLowerCase())}
-                                                </button>
-                                            </Tooltip>
-                                        </div>
-
-                                        {/* 11. Command Options */}
-                                        <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                                            <Tooltip text={t('tt_edit_record')}>
-                                                <button 
-                                                    onClick={(event) => { 
-                                                        event.stopPropagation(); 
-                                                        // TODO: Connect to store action
-                                                    }}
-                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-[var(--bg-app)] border border-[var(--border)] text-[var(--text-muted)] hover:text-orange-500 hover:border-orange-500/30 transition-all active:scale-90"
-                                                >
-                                                    <Edit2 size={14} strokeWidth={2.5} />
-                                                </button>
-                                            </Tooltip>
-                                            <Tooltip text={t('tt_delete_record')}>
-                                                <button 
-                                                    onClick={(event) => { 
-                                                        event.stopPropagation(); 
-                                                        openModal('deleteConfirm', { 
-                                                            targetName: e.title, 
-                                                            title: "modal_terminate_entry_title",
-                                                            desc: "modal_terminate_entry_desc",
-                                                            onConfirm: () => deleteEntry(e) 
-                                                        });
-                                                    }}
-                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-[var(--bg-app)] border border-[var(--border)] text-[var(--text-muted)] hover:text-red-500 hover:border-red-500/30 transition-all active:scale-90"
-                                                >
-                                                    <Trash2 size={14} strokeWidth={2.5} />
-                                                </button>
-                                            </Tooltip>
-                                        </div>
-                                    </motion.div>
-
-                                    {/* Expanded Details */}
-                                    <AnimatePresence>
-                                        {isExpanded && (
-                                            <motion.div
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: 'auto', opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                                                className="overflow-hidden"
-                                            >
-                                                <div className="px-6 py-4 bg-[var(--bg-app)]/30 border-t border-[var(--border)]/10">
-                                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                                        <div>
-                                                            <span className="text-[var(--text-muted)]">{t('note')}: </span>
-                                                            <span className="text-[var(--text-main)]">{e.note || t('no_note')}</span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[var(--text-muted)]">CID: </span>
-                                                            <span className="text-[var(--text-main)] font-mono-finance">{e.cid || e._id}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </React.Fragment>
-                            );
-                        })
-                    )}
+                    {deferredEntries.map((e: any, idx: number) => {
+                        const rowKey = String(e.localId || e._id || e.cid || `idx-${idx}`);
+                        return (
+                            <motion.div
+                                key={rowKey}
+                                onContextMenu={(event) => handleContextMenu(event, e)}
+                                className="group grid grid-cols-11 gap-4 px-8 py-5 items-center hover:bg-white/[0.02] transition-all cursor-pointer"
+                            >
+                                <h1 className="text-2xl font-black font-mono-finance opacity-20">{toBn(String(idx + 1).padStart(2, '0'), language)}</h1>
+                                <div className="text-[11px] font-black   text-[var(--text-main)]">{formatDate(e.date)}</div>
+                                <div className="text-[10px] font-bold text-[var(--text-muted)]">{toBn(e.time || '00:00', language)}</div>
+                                <div className="flex items-center gap-1 text-[8px] font-black text-orange-500/40">
+                                    <ShieldCheck size={10} /> {toBn(String(e.localId || e._id).slice(-6), language)}
+                                </div>
+                                <div className="text-[13px] font-black   text-[var(--text-main)] group-hover:text-orange-500 transition-colors truncate">{e.title}</div>
+                                <div className="text-[10px] font-medium text-[var(--text-muted)] opacity-30 truncate">{e.note || "—"}</div>
+                                <div className="px-3 py-1 rounded-lg bg-orange-500/5 border border-orange-500/10 text-orange-500 text-[8px] font-black  ">{e.category || 'General'}</div>
+                                <div className="text-[9px] font-black   text-[var(--text-muted)] bg-[var(--bg-app)] px-3 py-1 rounded-lg border border-[var(--border)]">{t((e.paymentMethod || e.via || 'cash').toLowerCase())}</div>
+                                <div className={cn("text-[18px] font-mono-finance font-black text-right", e.type === 'income' ? "text-green-500" : "text-red-500")}>
+                                    {e.type === 'income' ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), language)}
+                                </div>
+                                <div className="flex justify-center">
+                                    <div className={cn("px-3 py-1.5 rounded-xl border text-[8px] font-black  ", e.status === 'completed' ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20")}>
+                                        {t(e.status?.toLowerCase())}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button onMouseDown={(ev) => { ev.preventDefault(); onEdit(e); }} className="w-8 h-8 rounded-lg bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-orange-500"><Edit2 size={14} /></button>
+                                    <button onClick={() => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => deleteEntry(e) })} className="w-8 h-8 rounded-lg bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500"><Trash2 size={14} /></button>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
                 </div>
-
-                {/* End Ledger Signal */}
-                {deferredEntries.length > 0 && !isLoading && (
-                    <div className="py-16 flex flex-col items-center opacity-10 group-hover:opacity-30 transition-opacity duration-1000">
-                        <div className="h-px w-32 bg-gradient-to-r from-transparent via-[var(--text-main)] to-transparent mb-4" />
-                        <div className="flex items-center gap-3">
-                            <GitCommit size={14} strokeWidth={3} />
-                            <span className="text-[10px] font-medium tracking-[4px]">{t('ledger_end')}</span>
-                            <GitCommit size={14} strokeWidth={3} />
-                        </div>
-                    </div>
-                )}
             </div>
-        </>
+
+            {/* END SIGNAL */}
+            <div className="py-16 flex flex-col items-center opacity-10">
+                <div className="h-px w-32 bg-gradient-to-r from-transparent via-[var(--text-main)] to-transparent mb-4" />
+                <div className="flex items-center gap-3">
+                    <GitCommit size={14} strokeWidth={3} />
+                    <span className="text-[10px] font-black     ">{t('ledger_end')}</span>
+                    <GitCommit size={14} strokeWidth={3} />
+                </div>
+            </div>
+        </div>
     );
 };

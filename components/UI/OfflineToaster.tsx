@@ -107,8 +107,8 @@ export const OfflineToaster: React.FC = () => {
     >
       { (emergencyHydrationStatus === 'hydrating' || (bootStatus && bootStatus !== 'READY' && bootStatus !== 'IDLE')) ? <RefreshCw className="animate-spin" size={20} /> : <WifiOff size={20} />}
       <div className="flex flex-col">
-        <span className="text-[10px] font-black uppercase tracking-[2px] leading-none">{message.title}</span>
-        <span className="text-[8px] font-bold text-white/40 uppercase mt-1">{message.subtitle}</span>
+        <span className="text-[10px] font-black      leading-none">{message.title}</span>
+        <span className="text-[8px] font-bold text-white/40   mt-1">{message.subtitle}</span>
         {showResetButton && (
           <button 
             onClick={(e) => { e.stopPropagation(); nuclearReset(); }}

@@ -72,11 +72,11 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                 const XLSX = await import("xlsx");
                 
                 const worksheetData = [
-                    ["SOURCE: VAULT PRO FINANCIAL OS"], ["VAULT: " + (bookName || "SYSTEM").toUpperCase()],
+                    ["SOURCE: VAULT PRO FINANCIAL OS"], ["VAULT: " + (bookName || "SYSTEM").to ()],
                     ["GENERATED: " + new Date().toLocaleString()], ["SECURITY: ENCRYPTED ARCHIVE"], [],
                     ["Date", "Title", "Category", "Method", "Type", "Amount", "Status"]
                 ];
-                dataToExport.forEach((e: any) => worksheetData.push([new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.toUpperCase(), e.amount, e.status]));
+                dataToExport.forEach((e: any) => worksheetData.push([new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.to (), e.amount, e.status]));
                 
                 const ws = XLSX.utils.aoa_to_sheet(worksheetData);
                 const wb = XLSX.utils.book_new();
@@ -89,8 +89,8 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
 
                 const doc = new jsPDF();
                 doc.setFontSize(22); doc.setTextColor(249, 115, 22); doc.text("VAULT PRO", 14, 20);
-                doc.setFontSize(9); doc.setTextColor(120); doc.text(`ARCHIVE: ${bookName.toUpperCase()} | SECURE PROTOCOL`, 14, 28);
-                const rows = dataToExport.map((e: any) => [new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.toUpperCase(), e.amount.toLocaleString(), e.status]);
+                doc.setFontSize(9); doc.setTextColor(120); doc.text(`ARCHIVE: ${bookName.to ()} | SECURE PROTOCOL`, 14, 28);
+                const rows = dataToExport.map((e: any) => [new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.to (), e.amount.toLocaleString(), e.status]);
                 autoTable(doc, { head: [["DATE", "TITLE", "TAG", "VIA", "TYPE", "AMOUNT", "STATUS"]], body: rows, startY: 40, theme: 'grid' });
                 doc.save(`${bookName}_Archive.pdf`);
             }
@@ -125,8 +125,8 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                             <CloudDownload size={24} strokeWidth={2.5} />
                         </div>
                         <div>
-                            <h2 className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">{t('export_title')}</h2>
-                            <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-1.5 opacity-70 flex items-center gap-2">
+                            <h2 className="text-[12px] font-black text-[var(--text-main)]    leading-none">{t('export_title')}</h2>
+                            <p className="text-[8px] font-bold text-orange-500    mt-1.5 opacity-70 flex items-center gap-2">
                                 <ShieldCheck size={10} /> {t('identity_secured')}
                             </p>
                         </div>
@@ -137,32 +137,32 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                 <div className="flex-1 overflow-y-auto no-scrollbar px-8 py-6 space-y-8">
                     <div className="space-y-4">
                         <div className="flex justify-between items-center mb-1">
-                            <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] ml-1 flex items-center gap-2">
+                            <span className="text-[9px] font-black text-[var(--text-muted)]    ml-1 flex items-center gap-2">
                                 <Calendar size={12} className="text-orange-500/60" /> {t('range_selector')}
                             </span>
                             <div className="flex gap-2 bg-[var(--bg-app)] p-1 rounded-xl border border-[var(--border)]">
                                 {[7, 30, 'all'].map(p => (
-                                    <button key={p} onClick={() => setPreset(p as any)} className="w-12 h-9 flex items-center justify-center rounded-lg text-[9px] font-black uppercase transition-all hover:bg-orange-500/10 active:scale-90 text-orange-500/80 border border-transparent hover:border-orange-500/20">
+                                    <button key={p} onClick={() => setPreset(p as any)} className="w-12 h-9 flex items-center justify-center rounded-lg text-[9px] font-black transition-all hover:bg-orange-500/10 active:scale-90 text-orange-500/80 border border-transparent hover:border-orange-500/20">
                                         {p === 'all' ? 'ALL' : toBn(p, language)}
                                     </button>
                                 ))}
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full h-14 bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl px-5 text-[11px] font-black text-[var(--text-main)] outline-none focus:border-orange-500/50 shadow-inner uppercase" />
-                            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full h-14 bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl px-5 text-[11px] font-black text-[var(--text-main)] outline-none focus:border-orange-500/50 shadow-inner uppercase" />
+                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full h-14 bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl px-5 text-[11px] font-black text-[var(--text-main)] outline-none focus:border-orange-500/50 shadow-inner" />
+                            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full h-14 bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl px-5 text-[11px] font-black text-[var(--text-main)] outline-none focus:border-orange-500/50 shadow-inner" />
                         </div>
                     </div>
 
                     <div className="space-y-4 relative group">
-                        <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] ml-1 flex items-center gap-2">
+                        <span className="text-[9px] font-black text-[var(--text-muted)]    ml-1 flex items-center gap-2">
                             <ListFilter size={12} className="text-orange-500/60" /> {t('filter_class')}
                         </span>
                         <div className="relative">
                             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 pr-10 scroll-smooth">
                                 {categories.map((cat: any) => (
                                     <button key={cat} onClick={() => setSelectedCategory(cat)} 
-                                        className={`whitespace-nowrap px-6 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest border-2 transition-all active:scale-95
+                                        className={`whitespace-nowrap px-6 py-3 rounded-2xl text-[9px] font-black   border-2 transition-all active:scale-95
                                             ${selectedCategory === cat ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/20' : 'bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-muted)] hover:border-orange-500/30'}`}>
                                         {t(`category_${cat.toLowerCase()}`) || cat}
                                     </button>
@@ -175,15 +175,15 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                     </div>
 
                     <div className="space-y-4">
-                        <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px] ml-1 flex items-center gap-2"><Zap size={12} className="text-orange-500" /> {t('format_selection')}</span>
+                        <span className="text-[9px] font-black text-[var(--text-muted)]    ml-1 flex items-center gap-2"><Zap size={12} className="text-orange-500" /> {t('format_selection')}</span>
                         <div className="grid grid-cols-2 gap-4">
                             <button onClick={() => setFormat('pdf')} className={`group relative p-6 rounded-[35px] border-2 transition-all duration-500 flex flex-col items-center gap-3 overflow-hidden ${format === 'pdf' ? 'bg-red-500/5 border-red-500 shadow-xl scale-[1.02]' : 'bg-[var(--bg-app)] border-transparent opacity-40 hover:opacity-100'}`}>
                                 <FileText size={32} className={format === 'pdf' ? 'text-red-500 scale-110' : 'text-[var(--text-muted)]'} />
-                                <span className={`text-[10px] font-black uppercase tracking-[3px] ${format === 'pdf' ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>{t('format_pdf')}</span>
+                                <span className={`text-[10px] font-black    ${format === 'pdf' ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>{t('format_pdf')}</span>
                             </button>
                             <button onClick={() => setFormat('excel')} className={`group relative p-6 rounded-[35px] border-2 transition-all duration-500 flex flex-col items-center gap-3 overflow-hidden ${format === 'excel' ? 'bg-green-500/5 border-green-500 shadow-xl scale-[1.02]' : 'bg-[var(--bg-app)] border-transparent opacity-40 hover:opacity-100'}`}>
                                 <FileSpreadsheet size={32} className={format === 'excel' ? 'text-green-500 scale-110' : 'text-[var(--text-muted)]'} />
-                                <span className={`text-[10px] font-black uppercase tracking-[3px] ${format === 'excel' ? 'text-green-500' : 'text-[var(--text-muted)]'}`}>{t('format_excel')}</span>
+                                <span className={`text-[10px] font-black    ${format === 'excel' ? 'text-green-500' : 'text-[var(--text-muted)]'}`}>{t('format_excel')}</span>
                             </button>
                         </div>
                     </div>
@@ -192,14 +192,14 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                 <div className="p-8 bg-[var(--bg-card)] border-t border-[var(--border)] shrink-0">
                     <div className="flex items-center justify-center gap-3 mb-6 opacity-40">
                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                         <span className="text-[9px] font-black uppercase tracking-[4px] text-[var(--text-main)]">
+                         <span className="text-[9px] font-black    text-[var(--text-main)]">
                             {t('status_ready')}: {toBn(filteredCount, language)} {t('protocols_label')}
                          </span>
                     </div>
 
                     <button 
                         onClick={handleExport} disabled={isExporting || filteredCount === 0} 
-                        className={`w-full h-16 rounded-[30px] font-black text-[12px] uppercase tracking-[6px] shadow-2xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 border-none relative overflow-hidden group
+                        className={`w-full h-16 rounded-[30px] font-black text-[12px]    shadow-2xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 border-none relative overflow-hidden group
                             ${filteredCount === 0 ? 'bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed' : 'bg-orange-500 text-white shadow-orange-500/30'}
                         `}
                     >

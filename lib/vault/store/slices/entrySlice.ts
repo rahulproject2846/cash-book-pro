@@ -3,6 +3,7 @@
 import { getTimestamp } from '@/lib/shared/utils';
 import { identityManager } from '../../core/IdentityManager';
 import { db } from '@/lib/offlineDB';
+import { financeService } from '../../services/FinanceService';
 
 // 📝 ENTRY STATE INTERFACE
 export interface EntryState {
@@ -13,11 +14,14 @@ export interface EntryState {
   entryCategoryFilter: string;
   entrySearchQuery: string;
   processedEntries: any[];
+  isMobileFilterOpen: boolean;
   entryPagination: {
     currentPage: number;
     totalPages: number;
     itemsPerPage: number;
+    totalItems: number;
   };
+  isRefreshing: boolean;
 }
 
 // 📝 ENTRY ACTIONS INTERFACE
@@ -33,8 +37,10 @@ export interface EntryActions {
   setEntrySortConfig: (config: { key: string; direction: 'asc' | 'desc' }) => void;
   setEntryCategoryFilter: (filter: string) => void;
   setEntrySearchQuery: (query: string) => void;
+  setMobileFilterOpen: (open: boolean) => void;
   processEntries: () => void;
   setEntryPage: (page: number) => void;
+  applyFiltersAndSort: () => void;
 }
 
 // 📝 COMBINED ENTRY STORE TYPE
@@ -50,511 +56,42 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
   entryCategoryFilter: 'all',
   entrySearchQuery: '',
   processedEntries: [],
+  isMobileFilterOpen: false,
   entryPagination: {
     currentPage: 1,
     totalPages: 1,
-    itemsPerPage: 10
+    itemsPerPage: 10,
+    totalItems: 0
   },
+  isRefreshing: false,
 
   // 📝 REFRESH ENTRIES
   refreshEntries: async () => {
-    // 🛡️ IDENTITY SYNC: Get userId directly from identityManager
-    const userId = identityManager.getUserId();
-    if (!userId) {
-      console.warn('🚨 [ENTRY SLICE] No userId available, retrying in 100ms...');
-      setTimeout(() => get().refreshEntries(), 100);
-      return;
-    }
-    
-    set({ isRefreshing: true });
-    
-    try {
-      // Get pagination state
-      const pagination = get().entryPagination || { currentPage: 1, itemsPerPage: 15 };
-      const currentPage = Math.max(1, pagination.currentPage || 1);
-      const itemsPerPage = pagination.itemsPerPage || 15;
-      
-      // Get filter state
-      const categoryFilter = get().entryCategoryFilter || 'all';
-      const searchQuery = get().entrySearchQuery || '';
-      const sortConfig = get().entrySortConfig || { key: 'createdAt', direction: 'desc' };
-      
-      // 🆕 ACTIVE FETCH: Get fresh data directly from Dexie
-      const allEntries = await db.entries
-        .where('userId')
-        .equals(String(userId))
-        .and((entry: any) => entry.isDeleted === 0)
-        .reverse()
-        .sortBy('updatedAt');
-      
-      // Update store with fresh data
-      set({ allEntries });
-      
-      // 🎯 STRICT BOOK SCOPING: Get active book and all its identifiers
-      const activeBook = get().activeBook;
-      const activeBookId = activeBook?._id || activeBook?.localId || '';
-      
-      console.log('🔍 [ENTRY SLICE] Filtering entries for book:', activeBookId, 'Found:', allEntries.length);
-      
-      // 🆕 STEP C: Filter entries for UI display ONLY if activeBook exists
-      let entries = [];
-      if (activeBook) {
-        entries = allEntries.filter((entry: any) => {
-          const eBookId = String(entry.bookId || "");
-          const activeBookId = String(activeBook._id || activeBook.localId || "");
-          const activeBookCid = String(activeBook.cid || "");
-          return (eBookId === String(activeBook._id) || 
-                  eBookId === String(activeBook.localId) || 
-                  eBookId === activeBookCid) && entry.isDeleted === 0;
-        });
-        
-        // Apply category filter
-        if (categoryFilter !== 'all') {
-          entries = entries.filter((entry: any) => entry.category === categoryFilter);
-        }
-        
-        // Apply search filter
-        if (searchQuery.trim()) {
-          const searchLower = searchQuery.toLowerCase();
-          entries = entries.filter((entry: any) => 
-            entry.title.toLowerCase().includes(searchLower) ||
-            entry.note.toLowerCase().includes(searchLower) ||
-            entry.category.toLowerCase().includes(searchLower)
-          );
-        }
-        
-        // Apply sorting direction
-        if (sortConfig.direction === 'desc') {
-          entries = entries.reverse();
-        }
-      }
-      
-      // Calculate pagination
-      const totalItems = entries.length;
-      const totalPages = Math.ceil(totalItems / itemsPerPage);
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      const endIndex = startIndex + itemsPerPage;
-      const paginatedEntries = entries.slice(startIndex, endIndex);
-      
-      // Update state
-      set({
-        entries: paginatedEntries,
-        entryPagination: {
-          currentPage,
-          totalPages,
-          itemsPerPage
-        }
-      });
-      
-      // Process entries for UI
-      get().processEntries();
-      
-      // Apply filters and sorting if activeBookId is present
-      if (activeBookId) {
-        get().applyFiltersAndSort();
-      }
-      
-    } catch (error) {
-      console.error('❌ [ENTRY SLICE] Entries refresh failed:', error);
-    } finally {
-      set({ isRefreshing: false });
-    }
+    return await financeService.refreshEntries(get, set);
   },
 
   // 📝 SAVE ENTRY - ZOMBIE LOCK PREVENTION
   saveEntry: async (entryData: any, editTarget?: any, customActionId?: string) => {
-    // 🔍 VALIDATION FIRST - NO LOCK YET
-    const userId = identityManager.getUserId();
-    if (!userId) {
-      console.error('❌ [ENTRY SLICE] Invalid user ID for saveEntry');
-      return { success: false, error: new Error('Invalid user ID') };
-    }
-
-    // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
-    const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
-    if (isSecurityLockdown) {
-      console.warn('🚫 [ENTRY SLICE] Blocked entry save during security lockdown');
-      return { success: false, error: new Error('App in security lockdown') };
-    }
-    
-    // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
-    const actionId = customActionId || `save-entry-${Date.now()}`;
-    if (isGlobalAnimating) {
-      console.warn('🚫 [ENTRY SLICE] Blocked entry save during animation');
-      return { success: false, error: new Error('System busy - animation in progress') };
-    }
-    
-    if (activeActions.includes(actionId)) {
-      console.warn('🚫 [ENTRY SLICE] Blocked duplicate entry save action');
-      return { success: false, error: new Error('Entry save already in progress') };
-    }
-    
-    // ✅ ALL VALIDATIONS PASSED - NOW REGISTER ACTION
-    registerAction(actionId);
-
-    try {
-      const bookId = get().activeBook?._id || get().activeBook?.localId || '';
-      
-      if (bookId) {
-        const currentBook = await db.books.where('_id').equals(bookId).first();
-        if (currentBook && currentBook.isDeleted === 1) {
-          console.warn(`🚫 [ENTRY SLICE] Blocked entry save for deleted book: ${bookId}`);
-          return { success: false, error: new Error('This ledger no longer exists') };
-        }
-      }
-
-      const { generateCID, generateEntryChecksum } = await import('@/lib/offlineDB');
-      const { normalizeRecord } = await import('../../core/VaultUtils');
-      
-      const cidToFind = editTarget?.cid || entryData.cid;
-      const existingRecord = cidToFind ? await db.entries.where('cid').equals(cidToFind).first() : null;
-      const finalLocalId = existingRecord?.localId || editTarget?.localId;
-      
-      const finalAmount = Number(entryData.amount) || 0;
-      const finalDate = entryData.date || new Date().toISOString().split('T')[0];
-      const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category.toUpperCase()} RECORD` : 'GENERAL RECORD');
-
-      // 🎯 UNIQUE VKEY GENERATION - BETTER LOGIC
-      const uniqueVKey = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-
-      const entryPayload = {
-        title: finalTitle,
-        date: finalDate,
-        amount: finalAmount,
-        type: entryData.type || 'expense',
-        category: entryData.category || 'general',
-        paymentMethod: entryData.paymentMethod || 'cash',
-        note: entryData.note || '',
-        time: entryData.time || new Date().toTimeString().split(' ')[0],
-        status: entryData.status || 'completed',
-        isPinned: entryData.isPinned || false,  // ✅ ADDED isPinned FIELD
-        userId: userId,
-        bookId: bookId,
-        bookCid: get().activeBook?.cid || '', // 🆕 CRITICAL: Include book CID for future safety
-        localId: finalLocalId,
-        _id: editTarget?._id || entryData._id,
-        cid: editTarget?.cid || entryData.cid || generateCID(),
-        synced: 0,
-        isDeleted: 0,
-        updatedAt: getTimestamp(),
-        vKey: uniqueVKey,  // ✅ UNIQUE VKEY IMPLEMENTED
-        syncAttempts: 0
-      } as any;
-
-      if (!editTarget?.createdAt) entryPayload.createdAt = getTimestamp();
-
-      const normalized = normalizeRecord(entryPayload, userId);
-      const checksum = await generateEntryChecksum({
-        amount: normalized.amount,
-        date: normalized.date,
-        time: normalized.time || "",
-        title: normalized.title,
-        note: normalized.note || "",
-        category: normalized.category || "",
-        paymentMethod: normalized.paymentMethod || "",
-        type: normalized.type || "",
-        status: normalized.status || ""
-      });
-      
-      normalized.checksum = checksum;
-      
-      // 🔄 INGEST LOCAL MUTATION: Use HydrationController for atomic writes
-      const { HydrationController } = await import('../../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [normalized]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to save entry via HydrationController');
-      }
-      
-      // 🆕 OPTIMISTIC UPDATE: Add to Zustand immediately
-      const currentEntries = get().entries;
-      const newEntry = { ...normalized, localId: result.count || 0 };
-      const updatedEntries = [newEntry, ...currentEntries.filter((e: any) => (e._id || e.localId) !== (newEntry._id || newEntry.localId))];
-      set({ entries: updatedEntries });
-      
-      // 🆕 OPTIMISTIC RE-SORT: Apply filters and sort immediately
-      get().processEntries();
-      
-      // 🆕 SAFE IGNITION: Trigger sync for non-image updates
-      const hasNoImageChange = !entryData.image || !entryData.image.startsWith('cid_');
-      if (hasNoImageChange) {
-        const { orchestrator } = await import('../../core/SyncOrchestrator');
-        orchestrator.triggerSync();
-        console.log(`🚀 [SYNC TRIGGER] Manual sync ignited for TEXT-ONLY entry`);
-      }
-      
-      return { success: true, entry: { ...normalized, localId: result.count || 0 } };
-    } catch (error) {
-      console.error('❌ [ENTRY SLICE] saveEntry failed:', error);
-      return { success: false, error: error as Error };
-    } finally {
-      // 🛡️ SAFE ACTION SHIELD: ALWAYS UNREGISTER ACTION
-      unregisterAction(actionId);
-    }
+    return await financeService.saveEntry(get, set, entryData, editTarget, customActionId);
   },
 
   // 🗑️ DELETE ENTRY - ZOMBIE LOCK PREVENTION
   deleteEntry: async (entry: any, customActionId?: string) => {
-    // 🔍 VALIDATION FIRST - NO LOCK YET
-    const userId = identityManager.getUserId();
-    if (!userId || !entry?.localId) return { success: false };
-    
-    // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
-    const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
-    if (isSecurityLockdown) {
-      console.warn('🚫 [ENTRY SLICE] Blocked entry delete during security lockdown');
-      return { success: false, error: new Error('App in security lockdown') };
-    }
-    
-    // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
-    const actionId = customActionId || 'delete-entry';
-    if (isGlobalAnimating) {
-      console.warn('🚫 [ENTRY SLICE] Blocked entry delete during animation');
-      return { success: false, error: new Error('System busy - animation in progress') };
-    }
-    
-    if (activeActions.includes(actionId)) {
-      console.warn('🚫 [ENTRY SLICE] Blocked duplicate entry delete action');
-      return { success: false, error: new Error('Entry delete already in progress') };
-    }
-    
-    // ✅ ALL VALIDATIONS PASSED - NOW REGISTER ACTION
-    registerAction(actionId);
-
-    try {
-      const { HydrationController } = await import('../../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      const existingEntry = await db.entries.get(Number(entry.localId));
-      const currentVKey = existingEntry?.vKey || 0;
-      
-      // 🎯 UNIQUE VKEY GENERATION - BETTER LOGIC
-      const uniqueVKey = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-      
-      const deletePayload = {
-        ...entry,
-        isDeleted: 1,
-        synced: 0,
-        vKey: uniqueVKey,  // ✅ UNIQUE VKEY IMPLEMENTED
-        updatedAt: getTimestamp()
-      };
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [deletePayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to delete entry via HydrationController');
-      }
-      
-      const parentBookId = entry.bookId;
-      if (parentBookId) {
-        const bookUpdatePayload = {
-          _id: parentBookId,
-          updatedAt: getTimestamp()
-        };
-        await controller.ingestLocalMutation('BOOK', [bookUpdatePayload]);
-      }
-      
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
-      
-      get().refreshEntries();
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ [ENTRY SLICE] deleteEntry failed:', error);
-      return { success: false, error: error as Error };
-    } finally {
-      // 🛡️ SAFE ACTION SHIELD: ALWAYS UNREGISTER ACTION
-      unregisterAction(actionId);
-    }
+    return await financeService.deleteEntry(get, set, entry, customActionId);
   },
 
   // 🔄 RESTORE ENTRY
-  restoreEntry: async (entry: any, customActionId?: string) => {
-    // � VALIDATION FIRST - NO LOCK YET
-    const userId = identityManager.getUserId();
-    if (!userId) return { success: false, error: new Error('User not authenticated') };
-    
-    // ��️ LOCKDOWN GUARD: Block local writes during security breach
-    const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
-    if (isSecurityLockdown) {
-      console.warn('🚫 [ENTRY SLICE] Blocked entry restore during security lockdown');
-      return { success: false, error: new Error('App in security lockdown') };
-    }
-    
-    // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
-    const actionId = customActionId || `restore-entry-${Date.now()}`;
-    if (isGlobalAnimating) {
-      console.warn('🚫 [ENTRY SLICE] Blocked entry restore during animation');
-      return { success: false, error: new Error('System busy - animation in progress') };
-    }
-    
-    if (activeActions.includes(actionId)) {
-      console.warn('🚫 [ENTRY SLICE] Blocked duplicate entry restore action');
-      return { success: false, error: new Error('Entry restore already in progress') };
-    }
-    
-    // ✅ ALL VALIDATIONS PASSED - NOW REGISTER ACTION
-    registerAction(actionId);
+  restoreEntry: async (entry: any) => await financeService.restoreEntry(get, set, entry),
 
-    try {
-      const { HydrationController } = await import('../../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      const existingEntry = await db.entries.get(Number(entry.localId));
-      const currentVKey = existingEntry?.vKey || 0;
-      
-      // 🎯 UNIQUE VKEY GENERATION - BETTER LOGIC
-      const uniqueVKey = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-      
-      const restorePayload = {
-        ...entry,
-        isDeleted: 0,
-        synced: 0,
-        vKey: uniqueVKey,  // ✅ UNIQUE VKEY IMPLEMENTED
-        updatedAt: getTimestamp()
-      };
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [restorePayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to restore entry via HydrationController');
-      }
-      
-      const parentBookId = entry.bookId;
-      if (parentBookId) {
-        const bookUpdatePayload = {
-          _id: parentBookId,
-          updatedAt: getTimestamp()
-        };
-        await controller.ingestLocalMutation('BOOK', [bookUpdatePayload]);
-      }
-      
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
-      
-      get().refreshEntries();
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ [ENTRY SLICE] restoreEntry failed:', error);
-      return { success: false, error: error as Error };
-    } finally {
-      // 🛡️ SAFE ACTION SHIELD: Always unregister action
-      unregisterAction(actionId);
-    }
-  },
-
-  // 🔄 TOGGLE ENTRY STATUS
-  toggleEntryStatus: async (entry: any) => {
-    const userId = identityManager.getUserId();
-    if (!userId) return { success: false, error: new Error('User not authenticated') };
-
-    try {
-      const { HydrationController } = await import('../../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      const newStatus = entry.status === 'completed' ? 'pending' : 'completed';
-      
-      // 🎯 UNIQUE VKEY GENERATION - BETTER LOGIC
-      const uniqueVKey = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-      
-      const statusPayload = {
-        ...entry,
-        status: newStatus,
-        synced: 0,
-        vKey: uniqueVKey,  // ✅ UNIQUE VKEY IMPLEMENTED
-        updatedAt: getTimestamp()
-      };
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [statusPayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update entry status');
-      }
-      
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
-      
-      get().refreshEntries();
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ [ENTRY SLICE] toggleEntryStatus failed:', error);
-      return { success: false, error: error as Error };
-    }
-  },
+  //  TOGGLE ENTRY STATUS
+  toggleEntryStatus: async (entry: any) => await financeService.toggleEntryStatus(get, set, entry),
 
   // 📌 TOGGLE PIN
-  togglePin: async (entry: any) => {
-    const userId = identityManager.getUserId();
-    if (!userId) return { success: false, error: new Error('User not authenticated') };
-
-    try {
-      const { HydrationController } = await import('../../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      const newPinStatus = !entry.isPinned;
-      
-      // 🎯 UNIQUE VKEY GENERATION - BETTER LOGIC
-      const uniqueVKey = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-      
-      const pinPayload = {
-        ...entry,
-        isPinned: newPinStatus,
-        synced: 0,
-        vKey: uniqueVKey,  // ✅ UNIQUE VKEY IMPLEMENTED
-        updatedAt: getTimestamp()
-      };
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [pinPayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update entry pin status');
-      }
-      
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
-      
-      get().refreshEntries();
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ [ENTRY SLICE] togglePin failed:', error);
-      return { success: false, error: error as Error };
-    }
-  },
+  togglePin: async (entry: any) => await financeService.togglePin(get, set, entry),
 
   // 🔄 UPDATE ENTRY
   updateEntry: async (id: string, entryPayload: any) => {
-    const userId = identityManager.getUserId();
-    if (!userId) return { success: false, error: 'User not authenticated' };
-
-    try {
-      const { HydrationController } = await import('../../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      // 🎯 UNIQUE VKEY GENERATION - BETTER LOGIC
-      const uniqueVKey = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-      
-      const updatePayload = {
-        ...entryPayload,
-        vKey: uniqueVKey,  // ✅ UNIQUE VKEY IMPLEMENTED
-        updatedAt: getTimestamp()
-      };
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [updatePayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update entry');
-      }
-      
-      const { orchestrator } = await import('../../core/SyncOrchestrator');
-      orchestrator.triggerSync();
-      
-      get().refreshEntries();
-      
-      return { success: true, entry: updatePayload };
-    } catch (error) {
-      console.error('❌ [ENTRY SLICE] updateEntry failed:', error);
-      return { success: false, error: 'Failed to update entry' };
-    }
+    return await financeService.updateEntry(get, set, id, entryPayload);
   },
 
   // 🎯 UNIFIED ENTRY FILTERING ACTIONS
@@ -573,21 +110,77 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
     get().processEntries();
   },
 
+  setMobileFilterOpen: (open: boolean) => {
+    set({ isMobileFilterOpen: open });
+  },
+
   processEntries: () => {
-    const { entries, entrySortConfig, entryCategoryFilter, entrySearchQuery, allEntries, activeBook } = get();
+    const { entries, entrySortConfig, entryCategoryFilter, entrySearchQuery, allEntries, activeBook, entryPagination } = get();
+    
+    // 🔍 FORENSIC AUDIT: RAM Content Verification
+    console.log('🔍 [FORENSIC AUDIT] allEntries.length:', allEntries.length);
+    if (allEntries.length > 0) {
+      const sampleEntry = allEntries[0];
+      console.log('🔍 [FORENSIC AUDIT] Sample Entry:', {
+        bookId: sampleEntry.bookId,
+        bookIdType: typeof sampleEntry.bookId,
+        bookIdLength: sampleEntry.bookId?.length,
+        bookIdTrimmed: `"${sampleEntry.bookId}"`,
+        userId: sampleEntry.userId,
+        userIdType: typeof sampleEntry.userId
+      });
+    }
+    
+    console.log('🔍 [FORENSIC AUDIT] activeBook:', {
+      _id: activeBook?._id,
+      _idType: typeof activeBook?._id,
+      localId: activeBook?.localId,
+      localIdType: typeof activeBook?.localId,
+      cid: activeBook?.cid,
+      cidType: typeof activeBook?.cid,
+      _idTrimmed: `"${activeBook?._id}"`,
+      localIdTrimmed: `"${activeBook?.localId}"`,
+      cidTrimmed: `"${activeBook?.cid}"`
+    });
     
     // 🆕 TRIPLE-LINK PROTOCOL: Start with all entries and filter by active book
     let processed = [];
     if (activeBook) {
       processed = allEntries.filter((entry: any) => {
         const eBookId = String(entry.bookId || "");
-        return (eBookId === String(activeBook._id) || 
-                eBookId === String(activeBook.localId) || 
-                eBookId === String(activeBook.cid)) && entry.isDeleted === 0;
+        const bId = String(activeBook?._id || "");
+        const bLocalId = String(activeBook?.localId || "");
+        const bCid = String(activeBook?.cid || "");
+
+        // � FORENSIC AUDIT: Strict Comparison Analysis
+        const match1 = eBookId === bId;
+        const match2 = eBookId === bLocalId;
+        const match3 = eBookId === bCid;
+        
+        if (allEntries.indexOf(entry) === 0) { // Only log for first entry
+          console.log('🔍 [FORENSIC AUDIT] Comparison Analysis:', {
+            eBookId: `"${eBookId}"`,
+            bId: `"${bId}"`,
+            bLocalId: `"${bLocalId}"`,
+            bCid: `"${bCid}"`,
+            match1,
+            match2,
+            match3,
+            isMatch: match1 || match2 || match3
+          });
+        }
+
+        // 🛡️ TRIPLE-LINK LAW: Match ANY of the 3 IDs
+        const isMatch = (match1 || match2 || match3);
+        const isNotDeleted = (entry.isDeleted === 0 || entry.isDeleted === undefined || entry.isDeleted === null);
+
+        return isMatch && isNotDeleted;
       });
     } else {
-      processed = [...entries]; // Fallback to already filtered entries if no active book
+      processed = []; // No active book = no entries
     }
+    
+    console.log('🔍 [FORENSIC AUDIT] Final processed.length:', processed.length);
     
     // Apply category filter
     if (entryCategoryFilter !== 'all') {
@@ -616,7 +209,18 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
       }
     });
     
-    set({ processedEntries: processed });
+    // Calculate pagination
+    const totalItems = processed.length;
+    const totalPages = Math.ceil(totalItems / entryPagination.itemsPerPage);
+    
+    set({ 
+      processedEntries: processed,
+      entryPagination: {
+        ...entryPagination,
+        totalItems,
+        totalPages
+      }
+    });
   },
 
   setEntryPage: (page: number) => {
@@ -628,5 +232,9 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
       }
     });
     get().refreshEntries();
+  },
+
+  applyFiltersAndSort: () => {
+    get().processEntries();
   }
 });

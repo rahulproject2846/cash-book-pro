@@ -1,5 +1,5 @@
 "use client";
-import React from 'react';
+import React, { useEffect } from 'react';
 import { 
     LayoutTemplate, Smartphone, Lock, Bell, Moon, 
     Monitor, Zap, ShieldCheck, HelpCircle, Activity 
@@ -11,6 +11,33 @@ import { cn } from '@/lib/utils/helpers';
 
 export const ExperienceModule = ({ preferences, updatePreference }: any) => {
     const { t } = useTranslation();
+
+    // DEBUG: Check if props are being received
+    console.log(' [DEBUG] Prefs ready:', !!preferences, 'Action ready:', !!updatePreference);
+
+    // TURBO/MIDNIGHT MODE HANDLING
+    useEffect(() => {
+        const root = document.documentElement;
+        const body = document.body;
+        
+        // Turbo Mode
+        body.classList.toggle('turbo-active', preferences.turboMode);
+        
+        // Midnight Mode
+        root.classList.toggle('midnight-mode', preferences.isMidnight);
+    }, [preferences.turboMode, preferences.isMidnight]);
+
+    // ATOMIC HANDSHAKE: Dispatch vault update on mode changes
+    useEffect(() => {
+        const dispatchUpdate = async () => {
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('vault-updated', { 
+                    detail: { source: 'ExperienceModule', origin: 'local-mutation' } 
+                }));
+            }
+        };
+        dispatchUpdate();
+    }, [preferences.turboMode, preferences.isMidnight, preferences.compactMode, preferences.autoLock]);
 
     const ToggleItem = ({ active, onClick, icon: Icon, label, ttKey, colorClass }: any) => (
         <Tooltip text={preferences.showTooltips !== false ? t(ttKey) : ""}>

@@ -5,7 +5,7 @@ import { Settings2, Save, Cpu, ShieldCheck, Activity, Wifi } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn, toBn } from '@/lib/utils/helpers';
-import { getVaultStore } from '@/lib/vault/store/storeHelper';
+import { useVaultStore } from '@/lib/vault/store/index';
 
 // Modular Components
 import { HubHeader } from '@/components/Layout/HubHeader';
@@ -14,34 +14,32 @@ import { RegionModule } from './RegionModule';
 import { ExperienceModule } from './ExperienceModule';
 import { SystemMaintenance } from './SystemMaintenance';
 
-export const SettingsSection = ({ currentUser, setCurrentUser }: any) => {
+export const SettingsSection = () => {
     const { t, language } = useTranslation();
     const {
         categories, currency, preferences, dbStats,
         isLoading, isCleaning,
         addCategory, removeCategory, updatePreference, updateCurrency, clearLocalCache
-    } = useSettings(currentUser, setCurrentUser);
+    } = useSettings();
 
-    const [lastSynced, setLastSynced] = useState<string>('');
+    const { lastSyncedAt } = useVaultStore();
+
     const [newCat, setNewCat] = useState('');
     const [limitBuffer, setLimitBuffer] = useState(preferences?.expenseLimit || 0);
+    const [lastSynced, setLastSynced] = useState<string>('');
 
-    // Sync heartbeat effect
     useEffect(() => {
-        const store = getVaultStore();
-        const lastSync = store.lastSyncedAt;
-        if (lastSync) {
-            const time = new Date(lastSync).toLocaleTimeString('en-US', { 
+        if (lastSyncedAt) {
+            const time = new Date(lastSyncedAt).toLocaleTimeString('en-US', { 
                 hour: '2-digit', 
                 minute: '2-digit' 
             });
             setLastSynced(time);
         }
-    }, []);
+    }, [lastSyncedAt]);
 
-    // preferences আপডেট হলে লিমিট বাফার সিঙ্ক করা
     useEffect(() => {
-        if (preferences?.expenseLimit) setLimitBuffer(preferences.expenseLimit);
+        setLimitBuffer(preferences?.expenseLimit || 0);
     }, [preferences?.expenseLimit]);
 
     const saveLimit = () => {

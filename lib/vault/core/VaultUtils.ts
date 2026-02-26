@@ -265,8 +265,8 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
 
     // Generate required fields if missing
     if (!normalized.vKey) {
-        // 🔥 UNIFIED VKEY STRATEGY: Use getTimestamp() for absolute and incremental versioning
-        normalized.vKey = getTimestamp();
+        // 🎯 RIGID SEQUENTIAL VKEY: New Create = 1, Update = existing + 1
+        normalized.vKey = 1; // Always start new records at vKey: 1
     }
     
     if (!normalized.checksum) {

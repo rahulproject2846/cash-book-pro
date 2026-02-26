@@ -5,13 +5,19 @@ import { normalizeRecord, normalizeTimestamp } from '../../core/VaultUtils';
 import { validateBook, validateEntry } from '../../core/schemas';
 import { telemetry } from '../../Telemetry';
 import { getVaultStore } from '../../store/storeHelper';
-import type { HydrationResult } from '../engine/types';
+import { identityManager } from '../../core/IdentityManager';
+
+// 🛡️ API PATH MAPPING - Prevent pluralization typos
+const API_PATH_MAP: Record<string, string> = {
+  'BOOK': 'books',
+  'ENTRY': 'entries',
+  'USER': 'user/profile'
+};
 
 /**
  * 🎯 SNIPER SLICE - Single Item Hydration
  * 
  * Handles precise single-item fetching and processing
- * Used for on-demand hydration of specific books/entries
  */
 export class SniperSlice {
   private userId: string = '';
@@ -50,7 +56,7 @@ export class SniperSlice {
       console.log(`🧹 [SNIPER SLICE] Processing ${type} for user ${this.userId}`);
 
       // 🔄 FETCH SINGLE ITEM: Get specific item from server
-      const response = await fetch(`/api/${type.toLowerCase()}s/${id}`);
+      const response = await fetch(`/api/${API_PATH_MAP[type]}/${id}`);
       if (!response.ok) {
         if (response.status === 404) {
           console.info('👻 [SNIPER] Item gone from server, silencing ghost.');

@@ -49,7 +49,7 @@ export const Tooltip = ({ text, children, position = 'top', className }: Tooltip
                         exit={{ opacity: 0, scale: 0.9, y: position === 'top' ? 8 : -8 }}
                         transition={{ type: "spring", stiffness: 400, damping: 25 }}
                         className={cn(
-                            "absolute z-[var(--z-modal)] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white whitespace-nowrap apple-card bg-black/80 backdrop-blur-md pointer-events-none shadow-2xl",
+                            "absolute z-[var(--z-modal)] px-3 py-1.5 text-[10px] font-black     text-white whitespace-nowrap apple-card bg-black/80 backdrop-blur-md pointer-events-none shadow-2xl",
                             positionClasses[position]
                         )}
                     >

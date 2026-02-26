@@ -54,7 +54,7 @@ export const GovernanceModule = ({
                             <div className="p-3 bg-orange-500/10 rounded-[20px] text-orange-500 border border-orange-500/20">
                                 <Tag size={22} strokeWidth={2.5} />
                             </div>
-                            <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic">
+                            <h4 className="text-base font-black text-[var(--text-main)]       ">
                                 {t('registry_tags') || "REGISTRY TAGS"}
                             </h4>
                         </div>
@@ -65,7 +65,7 @@ export const GovernanceModule = ({
                             <input 
                                 onFocus={() => setIsFocused('tag')}
                                 onBlur={() => setIsFocused(null)}
-                                className="w-full h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[22px] px-6 text-[12px] font-black uppercase tracking-widest outline-none focus:border-orange-500/50 transition-all placeholder:text-[var(--text-muted)]/10 text-[var(--text-main)]" 
+                                className="w-full h-14 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[22px] px-6 text-[12px] font-black     outline-none focus:border-orange-500/50 transition-all placeholder:text-[var(--text-muted)]/10 text-[var(--text-main)]" 
                                 placeholder={t('placeholder_new_tag')} 
                                 value={newCat}
                                 onChange={(e) => setNewCat(e.target.value)}
@@ -95,7 +95,7 @@ export const GovernanceModule = ({
                                     layout key={cat} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
                                     className="flex items-center gap-3 bg-[var(--bg-app)] border border-[var(--border)] px-4 py-2.5 rounded-2xl shrink-0 hover:border-orange-500/30 transition-all cursor-default group/tag"
                                 >
-                                    <span className="text-[10px] font-black uppercase text-[var(--text-muted)] group-hover/tag:text-orange-500 tracking-wider">
+                                    <span className="text-[10px] font-black   text-[var(--text-muted)] group-hover/tag:text-orange-500  ">
                                         {cat}
                                     </span>
                                     <button onClick={() => confirmDeleteTag(cat)} className="text-[var(--text-muted)] hover:text-red-500 transition-colors">
@@ -113,7 +113,7 @@ export const GovernanceModule = ({
                         <div className="p-3 bg-red-500/10 rounded-[20px] text-red-500 border border-red-500/20">
                             <ShieldAlert size={22} strokeWidth={2.5} />
                         </div>
-                        <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic">
+                        <h4 className="text-base font-black text-[var(--text-main)]       ">
                             {t('expense_threshold') || "EXPENSE THRESHOLD"}
                         </h4>
                     </div>
@@ -134,7 +134,7 @@ export const GovernanceModule = ({
                                 placeholder="0000"
                             />
                             <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
-                                <span className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-[3px] opacity-30">
+                                <span className="text-[8px] font-black text-[var(--text-muted)]      opacity-30">
                                     {t('label_monthly_cap') || "PROTOCOL LIMIT"}
                                 </span>
                             </div>
@@ -155,7 +155,7 @@ export const GovernanceModule = ({
                     <AnimatePresence>
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 px-2 mt-2">
                             <BadgeCheck size={12} className="text-green-500 opacity-40" />
-                            <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] opacity-40">
+                            <p className="text-[9px] font-bold text-[var(--text-muted)]      opacity-40">
                                 Current Active Registry Cap: <span className="text-[var(--text-main)]">{toBn(limitBuffer, language)}</span>
                             </p>
                         </motion.div>

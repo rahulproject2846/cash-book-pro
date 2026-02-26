@@ -189,7 +189,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
             <div className="absolute top-6 left-8 z-10">
                 <Tooltip text={t('tt_integrity_score') || "System Integrity Measurement"}>
                     <div className="flex flex-col items-start gap-1.5 cursor-help">
-                        <span className="text-[8px] font-black uppercase tracking-[3px] text-[var(--text-muted)] opacity-40">
+                        <span className="text-[8px] font-black    text-[var(--text-muted)] opacity-40">
                             {t('label_integrity') || "INTEGRITY"}
                         </span>
                         <div className="flex items-center gap-2 bg-[var(--bg-app)] px-2.5 py-1 rounded-lg border border-[var(--border)] shadow-inner">
@@ -198,7 +198,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                                 healthScore >= 75 ? "bg-green-500" : "bg-orange-500"
                             )} />
                             <span className={cn(
-                                "text-[11px] font-black font-mono tracking-tighter",
+                                "text-[11px] font-black font-mono",
                                 healthScore >= 75 ? "text-green-500" : "text-orange-500"
                             )}>
                                 {toBn(healthScore, language)}%
@@ -240,7 +240,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                     {profileImage.type === 'uploading' && (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[var(--bg-app)] to-[var(--border)] relative">
                             <Loader2 size={48} className="text-orange-500 animate-spin mb-2" />
-                            <span className="text-xs font-bold text-orange-500 uppercase tracking-wider">
+                            <span className="text-xs font-bold text-orange-500  ">
                                 {profileImage.text}
                             </span>
                             {profileImage.progress && profileImage.progress > 0 && (
@@ -275,7 +275,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                     {profileImage.type === 'placeholder' && (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[var(--bg-app)] to-[var(--border)]">
                             <User size={72} strokeWidth={1} className="text-[var(--text-muted)] opacity-10" />
-                            <span className="text-3xl font-black text-orange-500/10 italic uppercase mt-2">
+                            <span className="text-3xl font-black text-orange-500/10 mt-2">
                                 {formData.name?.charAt(0)}
                             </span>
                         </div>
@@ -341,7 +341,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
             <div className="mt-16 relative z-10 w-full space-y-4">
                 <div className="flex items-center justify-center gap-3">
                     <Tooltip text={t('tt_display_identity') || "System Registered Username"}>
-                        <h3 className="text-3xl font-black text-[var(--text-main)] uppercase italic tracking-tighter leading-none truncate max-w-[85%] group-hover:text-orange-500 transition-colors cursor-help">
+                        <h3 className="text-3xl font-black text-[var(--text-main)] leading-none truncate max-w-[85%] group-hover:text-orange-500 transition-colors cursor-help">
                             {formData.name}
                         </h3>
                     </Tooltip>
@@ -352,7 +352,7 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                     )}
                 </div>
                 
-                <p className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-[3px] opacity-40 select-all font-mono">
+                <p className="text-[11px] font-bold text-[var(--text-muted)]    opacity-40 select-all font-mono">
                     {currentUser?.email}
                 </p>
                 
@@ -363,8 +363,8 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                             <div className="px-6 py-3 rounded-[22px] bg-blue-500/5 border border-blue-500/10 text-blue-400 flex items-center gap-4 shadow-inner group/badge hover:border-blue-500/30 transition-all duration-500 cursor-help">
                                 <div className="p-2 bg-blue-500/10 rounded-xl group-hover/badge:scale-110 transition-transform"><Chrome size={18} strokeWidth={2.5} /></div>
                                 <div className="text-left">
-                                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">{t('label_google_verified') || "GOOGLE VERIFIED"}</p>
-                                    <p className="text-[8px] font-bold uppercase opacity-40 mt-2 tracking-wider">{t('identity_secured')}</p>
+                                    <p className="text-[10px] font-black   leading-none">{t('label_google_verified') || "GOOGLE VERIFIED"}</p>
+                                    <p className="text-[8px] font-bold opacity-40 mt-2  ">{t('identity_secured')}</p>
                                 </div>
                             </div>
                         </Tooltip>
@@ -373,8 +373,8 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                             <div className="px-6 py-3 rounded-[22px] bg-orange-500/5 border border-orange-500/10 text-orange-500 flex items-center gap-4 group/badge hover:border-orange-500/30 transition-all duration-500 cursor-help">
                                 <div className="p-2 bg-orange-500/10 rounded-xl group-hover/badge:scale-110 transition-transform"><MailCheck size={18} strokeWidth={2.5} /></div>
                                 <div className="text-left">
-                                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">{t('label_standard_identity') || "VAULT IDENTITY"}</p>
-                                    <p className="text-[8px] font-bold uppercase opacity-40 mt-2 tracking-wider">{t('email_auth_active')}</p>
+                                    <p className="text-[10px] font-black   leading-none">{t('label_standard_identity') || "VAULT IDENTITY"}</p>
+                                    <p className="text-[8px] font-bold opacity-40 mt-2  ">{t('email_auth_active')}</p>
                                 </div>
                             </div>
                         </Tooltip>
@@ -385,20 +385,20 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                 <div className="mt-8 grid grid-cols-2 gap-4 w-full">
                     <Tooltip text={t('tt_network_status') || "Live Connection Monitor"}>
                         <div className="p-5 rounded-[30px] bg-[var(--bg-app)] border border-[var(--border)] group/item hover:border-orange-500/30 transition-all cursor-help">
-                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase mb-2 opacity-40 tracking-[3px]">{t('label_connection')}</p>
+                            <p className="text-[8px] font-black text-[var(--text-muted)] mb-2 opacity-40   ">{t('label_connection')}</p>
                             <div className="flex items-center justify-center gap-2 text-green-500">
                                 <Activity size={14} className="animate-pulse" />
-                                <span className="text-[11px] font-black uppercase tracking-[2px]">{t('label_status_stable') || "STABLE"}</span>
+                                <span className="text-[11px] font-black   ">{t('label_status_stable') || "STABLE"}</span>
                             </div>
                         </div>
                     </Tooltip>
 
                     <Tooltip text={t('tt_access_rank') || "Permission Tier Level"}>
                         <div className="p-5 rounded-[30px] bg-[var(--bg-app)] border border-[var(--border)] group/item hover:border-orange-500/30 transition-all cursor-help">
-                            <p className="text-[8px] font-black text-[var(--text-muted)] uppercase mb-2 opacity-40 tracking-[3px]">{t('label_hierarchy')}</p>
+                            <p className="text-[8px] font-black text-[var(--text-muted)] mb-2 opacity-40   ">{t('label_hierarchy')}</p>
                             <div className="flex items-center justify-center gap-2 text-orange-500">
                                 <Zap size={14} fill="currentColor" strokeWidth={0} />
-                                <span className="text-[11px] font-black uppercase tracking-[2px]">{t('label_rank_master') || "MASTER"}</span>
+                                <span className="text-[11px] font-black   ">{t('label_rank_master') || "MASTER"}</span>
                             </div>
                         </div>
                     </Tooltip>
@@ -413,8 +413,8 @@ export const IdentityHero = ({ formData, handleImageProcess, setForm, currentUse
                     <div className="h-px w-10 bg-current" />
                 </div>
                 <Tooltip text={t('tt_node_serial') || "Unique System Node Identity"}>
-                    <p className="text-[9px] font-mono font-bold tracking-[8px] uppercase cursor-help">
-                        NODE-{String(currentUser?._id).slice(-8).toUpperCase()}
+                    <p className="text-[9px] font-mono font-bold   cursor-help">
+                        NODE-{String(currentUser?._id).slice(-8)}
                     </p>
                 </Tooltip>
             </div>

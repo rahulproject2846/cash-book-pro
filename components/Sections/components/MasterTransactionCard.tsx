@@ -32,17 +32,17 @@ export const MasterTransactionCard = ({ e, currencySymbol, onEdit, onDelete, onT
                     <div className="p-1.5 bg-[var(--bg-app)] rounded-lg text-[var(--text-muted)] shrink-0">
                         <Calendar size={12} />
                     </div>
-                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] whitespace-nowrap">
-                        <span>{new Date(e.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}</span>
+                    <div className="flex items-center gap-2 text-[9px] font-black   text-[var(--text-muted)] whitespace-nowrap">
+                        <span>{new Date(e.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                         <span className="opacity-20">•</span>
                         <span className="text-orange-500/60 flex items-center gap-0.5">
-                            # {t('label_ref') || "REF"}: {String(e.localId || e._id).slice(-4).toUpperCase()}
+                            # {t('label_ref') || "REF"}: {String(e.localId || e._id).slice(-4)}
                         </span>
                     </div>
                 </div>
                 <div className="px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-full shrink-0">
-                    <span className="text-[8px] font-black uppercase tracking-[2px] text-orange-500">
-                        {e.category ? e.category.toUpperCase() : t('category_general')}
+                    <span className="text-[8px] font-black    text-orange-500">
+                        {e.category ? e.category : t('category_general')}
                     </span>
                 </div>
             </div>
@@ -50,22 +50,22 @@ export const MasterTransactionCard = ({ e, currencySymbol, onEdit, onDelete, onT
             {/* 2. Middle Body: Title & Inline Note */}
             <div className="flex justify-between items-start gap-[var(--app-gap,1rem)]">
                 <div className="flex-1 min-w-0">
-                    <h4 className="text-xl font-black uppercase italic tracking-tighter text-[var(--text-main)] leading-none truncate">
+                    <h4 className="text-xl font-black   text-[var(--text-main)] leading-none truncate">
                         {e.title}
                     </h4>
                     <div className="mt-2.5 flex items-center gap-1.5 opacity-40">
-                        <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] truncate max-w-[180px]">
+                        <span className="text-[9px] font-bold text-[var(--text-muted)]    truncate max-w-[180px]">
                             {e.note ? `# ${t('label_note') || "NOTE"}: "${e.note}"` : `# ${t('no_memo') || "NO PROTOCOL MEMO"}`}
                         </span>
                     </div>
                 </div>
 
                 <div className="text-right shrink-0">
-                    <div className={`text-2xl font-mono-finance font-bold tracking-tighter leading-none ${isIncome ? 'text-green-500' : 'text-red-500'}`}>
+                    <div className={`text-2xl font-mono-finance font-bold leading-none ${isIncome ? 'text-green-500' : 'text-red-500'}`}>
                         {isIncome ? '+' : '-'}{currencySymbol}{e.amount.toLocaleString()}
                     </div>
                     {e.time && (
-                        <p className="text-[8px] font-black text-[var(--text-muted)] opacity-30 uppercase tracking-widest mt-1">
+                        <p className="text-[8px] font-black text-[var(--text-muted)] opacity-30   mt-1">
                             {t('label_at') || "AT"} {e.time}
                         </p>
                     )}
@@ -77,7 +77,7 @@ export const MasterTransactionCard = ({ e, currencySymbol, onEdit, onDelete, onT
                 <Tooltip text={t('tt_toggle_status') || "Change status"}>
                     <button 
                         onClick={() => onToggleStatus && onToggleStatus(e)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-[9px] font-black uppercase tracking-[3px] transition-all active:scale-95 
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-[9px] font-black    transition-all active:scale-95 
                             ${isCompleted 
                                 ? 'bg-green-500/10 text-green-500 border-green-500/20 shadow-lg shadow-green-500/5' 
                                 : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-lg shadow-yellow-500/5'}`}

@@ -120,7 +120,8 @@ export class BulkSlice {
     try {
       console.log('📝 [BULK SLICE] Fetching entries from server...');
       
-      const response = await fetch(`/api/entries?userId=${encodeURIComponent(this.userId)}&limit=5000`);
+      // 🚀 FORCE FULL HYDRATION: Use /api/entries/all with since=0 for complete data
+      const response = await fetch(`/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=5000&since=0`);
       if (!response.ok) {
         throw new Error(`Failed to fetch entries: ${response.statusText}`);
       }

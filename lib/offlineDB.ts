@@ -193,7 +193,7 @@ export const generateCID = () => {
         const v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
       });
-  return `cid_${uuid}`;
+  return `cid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${uuid}`;
 };
 
 // --- ৩. ডাটাবেজ কনফিগারেশন ---

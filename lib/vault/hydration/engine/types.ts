@@ -27,6 +27,11 @@ export interface CommitOperation {
   operation: 'bulkPut' | 'put' | 'update' | 'bulkUpdate' | 'delete';
 }
 
+export interface BatchCommitOperation {
+  type: 'BOOK' | 'ENTRY' | 'USER';
+  records: any[];
+}
+
 export interface ValidationConfig {
   strict: boolean;
   allowPartial: boolean;

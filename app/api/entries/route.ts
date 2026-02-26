@@ -48,9 +48,19 @@ export async function GET(req: Request) {
         query.updatedAt = { $gt: new Date(Number(since)) };
     }
 
-    const entries = await Entry.find(query)
-        .sort({ updatedAt: -1 })
-        .lean();
+    // 🔥 APPLE STANDARD EGRESS FILTER: Unique result set guarantee
+    const entries = await Entry.aggregate([
+        { $match: query }, // আপনার ফিল্টার (userId, isDeleted: false)
+        { $sort: { updatedAt: -1, createdAt: -1 } }, // লেটেস্ট ডাটা সবার উপরে
+        { 
+            $group: { 
+                _id: "$cid", // প্রতিটি CID-র জন্য একটি গ্রুপ
+                doc: { $first: "$$ROOT" } // গ্রুপ থেকে শুধু প্রথম (সবচেয়ে নতুন) ডকুমেন্টটি নাও
+            } 
+        },
+        { $replaceRoot: { newRoot: "$doc" } }, // গ্রুপের স্ট্রাকচার ভেঙ্গে অরিজিনাল মডেলে ফেরাও
+        { $sort: { updatedAt: -1 } } // ফাইনাল ইউআই সর্টিং
+    ]);
 
     return NextResponse.json({ 
         success: true, 
@@ -72,9 +82,6 @@ export async function POST(req: Request) {
     const data = await req.json();
     const { cid, bookId, userId, amount, date, title, category, checksum, vKey } = data;
 
-    // 🔥 API LOGGING: Show received payload for debugging
-    console.log('📦 [API-ENTRIES] Received Payload:', JSON.stringify(data));
-
     if (!bookId || !userId || amount === undefined || !date || !checksum) {
         return NextResponse.json({ message: "Solidarity fields missing" }, { status: 400 });
     }
@@ -88,30 +95,53 @@ export async function POST(req: Request) {
         return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
 
-    // ডুপ্লিকেট প্রোটেকশন
+    // � GOOGLE/PAYPAL LEVEL IDEMPOTENCY: Atomic check + insert in single operation
     if (cid) {
-        const existing = await Entry.findOne({ cid }).select('_id cid');
-        if (existing) {
+        // 🚀 ATOMIC OPERATION: findOneAndUpdate prevents race conditions
+        const idempotentRecord = await Entry.findOneAndUpdate(
+            { cid: cid }, // Filter: Check if same CID exists
+            { 
+                $setOnInsert: {
+                    ...data,
+                    title: title?.trim() || `${category || 'GENERAL'} RECORD`,
+                    date: date,
+                    status: String(data.status || 'completed'),
+                    type: String(data.type || 'expense'),
+                    category: String(data.category || 'general'),
+                    paymentMethod: String(data.paymentMethod || 'cash'),
+                    vKey: vKey || 1,
+                    checksum: checksum,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                }
+            }, // Only insert this data if new
+            { 
+                upsert: true, // Create if not exists, don't update if exists
+                new: true, // Always return latest data
+                setDefaultsOnInsert: true,
+                lean: true 
+            }
+        );
+
+        // 🚨 DUPLICATE DETECTION: If record existed before this request
+        // isNew = true only when record was just created (createdAt === updatedAt)
+        const isNew = Number(idempotentRecord.createdAt) === Number(idempotentRecord.updatedAt);
+
+        if (!isNew) {
+            // 🔄 IDEMPOTENCY TRIGGER: Return existing record, prevent duplicate creation
             return NextResponse.json({ 
                 success: true, 
-                entry: existing,
-                isActive: true,
-                message: "Duplicate prevented" 
-            }, { status: 409 });
+                entry: idempotentRecord,
+                message: "Idempotency trigger: Duplicate prevented, returning existing record." 
+            }, { status: 200 }); 
         }
-    }
-
-    // 🔥 SERVER-SIDE DEDUPLICATION: Additional CID check before creation
-    if (cid) {
-      const existingByCid = await Entry.findOne({ cid });
-      if (existingByCid) {
+        
+        // 🆕 NEW RECORD: Continue with normal flow for newly created records
         return NextResponse.json({ 
             success: true, 
-            entry: existingByCid,
-            isActive: true,
-            message: "CID match found" 
-        }, { status: 200 });
-      }
+            entry: idempotentRecord,
+            isActive: true 
+        }, { status: 201 });
     }
 
     // Logic C: SHA-256 Checksum Validation (Enhanced with all 8 fields)
@@ -167,7 +197,6 @@ export async function POST(req: Request) {
     }, { status: 201 });
 
   } catch (error: any) { 
-    console.error('❌ [API-ENTRIES-POST] Error:', error.message);
     return NextResponse.json({ message: error.message || "Sync Engine Error" }, { status: 500 }); 
   }
 }

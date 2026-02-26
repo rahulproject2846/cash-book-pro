@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -36,6 +36,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
         <motion.div 
             initial={false}
             animate={{ width: collapsed ? 90 : 280 }}
+            transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
             className={cn(
                 "hidden md:flex flex-col h-screen fixed left-0 top-0", 
                 // Optimization: Reduced blur for faster rendering
@@ -58,7 +59,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
                 <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-[18px] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-orange-500/30">V</div>
                     {!collapsed && (
-                        <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xl font-black uppercase italic text-[var(--text-main)] tracking-tighter">
+                        <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }} className="text-xl font-black     text-[var(--text-main)]">
                             {t('vault_pro_split_1')}<span className="text-orange-500">{t('vault_pro_split_2')}</span>
                         </motion.h1>
                     )}
@@ -83,7 +84,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
                             )}
                         >
                             <item.icon size={isCompact ? 18 : 22} strokeWidth={isActive ? 2.5 : 2} />
-                            {!collapsed && <span className="text-[11px] font-black uppercase tracking-[3px]">{t(item.name)}</span>}
+                            {!collapsed && <span className="text-[11px] font-black     ">{t(item.name)}</span>}
                             {isActive && collapsed && <div className="absolute left-2 w-1 h-6 bg-white rounded-full opacity-50" />}
                         </button>
                     );
@@ -94,7 +95,7 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
             <div className="p-6 border-t border-[var(--border)]">
                 <button onClick={onLogout} className={cn("flex items-center h-12 text-red-500 hover:bg-red-500/10 rounded-2xl transition-all", collapsed ? "justify-center" : "px-4 gap-4 w-full")}>
                     <LogOut size={20} strokeWidth={2.5} /> 
-                    {!collapsed && <span className="text-[10px] font-black uppercase tracking-widest">{t('nav_signout')}</span>}
+                    {!collapsed && <span className="text-[10px] font-black    ">{t('nav_signout')}</span>}
                 </button>
             </div>
         </motion.div>
@@ -102,20 +103,24 @@ const Sidebar = ({ active, setActive, onLogout, collapsed, setCollapsed, onReset
 };
 
 // --- 2. Mobile Bottom Nav (Optimized Rendering) ---
-const BottomNav = ({ active, setActive, onFabClick, onResetBook, fabTooltip }: any) => {
+const BottomNav = ({ active, setActive, onFabClick, onResetBook, fabTooltip, mainContainerRef }: any) => {
     const [isVisible, setIsVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
     const { t } = useTranslation();
 
     useEffect(() => {
         const handleScroll = () => {
-            const current = window.scrollY;
+            const current = mainContainerRef?.current?.scrollTop || 0;
             setIsVisible(current < lastScrollY || current < 50);
             setLastScrollY(current);
         };
-        window.addEventListener('scroll', handleScroll, { passive: true });
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, [lastScrollY]);
+        
+        const container = mainContainerRef?.current;
+        if (container) {
+            container.addEventListener('scroll', handleScroll, { passive: true });
+            return () => container.removeEventListener('scroll', handleScroll);
+        }
+    }, [lastScrollY, mainContainerRef]);
 
     const NavIcon = ({ id, icon: Icon }: any) => {
         const isActive = active === id;
@@ -138,7 +143,7 @@ const BottomNav = ({ active, setActive, onFabClick, onResetBook, fabTooltip }: a
             {isVisible && (
                 <motion.div 
                     initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
                     className="md:hidden fixed bottom-6 left-4 right-4 z-[900]"
                 >
                     <div className="bg-[var(--bg-card)]/95 backdrop-blur-lg border border-[var(--border)] h-[72px] rounded-[35px] shadow-2xl flex items-center justify-between px-6 relative">
@@ -175,24 +180,14 @@ export const DashboardLayout = (props: any) => {
     const [collapsed, setCollapsed] = useState(false);
     const [isShielded, setIsShielded] = useState(false);
     const { theme, setTheme } = useTheme();
-    const [mounted, setMounted] = useState(false);
+    const mainContainerRef = useRef<HTMLElement>(null);
     const router = useRouter();
     const { openModal } = useModal();
 
-    const { activeSection, setActiveSection, activeBook, setActiveBook } = useVaultState();
-
-    const [currentUser, setCurrentUser] = useState<any>(null);
-    useEffect(() => {
-        try {
-            const savedUser = localStorage.getItem('cashbookUser');
-            if (savedUser) setCurrentUser(JSON.parse(savedUser));
-        } catch {
-            setCurrentUser(null);
-        }
-    }, []);
-
-    const prefs = currentUser?.preferences || {};
+    const { activeSection, setActiveSection, activeBook, setActiveBook, preferences } = useVaultState();
     const { t } = useTranslation();
+
+    const prefs = preferences || {};
 
     // Generate context-aware tooltip text
     const getFabTooltip = () => {
@@ -250,8 +245,6 @@ export const DashboardLayout = (props: any) => {
         }
     }, [prefs.isMidnight, prefs.compactMode, prefs.autoLock, theme, setTheme]);
 
-    useEffect(() => setMounted(true), []);
-    
     // Initialize ConflictBackgroundService to keep timers alive across sessions
     useEffect(() => {
         ConflictBackgroundService.getInstance().restoreFromStorage();
@@ -261,12 +254,10 @@ export const DashboardLayout = (props: any) => {
             (window as any).mediaStore.getState().processQueue();
         }
     }, []);
-    
-    if (!mounted) return null;
 
     return (
         <div 
-            className="h-screen" 
+            className="h-screen bg-[var(--bg-app)]" 
             style={{ 
                 display: 'grid', 
                 gridTemplateColumns: collapsed ? '90px 1fr' : '280px 1fr',
@@ -294,6 +285,7 @@ export const DashboardLayout = (props: any) => {
             
             {/* Main Content Area */}
             <main 
+                ref={mainContainerRef}
                 style={{ gridArea: 'main' }} 
                 className="overflow-y-auto custom-scrollbar h-full relative bg-[var(--bg-app)]"
             >
@@ -303,7 +295,8 @@ export const DashboardLayout = (props: any) => {
                     setActive={setActiveSection} 
                     onFabClick={handleFabClick} 
                     onResetBook={handleBack} 
-                    fabTooltip={getFabTooltip()} 
+                    fabTooltip={getFabTooltip()}
+                    mainContainerRef={mainContainerRef}
                 />
                 
                 {children}
@@ -316,13 +309,13 @@ export const DashboardLayout = (props: any) => {
                         initial={{ opacity: 0 }} 
                         animate={{ opacity: 1 }} 
                         exit={{ opacity: 0 }} 
-                        className="fixed inset-0 z-[10000] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-10 text-center text-white"
+                        className="fixed inset-0 z-10000 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-10 text-center text-white"
                     >
-                        <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="w-24 h-24 bg-orange-500 rounded-[35px] flex items-center justify-center mb-8">
+                        <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }} className="w-24 h-24 bg-orange-500 rounded-[35px] flex items-center justify-center mb-8">
                             <Fingerprint size={56} strokeWidth={2} />
                         </motion.div>
-                        <h2 className="text-3xl font-black uppercase italic tracking-tighter">{t('session_shield')}</h2>
-                        <p className="text-[10px] font-bold text-white/40 uppercase tracking-[4px] mt-4 flex items-center gap-2">
+                        <h2 className="text-3xl font-black  ">{t('session_shield')}</h2>
+                        <p className="text-[10px] font-bold text-white/40    mt-4 flex items-center gap-2">
                             <ShieldCheck size={12} /> {t('protocol_locked')}
                         </p>
                     </motion.div>

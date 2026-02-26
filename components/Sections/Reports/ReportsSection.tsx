@@ -71,14 +71,14 @@ export const ReportsSection = ({ currentUser }: any) => {
 
         const catMap = new Map();
         filtered.filter(e => e.type.toLowerCase() === 'expense').forEach(e => {
-            const cat = (e.category || 'GENERAL').toUpperCase();
+            const cat = (e.category || 'GENERAL').to ();
             if (!catMap.has(cat)) catMap.set(cat, { name: cat, value: 0 });
             catMap.get(cat).value += e.amount;
         });
 
         const viaMap: { [key: string]: number } = { CASH: 0, BANK: 0 };
         filtered.filter(e => e.type.toLowerCase() === 'expense').forEach(e => {
-            const method = (e.paymentMethod || 'CASH').toUpperCase();
+            const method = (e.paymentMethod || 'CASH').to ();
             if (viaMap.hasOwnProperty(method)) viaMap[method] += e.amount;
         });
 
@@ -94,7 +94,7 @@ export const ReportsSection = ({ currentUser }: any) => {
     if (loading) return (
         <div className="flex flex-col items-center justify-center h-[60vh] gap-6">
             <Loader2 className="animate-spin text-orange-500" size={48} />
-            <span className="text-[10px] font-black uppercase tracking-[5px] text-orange-500/40">{t('syncing_intel')}</span>
+            <span className="text-[10px] font-black      text-orange-500/40">{t('syncing_intel')}</span>
         </div>
     );
 
@@ -139,11 +139,11 @@ export const ReportsSection = ({ currentUser }: any) => {
                                 <Download size={28} />
                             </div>
                             <div className="text-center lg:text-left">
-                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter italic leading-none">{t('execute_report_title')}</h3>
-                                <p className="text-[10px] md:text-[12px] font-bold text-white/80 uppercase tracking-[2px] mt-3 opacity-80 max-w-xl">{t('execute_report_desc')}</p>
+                                <h3 className="text-2xl md:text-3xl font-black text-white   leading-none">{t('execute_report_title')}</h3>
+                                <p className="text-[10px] md:text-[12px] font-bold text-white/80    mt-3 opacity-80 max-w-xl">{t('execute_report_desc')}</p>
                             </div>
                         </div>
-                        <button onClick={() => setShowExportModal(true)} className="w-full lg:w-auto px-12 h-16 bg-black text-white rounded-[24px] text-[11px] font-black uppercase tracking-[4px] hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-4">
+                        <button onClick={() => setShowExportModal(true)} className="w-full lg:w-auto px-12 h-16 bg-black text-white rounded-[24px] text-[11px] font-black    hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-4">
                             <Fingerprint size={20} className="text-orange-500" strokeWidth={3} />
                             {t('btn_execute_archive')}
                         </button>

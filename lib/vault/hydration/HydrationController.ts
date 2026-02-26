@@ -340,4 +340,66 @@ export class HydrationController {
       };
     }
   }
+
+  /**
+   * ⚛️ INGEST BATCH MUTATION - Handle multiple atomic operations
+   * 
+   * Processes multiple operations (BOOK + ENTRY) in SINGLE transaction
+   * Dispatches vault-updated event ONLY ONCE at the end
+   */
+  public async ingestBatchMutation(operations: Array<{ type: 'BOOK' | 'ENTRY'; records: any[] }>): Promise<{ success: boolean; error?: string; count?: number }> {
+    try {
+      console.log(`[CONTROLLER] Batch mutation request: ${operations.length} operations | Source: LOCAL_USER_ACTION`);
+      
+      // SECURITY GUARD: Check lockdown state
+      const { isSecurityLockdown, emergencyHydrationStatus } = getVaultStore();
+      if (isSecurityLockdown || emergencyHydrationStatus === 'failed') {
+        console.error('[CONTROLLER] Batch mutation blocked - Security Lockdown/Profile Failure');
+        return { 
+          success: false, 
+          error: 'SECURITY_LOCKDOWN: Batch mutation blocked'
+        };
+      }
+
+      const userId = this.engine.getEngineStatus().userId;
+      if (!userId) {
+        return { 
+          success: false, 
+          error: 'No user ID available for batch mutation'
+        };
+      }
+
+      // 🎯 BATCH COMMIT: All operations in SINGLE atomic transaction
+      const result = await this.engine.commitBatch(operations, 'LOCAL_USER_ACTION');
+      
+      if (result.success) {
+        console.log(`[CONTROLLER] Batch mutation successful: ${result.count} records processed across ${operations.length} operations`);
+        
+        // 🚨 SINGLE EVENT: Fire vault-updated ONLY ONCE for entire batch
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vault-updated', { 
+            detail: { source: 'HydrationController', origin: 'batch-mutation' } 
+          }));
+        }
+        
+        return { 
+          success: true, 
+          count: result.count 
+        };
+      } else {
+        console.error(`[CONTROLLER] Batch mutation failed: ${result.error}`);
+        return { 
+          success: false, 
+          error: result.error 
+        };
+      }
+
+    } catch (error) {
+      console.error('[CONTROLLER] Batch mutation failed:', error);
+      return { 
+        success: false, 
+        error: String(error)
+      };
+    }
+  }
 }

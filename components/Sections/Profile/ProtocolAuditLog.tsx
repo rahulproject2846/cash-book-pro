@@ -65,10 +65,10 @@ export const ProtocolAuditLog = () => {
                         </div>
                     </Tooltip>
                     <div>
-                        <h4 className="text-base font-black text-[var(--text-main)] uppercase tracking-[3px] italic leading-none">
+                        <h4 className="text-base font-black text-[var(--text-main)]        leading-none">
                             {t('audit_log_title') || "SECURITY AUDIT LOG"}
                         </h4>
-                        <p className="text-[8px] font-bold text-orange-500 uppercase tracking-[2px] mt-2 opacity-60">
+                        <p className="text-[8px] font-bold text-orange-500      mt-2 opacity-60">
                             Local Node Activity Feed
                         </p>
                     </div>
@@ -78,7 +78,7 @@ export const ProtocolAuditLog = () => {
                 <Tooltip text={t('tt_monitoring') || "System events are actively recorded"}>
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-xl cursor-help hover:bg-green-500/20 transition-colors">
                         <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                        <span className="text-[8px] font-black uppercase text-green-500 tracking-widest hidden sm:block">MONITORING</span>
+                        <span className="text-[8px] font-black   text-green-500   hidden sm:block">MONITORING</span>
                     </div>
                 </Tooltip>
             </div>
@@ -115,12 +115,12 @@ export const ProtocolAuditLog = () => {
 
                         {/* Event Details */}
                         <div className="flex-1 pt-1.5">
-                            <p className="text-[12px] font-black text-[var(--text-main)] uppercase tracking-widest group-hover/item:text-orange-500 transition-colors cursor-default">
+                            <p className="text-[12px] font-black text-[var(--text-main)]     group-hover/item:text-orange-500 transition-colors cursor-default">
                                 {log.event}
                             </p>
                             <div className="flex items-center gap-2 mt-2 opacity-40">
                                 <Clock size={12} />
-                                <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                <span className="text-[9px] font-bold text-[var(--text-muted)]    ">
                                     {log.time}
                                 </span>
                             </div>
@@ -137,7 +137,7 @@ export const ProtocolAuditLog = () => {
             {/* --- 🔐 FOOTER NOTICE --- */}
             <div className="mt-14 pt-6 border-t border-[var(--border)]/50 opacity-30 group-hover:opacity-60 flex items-center justify-center gap-3 transition-opacity duration-500">
                 <ShieldCheck size={14} className="text-orange-500" />
-                <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px]">
+                <p className="text-[9px] font-black text-[var(--text-muted)]     ">
                     {t('audit_node_info') || "ONLY VISIBLE ON THIS LOCAL HARDWARE NODE"}
                 </p>
             </div>

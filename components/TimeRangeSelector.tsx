@@ -36,7 +36,7 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
             <div className="md:hidden">
                 <button 
                     onClick={() => setIsOpen(!isOpen)}
-                    className="h-11 w-full px-4 apple-card bg-[var(--bg-card)] border border-[var(--border)] flex items-center justify-between text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all shadow-sm"
+                    className="h-11 w-full px-4 apple-card bg-[var(--bg-card)] border border-[var(--border)] flex items-center justify-between text-[10px] font-black     active:scale-95 transition-all shadow-sm"
                 >
                     <div className="flex items-center gap-3">
                         <Calendar size={16} className="text-orange-500" strokeWidth={2.5} />
@@ -55,7 +55,7 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
                                     key={opt.days} 
                                     onClick={() => { onChange(opt.days); setIsOpen(false); }} 
                                     className={cn(
-                                        "w-full flex items-center justify-between px-5 py-3.5 apple-card text-[10px] font-black uppercase tracking-tight transition-all mb-1 last:mb-0",
+                                        "w-full flex items-center justify-between px-5 py-3.5 apple-card text-[10px] font-black     transition-all mb-1 last:mb-0",
                                         value === opt.days ? "text-orange-500 bg-orange-500/10" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
                                     )}
                                 >
@@ -82,7 +82,7 @@ export const TimeRangeSelector = ({ value, onChange }: TimeRangeSelectorProps) =
                             )}
                         >
                             <span className="relative z-20 text-[11px] font-black leading-none">{toBn(option.days, language)}</span>
-                            <span className="relative z-20 text-[6px] font-black uppercase tracking-[1px] mt-0.5 opacity-60">DAYS</span>
+                            <span className="relative z-20 text-[6px] font-black      mt-0.5 opacity-60">DAYS</span>
                             {isActive && (
                                 <motion.div layoutId="activeRange" className="absolute inset-0 bg-orange-500 apple-card shadow-lg" />
                             )}

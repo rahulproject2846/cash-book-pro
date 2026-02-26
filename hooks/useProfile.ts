@@ -1,16 +1,27 @@
 "use client";
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
 import { processMedia } from '@/lib/utils/mediaProcessor';
 import { useMediaStore } from '@/lib/vault/MediaStore';
 import { identityManager } from '@/lib/vault/core/IdentityManager';
 import { generateCID } from '@/lib/offlineDB';
+import { useVaultStore } from '@/lib/vault/store/index';
 
-export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any) => {
+/**
+ * 🏆 MASTER PROFILE ENGINE (V12.0)
+ * -----------------------------------------
+ * Logic: Fully Autonomous & Atomic.
+ * Sync: Integrated with VaultStore SSOT.
+ * Handshake: Dispatches local-mutation events.
+ */
+export const useProfile = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     
+    // 🚀 STORE ACCESS
+    const { currentUser, loginSuccess, logout } = useVaultStore();
+
     const [formData, setForm] = useState({
         name: currentUser?.username || '',
         currentPassword: '',
@@ -18,32 +29,34 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
         image: currentUser?.image || ''
     });
 
+    // Sync form data when store identity changes
+    useEffect(() => {
+        if (currentUser) {
+            setForm(prev => ({
+                ...prev,
+                name: currentUser.username || '',
+                image: currentUser.image || ''
+            }));
+        }
+    }, [currentUser]);
+
+    // 🤝 THE ATOMIC HANDSHAKE
+    const dispatchHandshake = useCallback(() => {
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('vault-updated', { 
+                detail: { source: 'useProfile', origin: 'local-mutation' } 
+            }));
+        }
+    }, []);
+
     // ১. ইমেজ প্রসেসিং (🚀 BANKING-GRADE MEDIA ENGINE)
     const handleImageProcess = useCallback(async (file: File) => {
         try {
-            console.log(`🚀 [PROFILE IMAGE] Processing profile image:`, {
-                name: file.name,
-                size: `${(file.size / 1024).toFixed(2)} KB`,
-                type: file.type
-            });
-            
-            // 🗜️ SMART COMPRESSION: Use our new media processor
-            const { blob, compressedSize, compressionRatio } = await processMedia(file);
-            
-            console.log(`✅ [PROFILE IMAGE] Compression complete:`, {
-                original: `${(file.size / 1024).toFixed(2)} KB`,
-                compressed: `${(compressedSize / 1024).toFixed(2)} KB`,
-                saved: `${compressionRatio.toFixed(1)}%`
-            });
-            
-            // 🆔 GENERATE MEDIA CID
+            const { blob } = await processMedia(file);
             const mediaCid = generateCID();
             const userId = identityManager.getUserId();
             
-            if (!userId) {
-                toast.error('User not logged in');
-                return;
-            }
+            if (!userId) return toast.error('Identity Node Offline');
             
             // 📤 SAVE TO MEDIA STORE
             await db.mediaStore.add({
@@ -59,33 +72,32 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
                 userId
             });
             
-            // 🔄 UPDATE USER RECORD: Reference media CID and mark as custom
-            await db.users.update(userId, { 
-                image: mediaCid, // 🚨 Store CID reference
-                isCustomImage: true // 🚨 Mark as custom upload
-            });
+            // 🔄 UPDATE LOCAL DEXIE USER
+            await db.users.update(userId, { image: mediaCid, isCustomImage: true });
             
             // 📤 ADD TO UPLOAD QUEUE
-            const mediaStore = useMediaStore.getState();
-            mediaStore.addToQueue(mediaCid);
+            useMediaStore.getState().addToQueue(mediaCid);
             
-            // 🎯 UPDATE FORM STATE: Show loading state
+            // 🎯 UPDATE UI STATE
             setForm(prev => ({ ...prev, image: mediaCid }));
             
-            toast.success('Image uploaded successfully! Processing...');
+            // 🤝 SYNC HANDSHAKE: Ensure Header & Store are notified
+            const updatedUser = { ...currentUser, image: mediaCid, isCustomImage: true };
+            loginSuccess(updatedUser); // Update Zustand & IdentityManager
+            dispatchHandshake();
             
+            toast.success('Identity visual updated');
         } catch (error) {
-            console.error('❌ [PROFILE IMAGE] Upload failed:', error);
-            toast.error('Image upload failed');
+            toast.error('Visual processing failed');
         }
-    }, []);
+    }, [currentUser, loginSuccess, dispatchHandshake]);
 
-    // ২. প্রোফাইল আপডেট
+    // ২. প্রোফাইল আপডেট (Atomic API Bridge)
     const updateProfile = async (e: React.FormEvent) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         
         if (currentUser?.authProvider === 'credentials' && !formData.currentPassword) {
-             return toast.error("Please enter current password to save changes");
+             return toast.error("Verification password required");
         }
 
         setIsLoading(true);
@@ -105,15 +117,16 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
             
             const data = await res.json();
             if (res.ok) {
-                setCurrentUser(data.user);
-                localStorage.setItem('cashbookUser', JSON.stringify(data.user));
+                // 🚀 UPDATE GLOBAL IDENTITY
+                loginSuccess(data.user);
                 setForm(prev => ({ ...prev, currentPassword: '', newPassword: '' }));
-                toast.success('Profile Updated Successfully');
+                dispatchHandshake();
+                toast.success('Core Identity Re-verified');
             } else {
-                toast.error(data.message || 'Update Failed');
+                toast.error(data.message || 'Update Rejected');
             }
         } catch (error) {
-            toast.error('Connection Error');
+            toast.error('Network Interruption');
         } finally {
             setIsLoading(false);
         }
@@ -123,15 +136,9 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
     const exportMasterData = async () => {
         setIsExporting(true);
         try {
-            if (!db.isOpen()) await db.open();
             const [books, entries] = await Promise.all([db.books.toArray(), db.entries.toArray()]);
-
             const backupData = {
-                meta: {
-                    user: currentUser?.username, // মালিকানা চেক করার জন্য
-                    email: currentUser?.email,
-                    date: new Date().toISOString()
-                },
+                meta: { user: currentUser?.username, email: currentUser?.email, date: new Date().toISOString() },
                 books,
                 entries
             };
@@ -139,13 +146,16 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
             const downloadAnchorNode = document.createElement('a');
             downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", `Backup_${currentUser?.username}_${new Date().toISOString().slice(0,10)}.json`);
+            downloadAnchorNode.setAttribute("download", `VAULT_BACKUP_${new Date().toISOString().slice(0,10)}.json`);
             document.body.appendChild(downloadAnchorNode);
             downloadAnchorNode.click();
             downloadAnchorNode.remove();
-            toast.success("Backup Downloaded");
-        } catch (err) { toast.error("Export Failed"); } 
-        finally { setIsExporting(false); }
+            toast.success("Master Data Secured (JSON)");
+        } catch (err) { 
+            toast.error("Export Protocol Failed"); 
+        } finally { 
+            setIsExporting(false); 
+        }
     };
 
     // ৪. ডাটা রিস্টোর (Import)
@@ -157,30 +167,21 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
         reader.onload = async (event) => {
             try {
                 const json = JSON.parse(event.target?.result as string);
-                
-                // সিকিউরিটি চেক: ফাইলটি কি এই ইউজারের?
                 if (json.meta?.email && json.meta.email !== currentUser?.email) {
-                    const confirmRestore = confirm(`Warning: This backup belongs to "${json.meta.user}". Do you still want to merge it?`);
-                    if (!confirmRestore) return;
+                    if (!confirm(`Warning: Backup mismatch. Proceed anyway?`)) return;
                 }
 
                 setIsLoading(true);
-                
-                // লোকাল ডাটাবেস আপডেট
                 if (json.books?.length) await db.books.bulkPut(json.books);
                 if (json.entries?.length) await db.entries.bulkPut(json.entries);
 
-                toast.success("Data Restored Successfully!");
-                window.dispatchEvent(new Event('vault-updated')); // UI রিফ্রেশ
-                
-                // ব্যাকগ্রাউন্ড সিঙ্ক ট্রিগার
-                if(navigator.onLine) window.dispatchEvent(new Event('online'));
-
+                toast.success("Database Restoration Complete");
+                dispatchHandshake(); // UI Refresh & Sync
             } catch (err) {
-                toast.error("Invalid Backup File");
+                toast.error("Corrupted Backup File");
             } finally {
                 setIsLoading(false);
-                if(e.target) e.target.value = ''; // ইনপুট রিসেট
+                if(e.target) e.target.value = '';
             }
         };
         reader.readAsText(file);
@@ -188,6 +189,7 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
 
     // ৫. একাউন্ট ডিলিট
     const deleteAccount = async () => {
+        if (!confirm("🚨 TOTAL ERASURE: This will delete your account forever. Proceed?")) return;
         setIsLoading(true);
         try {
             const res = await fetch('/api/auth/delete', {
@@ -196,59 +198,43 @@ export const useProfile = (currentUser: any, setCurrentUser: any, onLogout: any)
                 body: JSON.stringify({ userId: currentUser._id }),
             });
             if (res.ok) { 
-                toast.success('Account Deleted'); 
-                onLogout(); 
+                toast.success('Account Terminated'); 
+                logout(); // Atomic Store Logout
+                window.location.href = '/';
             }
-        } catch (error) { toast.error('Error'); } 
-        finally { setIsLoading(false); }
+        } catch (error) { 
+            toast.error('Erasure Protocol Interrupted'); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
-    // 🗑️ REMOVE IMAGE LOGIC: Re-enable Google sync
+    // 🗑️ REMOVE IMAGE LOGIC
     const handleRemoveImage = async () => {
         try {
-            if (!currentUser?._id) {
-                toast.error('User not found');
-                return;
-            }
-            
             setIsLoading(true);
-            
-            // 🔄 UPDATE SERVER: Remove custom image and re-enable Google sync
             const res = await fetch('/api/auth/update', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    userId: currentUser._id,
-                    image: '', // Clear image
-                    isCustomImage: false // Re-enable Google sync
-                }),
+                body: JSON.stringify({ userId: currentUser._id, image: '', isCustomImage: false }),
             });
             
             if (res.ok) {
                 const data = await res.json();
-                setCurrentUser(data.user);
-                localStorage.setItem('cashbookUser', JSON.stringify(data.user));
-                setForm(prev => ({ ...prev, image: '' }));
-                toast.success('Image removed. Google sync re-enabled');
-            } else {
-                const errorData = await res.json().catch(() => ({}));
-                toast.error(errorData.message || 'Failed to remove image');
+                loginSuccess(data.user);
+                dispatchHandshake();
+                toast.success('Visual Reset Complete');
             }
         } catch (error) {
-            toast.error('Connection error');
+            toast.error('Identity Reset Failed');
         } finally {
             setIsLoading(false);
         }
     };
 
     return {
-        formData, setForm,
-        isLoading, isExporting,
-        handleImageProcess,
-        handleRemoveImage, // 🗑️ NEW: Remove image logic
-        updateProfile,
-        exportMasterData,
-        importMasterData, // নতুন ফাংশন এক্সপোর্ট
-        deleteAccount
+        formData, setForm, isLoading, isExporting,
+        handleImageProcess, handleRemoveImage,
+        updateProfile, exportMasterData, importMasterData, deleteAccount
     };
 };

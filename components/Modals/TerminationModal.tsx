@@ -37,7 +37,7 @@ export const TerminationModal = ({ isOpen, onClose, onConfirm, targetName, title
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3 text-red-500">
                             <ShieldAlert size={20} className="animate-pulse" />
-                            <h4 className="text-[11px] font-black uppercase tracking-[4px] italic">{title || "TERMINATION PROTOCOL"}</h4>
+                            <h4 className="text-[11px] font-black     ">{title || "TERMINATION PROTOCOL"}</h4>
                         </div>
                         <button onClick={onClose} className="w-10 h-10 rounded-full bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 transition-all active:scale-90 shadow-inner"><X size={20} /></button>
                     </div>
@@ -46,20 +46,20 @@ export const TerminationModal = ({ isOpen, onClose, onConfirm, targetName, title
                         <div className="w-16 h-16 rounded-[22px] bg-red-500/10 flex items-center justify-center text-red-500 mb-4 shadow-2xl">
                             <AlertOctagon size={32} />
                         </div>
-                        <p className="text-[10px] font-bold uppercase leading-relaxed text-red-500/60 px-2 tracking-widest">
+                        <p className="text-[10px] font-bold leading-relaxed text-red-500/60 px-2  ">
                             {desc || "THIS ACTION IS IRREVERSIBLE. ALL DATA NODES ASSOCIATED WITH THIS REGISTRY WILL BE ERASED."}
                         </p>
                     </div>
 
                     <div className="space-y-4">
                         <div className="flex justify-between px-1">
-                            <label className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-[3px]">Type identity to confirm</label>
-                            <span className="text-[9px] font-black text-orange-500 uppercase tracking-[2px] italic">{targetName}</span>
+                            <label className="text-[9px] font-black text-[var(--text-muted)]   ">Type identity to confirm</label>
+                            <span className="text-[9px] font-black text-orange-500     ">{targetName}</span>
                         </div>
                         <input 
                             autoFocus type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)}
                             placeholder="RE-TYPE NAME..."
-                            className="w-full h-16 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[25px] px-8 text-[13px] font-black tracking-widest text-red-500 outline-none focus:border-red-500 transition-all shadow-inner placeholder:opacity-10"
+                            className="w-full h-16 bg-[var(--bg-app)] border-2 border-[var(--border)] rounded-[25px] px-8 text-[13px] font-black   text-red-500 outline-none focus:border-red-500 transition-all shadow-inner placeholder:opacity-10"
                         />
                     </div>
 

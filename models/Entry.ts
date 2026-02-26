@@ -21,19 +21,19 @@ export interface IEntry extends Document {
   date: Date;
   time?: string;
   status: 'completed' | 'pending';
-  isDeleted: boolean; 
+  isDeleted: number; 
   vKey: number; 
   checksum: string; 
   synced: 0 | 1;
   syncAttempts: number; 
   lastAttempt?: number; 
-  _emergencyFlushed?: boolean; 
-  _emergencyFlushAt?: number; 
-  isPinned?: number; 
+  conflictReason?: string;
+  serverData?: any; 
+  isPinned: number; 
   localId?: number; 
-  conflicted?: number;  
-  createdAt: Date;
-  updatedAt: Date;
+  conflicted: number;  
+  createdAt: number;
+  updatedAt: number;
 }
 
 const EntrySchema = new Schema<IEntry>({
@@ -99,8 +99,8 @@ const EntrySchema = new Schema<IEntry>({
     index: true
   },
   isDeleted: {
-    type: Boolean,
-    default: false,
+    type: Number,
+    default: 0,
     index: true
   },
   // --- ২. Stability & Sync Fields (ইন্টারফেসের সাথে মিল রেখে যোগ করা হয়েছে) ---
@@ -127,24 +127,32 @@ const EntrySchema = new Schema<IEntry>({
   lastAttempt: {
     type: Number
   },
+  conflictReason: {
+    type: String,
+    default: null
+  },
+  serverData: {
+    type: Schema.Types.Mixed,
+    default: null
+  },
   isPinned: {
     type: Number,
     default: 0
-  },
-  _emergencyFlushed: {
-    type: Boolean,
-    default: false
-  },
-  _emergencyFlushAt: {
-    type: Number
   },
   conflicted: {
     type: Number,
     default: 0,
     index: true
+  },
+  createdAt: {
+    type: Number,
+    required: true
+  },
+  updatedAt: {
+    type: Number,
+    required: true
   }
 }, { 
-  timestamps: true,
   versionKey: false
 });
 

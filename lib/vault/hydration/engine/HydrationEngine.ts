@@ -4,7 +4,7 @@ import { db } from '@/lib/offlineDB';
 import { getVaultStore } from '../../store/storeHelper';
 import { validateBook, validateEntry } from '../../core/schemas';
 import { normalizeUser } from '../../core/VaultUtils';
-import type { HydrationResult, SecurityState, CommitOperation } from './types';
+import type { HydrationResult, SecurityState, CommitOperation, BatchCommitOperation } from './types';
 
 /**
  * 🛡️ HYDRATION ENGINE (V6.0) - The Iron Gate Core
@@ -225,5 +225,138 @@ export class HydrationEngine {
         emergencyHydrationStatus
       }
     };
+  }
+
+  /**
+   * ⚛️ COMMIT BATCH: Atomic batch operations in SINGLE transaction
+   * 
+   * Processes multiple operations (BOOK + ENTRY) in one atomic transaction
+   * Uses merge strategy to preserve existing fields
+   */
+  public async commitBatch(operations: BatchCommitOperation[], source: string): Promise<HydrationResult> {
+    try {
+      console.log(`🛡️ [IRON GATE] Batch commit request: ${operations.length} operations | Source: ${source}`);
+
+      // 🛡️ SECURITY GUARD: Check lockdown state
+      const securityCheck = this.checkSecurityGuard();
+      if (!securityCheck.allowed) {
+        console.error(`🛡️ [IRON GATE] BATCH BLOCKED: ${securityCheck.reason}`);
+        return { 
+          success: false, 
+          error: `Security guard blocked batch operation: ${securityCheck.reason}`,
+          source 
+        };
+      }
+
+      // 🔄 VALIDATION & DEDUPLICATION: Process all operations
+      const processedOperations: BatchCommitOperation[] = [];
+      let totalRecords = 0;
+
+      for (const operation of operations) {
+        const { type, records } = operation;
+        
+        // 🔄 DEDUPLICATION: Filter duplicates within each operation
+        const uniqueRecords = this.deduplicate(records);
+        console.log(`🔄 [IRON GATE] Batch deduplication: ${type} ${records.length} → ${uniqueRecords.length} records`);
+
+        // 🛡️ VALIDATION: Validate all records in this operation
+        const validRecords: any[] = [];
+        for (const record of uniqueRecords) {
+          const validation = this.validate(record, type);
+          if (validation.success && validation.data) {
+            validRecords.push(validation.data);
+          } else {
+            console.error(`🛡️ [IRON GATE] Batch validation failed: ${validation.error}`);
+            // Continue with other records, don't fail entire operation
+          }
+        }
+
+        if (validRecords.length > 0) {
+          processedOperations.push({ type, records: validRecords });
+          totalRecords += validRecords.length;
+        }
+      }
+
+      if (processedOperations.length === 0) {
+        console.warn(`⚠️ [IRON GATE] No valid operations to commit`);
+        return { success: true, count: 0, source };
+      }
+
+      // ⚛️ ATOMIC TRANSACTION: ALL operations in SINGLE db.transaction
+      const result = await db.transaction('rw', db.books, db.entries, db.users, async () => {
+        let processedCount = 0;
+
+        for (const operation of processedOperations) {
+          const { type, records } = operation;
+
+          if (type === 'BOOK') {
+            for (const record of records) {
+              const existing = await db.books.where('cid').equals(record.cid).first();
+              
+              if (existing) {
+                // 🎯 MERGE STRATEGY: Preserve existing fields, update with new fields
+                const updated = { ...existing, ...record };
+                await db.books.update(existing.localId!, updated);
+                console.log(`✅ [IRON GATE] Batch updated book: ${record.cid}`);
+              } else {
+                await db.books.add(record);
+                console.log(`✅ [IRON GATE] Batch added book: ${record.cid}`);
+              }
+              processedCount++;
+            }
+          } else if (type === 'ENTRY') {
+            for (const record of records) {
+              const existing = await db.entries.where('cid').equals(record.cid).first();
+              
+              if (existing) {
+                // 🎯 MERGE STRATEGY: Preserve existing fields, update with new fields
+                const updated = { ...existing, ...record };
+                await db.entries.update(existing.localId!, updated);
+                console.log(`✅ [IRON GATE] Batch updated entry: ${record.cid}`);
+              } else {
+                await db.entries.add(record);
+                console.log(`✅ [IRON GATE] Batch added entry: ${record.cid}`);
+              }
+              processedCount++;
+            }
+          } else if (type === 'USER') {
+            for (const record of records) {
+              const existing = await db.users.get(record._id);
+              
+              if (existing) {
+                // 🎯 MERGE STRATEGY: Preserve existing fields, update with new fields
+                const updated = { ...existing, ...record };
+                await db.users.update(record._id, updated);
+                console.log(`✅ [IRON GATE] Batch updated user: ${record._id}`);
+              } else {
+                await db.users.add(record);
+                console.log(`✅ [IRON GATE] Batch added user: ${record._id}`);
+              }
+              processedCount++;
+            }
+          } else {
+            throw new Error(`Unsupported batch operation type: ${type}`);
+          }
+        }
+
+        return processedCount;
+      });
+
+      console.log(`🎯 [IRON GATE] Batch commit successful: ${result} records processed across ${processedOperations.length} operations`);
+      return { 
+        success: true, 
+        count: result, 
+        source,
+        error: undefined 
+      };
+
+    } catch (error) {
+      console.error(`❌ [IRON GATE] Batch commit failed:`, error);
+      return { 
+        success: false, 
+        error: String(error),
+        source 
+      };
+    }
   }
 }

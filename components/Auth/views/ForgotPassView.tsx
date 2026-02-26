@@ -56,10 +56,10 @@ export const ForgotPassView = ({ onBack }: any) => {
                     <ShieldQuestion className="text-blue-400" size={28} />
                 </motion.div>
 
-                <h2 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none">
+                <h2 className="text-3xl font-black text-[var(--text-main)]     leading-none">
                     {t('auth_forgot_key_title') || "RECOVER ACCESS"}
                 </h2>
-                <p className="text-[9px] font-bold text-[var(--text-muted)] mt-3 uppercase tracking-[2px] opacity-60 max-w-[220px] mx-auto leading-relaxed">
+                <p className="text-[9px] font-bold text-[var(--text-muted)] mt-3      opacity-60 max-w-[220px] mx-auto leading-relaxed">
                     {t('auth_forgot_desc')}
                 </p>
             </div>
@@ -73,7 +73,7 @@ export const ForgotPassView = ({ onBack }: any) => {
                     <input 
                         type="email" 
                         placeholder={t('placeholder_email')}
-                        className="app-input h-15 pl-14 font-bold text-xs tracking-widest uppercase rounded-3xl border border-white/5 bg-white/[0.03] focus:border-blue-500/40 focus:bg-white/[0.05] outline-none w-full transition-all"
+                        className="app-input h-15 pl-14 font-bold text-xs     rounded-3xl border border-white/5 bg-white/[0.03] focus:border-blue-500/40 focus:bg-white/[0.05] outline-none w-full transition-all"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
@@ -85,7 +85,7 @@ export const ForgotPassView = ({ onBack }: any) => {
                         disabled={isLoading}
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.98 }}
-                        className="w-full py-5 bg-white text-black rounded-[24px] font-black text-[11px] uppercase tracking-[4px] shadow-xl hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center gap-3 mt-4"
+                        className="w-full py-5 bg-white text-black rounded-[24px] font-black text-[11px]      shadow-xl hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center gap-3 mt-4"
                     >
                         {isLoading ? (
                             <span className="w-5 h-5 border-3 border-black border-t-transparent rounded-full animate-spin" />
@@ -100,7 +100,7 @@ export const ForgotPassView = ({ onBack }: any) => {
             <div className="mt-auto pt-10 text-center">
                 <button 
                     onClick={onBack} 
-                    className="group text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[4px] transition-all flex items-center justify-center gap-2 mx-auto"
+                    className="group text-[var(--text-muted)] text-[10px] font-black      transition-all flex items-center justify-center gap-2 mx-auto"
                 >
                     <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                     <span className="text-[var(--text-main)] underline underline-offset-8 decoration-white/10 group-hover:text-[var(--accent)] group-hover:decoration-orange-500 transition-all">

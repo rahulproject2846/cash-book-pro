@@ -18,13 +18,16 @@ interface HubHeaderProps {
     sortOption?: string;
     sortOptions?: string[];
     onSortChange?: (val: string) => void;
+    hideIdentity?: boolean;
+    fullWidthSearch?: boolean;
 }
 
 export const HubHeader = ({ 
     title, subtitle, icon: Icon, 
     searchQuery = "", onSearchChange, 
     children, showSearch = true,
-    sortOption, sortOptions, onSortChange
+    sortOption, sortOptions, onSortChange,
+    hideIdentity = false, fullWidthSearch = false
 }: HubHeaderProps) => {
     const { t } = useTranslation();
     const [isScrolled, setIsScrolled] = useState(false);
@@ -74,31 +77,33 @@ export const HubHeader = ({
                 <div className="flex items-center justify-between gap-3 h-12 relative w-full">
                     
                     {/* LEFT: IDENTITY */}
-                    <motion.div 
-                        animate={{ opacity: isSearchOpen ? 0 : 1 }}
-                        className={cn("items-center gap-4 min-w-0", isSearchOpen ? "hidden" : "flex")}
-                    >
-                        <div className={cn(
-                            "hidden md:flex bg-orange-500 rounded-[22px] items-center justify-center text-white shadow-lg shrink-0 transition-all duration-300",
-                            isScrolled ? "w-10 h-10 rounded-[16px]" : "w-12 h-12"
-                        )}>
-                            <Icon size={isScrolled ? 20 : 24} strokeWidth={2.5} />
-                        </div>
-                        <div className="truncate transition-all duration-300">
-                            <h2 className={cn(
-                                "font-black text-(--text-main) uppercase tracking-tighter leading-none transition-all",
-                                isScrolled ? "text-lg md:text-xl" : "text-xl md:text-2xl"
-                            )}>{title}</h2>
-                            <p className="text-[8px] md:text-[9px] font-black text-orange-500 uppercase tracking-[2px] mt-1">
-                                {subtitle}
-                            </p>
-                        </div>
-                    </motion.div>
+                    {!hideIdentity && (
+                        <motion.div 
+                            animate={{ opacity: isSearchOpen ? 0 : 1 }}
+                            className={cn("items-center gap-4 min-w-0", isSearchOpen ? "hidden" : "flex")}
+                        >
+                            <div className={cn(
+                                "hidden md:flex bg-orange-500 rounded-[22px] items-center justify-center text-white shadow-lg shrink-0 transition-all duration-300",
+                                isScrolled ? "w-10 h-10 rounded-[16px]" : "w-12 h-12"
+                            )}>
+                                <Icon size={isScrolled ? 20 : 24} strokeWidth={2.5} />
+                            </div>
+                            <div className="truncate transition-all duration-300">
+                                <h2 className={cn(
+                                    "font-black text-(--text-main) leading-none transition-all",
+                                    isScrolled ? "text-lg md:text-xl" : "text-xl md:text-2xl"
+                                )}>{title}</h2>
+                                <p className="text-[8px] md:text-[9px] font-black text-orange-500    mt-1">
+                                    {subtitle}
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
 
                     {/* RIGHT: COMMANDS & MORPHIC SEARCH */}
                     <div className={cn("flex items-center gap-2", isSearchOpen ? "flex-1" : "flex-1 justify-end")}>
                         {showSearch && onSearchChange && (
-                            <div className="hidden md:block relative flex-1 max-w-md">
+                            <div className={cn("hidden md:block relative", fullWidthSearch ? "flex-1" : "flex-1 max-w-md")}>
                                 <motion.div
                                     className="absolute left-4 top-1/2 -translate-y-1/2 text-orange-500"
                                 >
@@ -111,7 +116,7 @@ export const HubHeader = ({
                                     onFocus={handleSearchFocus}
                                     onBlur={handleSearchBlur}
                                     className={cn(
-                                        "w-full bg-(--bg-card) border border-(--border) rounded-[22px] pl-12 pr-4 text-[10px] font-bold uppercase outline-none focus:border-orange-500/40 shadow-inner text-(--text-main) transition-all",
+                                        "w-full bg-(--bg-card) border border-(--border) rounded-[22px] pl-12 pr-4 text-[10px] font-bold   outline-none focus:border-orange-500/40 shadow-inner text-(--text-main) transition-all",
                                         isScrolled ? "h-10 text-[9px]" : "h-11"
                                     )}
                                 />
@@ -156,7 +161,7 @@ export const HubHeader = ({
                                         onFocus={handleSearchFocus}
                                         onBlur={handleSearchBlur}
                                         placeholder={t('search_placeholder')}
-                                        className="w-full h-12 bg-(--bg-card) border border-orange-500/40 rounded-[22px] pl-12 pr-12 text-[11px] font-bold uppercase outline-none text-(--text-main)"
+                                        className="w-full h-12 bg-(--bg-card) border border-orange-500/40 rounded-[22px] pl-12 pr-12 text-[11px] font-bold   outline-none text-(--text-main)"
                                     />
                                     {/* Apple-style Clear Button */}
                                     <motion.button
@@ -192,7 +197,7 @@ export const HubHeader = ({
                                                 >
                                                     <ArrowDownUp size={16} strokeWidth={2.5} className="opacity-60" />
                                                 </motion.div>
-                                                <span className="hidden lg:block text-[10px] font-black uppercase tracking-widest truncate max-w-25">
+                                                <span className="hidden lg:block text-[10px] font-black     truncate max-w-25">
                                                     {sortOption}
                                                 </span>
                                             </div>
@@ -209,7 +214,7 @@ export const HubHeader = ({
                                                 onClick={() => onSortChange(opt)}
                                                 className={cn(
                                                     "w-full flex items-center justify-between px-5 py-3.5 rounded-2xl transition-all mb-1 last:mb-0",
-                                                    "text-[10px] font-black uppercase tracking-widest",
+                                                    "text-[10px] font-black    ",
                                                     isSelected 
                                                         ? "text-orange-500 bg-orange-500/10 shadow-sm" 
                                                         : "text-(--text-muted) hover:bg-(--bg-app) hover:text-(--text-main)"

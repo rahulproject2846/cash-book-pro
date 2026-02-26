@@ -47,7 +47,7 @@ export const ModalRegistry = () => {
         key="book-modal"
         isOpen={isOpen && (view === 'addBook' || view === 'editBook')}
         onClose={closeModal}
-        initialData={data?.currentBook || data?.book || null}
+        initialData={data?.editTarget || data?.currentBook || data?.book || null}
         currentUser={data?.currentUser}
       />
 
@@ -133,10 +133,10 @@ export const ModalRegistry = () => {
                           <Plus size={28} strokeWidth={4}/>
                         </div>
                         <div className="text-left">
-                          <p className="font-black uppercase text-sm tracking-[3px] text-[var(--text-main)]">
+                          <p className="font-black   text-sm    text-[var(--text-main)]">
                             {t('initialize_ledger')}
                           </p>
-                          <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mt-1.5 opacity-60">
+                          <p className="text-[10px] font-bold text-[var(--text-muted)]     mt-1.5 opacity-60">
                             {t('shortcut_desc')}
                           </p>
                         </div>

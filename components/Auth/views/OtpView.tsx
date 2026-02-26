@@ -74,14 +74,14 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                     </motion.div>
                     
                     <div className="space-y-2">
-                        <h2 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter italic leading-none">
+                        <h2 className="text-3xl font-black text-[var(--text-main)]     leading-none">
                             {t('title_protocol_verify') || "VERIFICATION"}
                         </h2>
                         <div className="flex flex-col items-center">
-                            <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[2px] opacity-60">
+                            <p className="text-[9px] font-bold text-[var(--text-muted)]      opacity-60">
                                 {t('auth_proto_dispatched')}
                             </p>
-                            <p className="text-[11px] font-black text-orange-500 uppercase tracking-widest mt-1 bg-orange-500/5 px-3 py-1 rounded-lg border border-orange-500/10">
+                            <p className="text-[11px] font-black text-orange-500     mt-1 bg-orange-500/5 px-3 py-1 rounded-lg border border-orange-500/10">
                                 {email}
                             </p>
                         </div>
@@ -92,13 +92,13 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
             {/* --- ২. OTP ENTRY FIELD --- */}
             <form onSubmit={handleVerify} className="space-y-[var(--app-gap,2rem)]">
                 <div className="space-y-4">
-                    <label className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-[3px] text-center block w-full opacity-40">
+                    <label className="text-[10px] font-black text-[var(--text-muted)]      text-center block w-full opacity-40">
                         {t('label_entry_key')}
                     </label>
                     <input 
                         type="text" 
                         placeholder="••••••" 
-                        className="app-input text-center text-5xl font-black tracking-[18px] py-8 border border-white/5 bg-white/[0.02] focus:bg-white/[0.04] focus:border-orange-500/40 transition-all outline-none rounded-3xl w-full font-mono placeholder:opacity-10" 
+                        className="app-input text-center text-5xl font-black   py-8 border border-white/5 bg-white/[0.02] focus:bg-white/[0.04] focus:border-orange-500/40 transition-all outline-none rounded-3xl w-full font-mono placeholder:opacity-10" 
                         maxLength={6} 
                         value={otpCode} 
                         onChange={e => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))} 
@@ -114,7 +114,7 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.98 }}
                         type="submit" 
-                        className="w-full py-5 bg-white text-black rounded-[24px] font-black text-[11px] uppercase tracking-[4px] shadow-2xl hover:bg-orange-500 hover:text-white transition-all duration-300 flex items-center justify-center gap-3"
+                        className="w-full py-5 bg-white text-black rounded-[24px] font-black text-[11px]      shadow-2xl hover:bg-orange-500 hover:text-white transition-all duration-300 flex items-center justify-center gap-3"
                     >
                         {isLoading ? (
                             <span className="w-5 h-5 border-3 border-black border-t-transparent rounded-full animate-spin" />
@@ -131,7 +131,7 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                 <button 
                     type="button" 
                     onClick={onBack} 
-                    className="text-[9px] font-black text-[var(--text-muted)] hover:text-[var(--text-main)] uppercase tracking-[4px] transition-all flex items-center gap-2 group"
+                    className="text-[9px] font-black text-[var(--text-muted)] hover:text-[var(--text-main)]      transition-all flex items-center gap-2 group"
                 >
                     <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                     {t('btn_adjust_detail')}
@@ -141,12 +141,12 @@ export const OtpView = ({ email, onBack, onSuccess }: any) => {
                 {cooldown > 0 ? (
                     <div className="flex items-center gap-2.5 px-4 py-2 bg-white/[0.03] border border-white/5 rounded-full text-orange-500/80">
                         <Timer size={14} />
-                        <span className="text-[10px] font-black tracking-[2px] font-mono">{formatTime(cooldown)}</span>
+                        <span className="text-[10px] font-black    font-mono">{formatTime(cooldown)}</span>
                     </div>
                 ) : (
                     <button 
                         type="button" 
-                        className="text-[9px] font-black text-orange-500 uppercase tracking-[4px] underline underline-offset-8 hover:text-orange-400 transition-all flex items-center gap-2"
+                        className="text-[9px] font-black text-orange-500      underline underline-offset-8 hover:text-orange-400 transition-all flex items-center gap-2"
                     >
                         <RefreshCcw size={14} />
                         {t('btn_resend_protocol')}
