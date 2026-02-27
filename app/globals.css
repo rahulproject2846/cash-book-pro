@@ -2,6 +2,16 @@
 
 @layer base {
 :root {
+  /* --- SITE MARKETING THEME (Warm Cream & Charcoal) --- */
+  --site-bg: #F5F2ED;
+  --site-surface: #ECEAE4;
+  --site-text: #1A1A1A;
+  --site-text-muted: #6B6660;
+  --site-accent: #C05621;
+  --site-accent-hover: #A64B1B;
+  --site-border: rgba(0, 0, 0, 0.08);
+  --site-card-bg: #FFFFFF;
+
   /* --- APPLE LIGHT (Glass & Calm) --- */
 
   /* App background (never pure white) */
