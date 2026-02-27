@@ -56,7 +56,6 @@ export const useBookImage = (): UseBookImageResult => {
       
       // 🚨 CRITICAL CHECK: Zero-byte blob detection
       if (!blob || blob.size === 0) {
-        console.error('🚨 [TRACE A] CRITICAL: Blob is empty or null!');
         throw new Error('Processed blob is empty - cannot upload zero-byte file');
       }
       
@@ -64,7 +63,7 @@ export const useBookImage = (): UseBookImageResult => {
       const mediaCid = generateCID();
       
       // 📤 SAVE TO MEDIA STORE
-      await db.mediaStore.add({
+      const result = await db.mediaStore.add({
         cid: mediaCid,
         parentType: 'book',
         parentId: bookId || 'temp', // Will be updated after book creation

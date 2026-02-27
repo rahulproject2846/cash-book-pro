@@ -44,7 +44,7 @@ export const DynamicHeader = () => {
     const currentSection = activeSection || 'books';
 
     // 🖼️ PROFILE IMAGE PREVIEW - Reactive to Store
-    const userProfilePreview = useLocalPreview(currentUser?.image);
+    const userProfilePreview = useLocalPreview(currentUser?.image, currentUser?.mediaCid);
 
     // 📱 MOBILE DETECTION
     const [isMobile, setIsMobile] = useState(false);
@@ -248,14 +248,14 @@ export const DynamicHeader = () => {
                         <button 
                             onClick={() => isOverlayActive('UserMenu') ? unregisterOverlay('UserMenu') : registerOverlay('UserMenu')} 
                             className={cn(
-                                "w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-black flex items-center justify-center border transition-all active:scale-90 shadow-lg overflow-hidden",
-                                isOverlayActive('UserMenu') ? "border-orange-500 ring-4 ring-orange-500/10" : "border-[var(--border)]"
+                                "w-12 h-12 rounded-2xl bg-[var(--bg-card)] flex items-center justify-center border transition-all active:scale-90 shadow-sm overflow-hidden",
+                                isOverlayActive('UserMenu') ? "border-[var(--accent)] ring-4 ring-[var(--accent)]/10" : "border-[var(--border)]"
                             )}
                         >
                             {userProfilePreview.previewUrl ? (
                                 <img src={userProfilePreview.previewUrl} alt="U" className="w-full h-full object-cover" />
                             ) : (
-                                <span className="text-white font-black text-lg">{(currentUser?.username?.charAt(0) || "U").toUpperCase ()}</span>
+                                <span className="text-[var(--text-main)] font-black text-lg">{(currentUser?.username?.charAt(0) || "U").toUpperCase()}</span>
                             )}
                         </button>
                         

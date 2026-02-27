@@ -29,7 +29,7 @@ export const MobileFilterSheet = () => {
 
     // 🎯 DYNAMIC CATEGORIES FROM STORE
     const userCategories = useMemo(() => {
-        const cats = new Set(allEntries.map((e: any) => e.category?.toUpperCase ()).filter(Boolean));
+        const cats = new Set(allEntries.map((e: any) => e.category?.toUpperCase()).filter(Boolean));
         return ['ALL', ...Array.from(cats)];
     }, [allEntries]);
 

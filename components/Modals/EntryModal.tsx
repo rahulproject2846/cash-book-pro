@@ -65,7 +65,7 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
         if (initialData) {
             setAmountStr(initialData.amount.toString());
             setActiveInput(initialData.type);
-            setForm({ ...initialData, category: initialData.category?.to () || 'GENERAL' });
+            setForm({ ...initialData, category: initialData.category?.toUpperCase() || 'GENERAL' });
             setIsExpanded(true);
         } else {
             setAmountStr('');

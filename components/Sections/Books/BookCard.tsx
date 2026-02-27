@@ -62,7 +62,18 @@ const BookCard = React.memo<BookCardProps>(({
     const router = useRouter();
     
     // 🔍 REACTIVE DATABASE OBSERVER
-    const liveBook = useLiveQuery(() => book.localId ? db.books.get(book.localId) : null, [book.localId]);
+    const liveBook = useLiveQuery(
+      async () => {
+          if (!book) return null;
+          const lid = Number(book.localId);
+          return await db.books
+            .where('localId').equals(!isNaN(lid) ? lid : -1)
+            .or('_id').equals(String(book._id || ''))
+            .or('cid').equals(String(book.cid || ''))
+            .first();
+        },
+        [book.localId, book._id, book.cid]
+      );
     const reactiveBook = liveBook || book;
     const bookId = reactiveBook._id || reactiveBook.localId || reactiveBook.cid;
 
@@ -72,14 +83,13 @@ const BookCard = React.memo<BookCardProps>(({
     // 🛡️ TRIPLE-LINK ACTIVE CHECK
     const isActive = useMemo(() => {
         if (!activeBook) return false;
-        const bId = String(bookId);
-        return String(activeBook._id) === bId || String(activeBook.localId) === bId || String(activeBook.cid) === bId;
+        return [activeBook._id, activeBook.localId, activeBook.cid].includes(bookId);
     }, [activeBook, bookId]);
 
     // 🎯 VIEWPORT SNIPER & IMAGE STATE
     const { elementRef, isVisible } = useViewportSniper(String(bookId), reactiveBook.image || reactiveBook.mediaCid);
-    const displayImage = reactiveBook.image?.startsWith('http') ? reactiveBook.image : (reactiveBook.image || reactiveBook.mediaCid);
-    const { previewUrl, isLoading: isImageLoading } = useLocalPreview(isVisible ? displayImage : null);
+    // 🎯 LIVE OBSERVER: Real-time image resolution with live mediaStore observation
+    const { previewUrl, isLoading: isImageLoading } = useLocalPreview(reactiveBook.image, reactiveBook.mediaCid);
 
     const isPositive = balance >= 0;
 
@@ -151,10 +161,9 @@ const BookCard = React.memo<BookCardProps>(({
                 </div>
                 
                 <div className="w-10 h-10 md:w-16 md:h-16 apple-card bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                    {displayImage && isVisible ? (
+                    {previewUrl && isVisible ? (
                         isImageLoading ? <Loader2 size={16} className="text-blue-500 animate-spin" /> :
-                        previewUrl || displayImage.startsWith('http') ? <img src={previewUrl || displayImage} className="w-full h-full object-cover" /> :
-                        <ImageIcon size={20} className="text-slate-800" />
+                        <img src={previewUrl} className="w-full h-full object-cover" />
                     ) : <Wallet size={20} className="text-orange-500 opacity-20" />}
                 </div>
             </div>

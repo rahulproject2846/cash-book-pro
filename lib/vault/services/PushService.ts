@@ -570,13 +570,16 @@ export class PushService {
           console.warn(`⚠️ [MEDIA HANDSHAKE] No media record found for CID: ${cleanBook.image}`);
           cleanBook.image = ''; // Remove invalid CID
         } else if (media.localStatus !== 'uploaded') {
-          console.log(`🔄 [MEDIA HANDSHAKE] Media not uploaded yet, deferring sync for book ${book.cid}`);
-          return { success: false, error: `Media upload pending for book ${book.cid} - will retry` };
+          console.warn(`⚠️ [OFFLINE-FIRST] Media pending, proceeding with CID for book ${book.cid}`);
+          
+          // 🚀 OFFLINE-FIRST: Keep CID reference, sync book anyway
+          cleanBook.mediaCid = cleanBook.image; // Preserve CID for server awareness
+          // Don't return false - allow sync to continue
         } else if (media.cloudinaryUrl) {
           // ✅ SUCCESS: Swap CID with actual Cloudinary URL
           console.log(`🚀 [MEDIA HANDSHAKE] Swapping CID ${cleanBook.image} with URL: ${media.cloudinaryUrl}`);
-          cleanBook.image = media.cloudinaryUrl;
-          cleanBook.mediaCid = cleanBook.image; // Preserve CID reference
+          cleanBook.image = media.cloudinaryUrl; // Update surface URL
+          cleanBook.mediaCid = book.image || book.mediaCid; // 🛡️ IDENTITY DNA: Preserve original CID ALWAYS
         } else {
           console.warn(`⚠️ [MEDIA HANDSHAKE] Media marked uploaded but no URL found for CID: ${cleanBook.image}`);
           cleanBook.image = ''; // Remove broken reference
@@ -643,6 +646,25 @@ export class PushService {
           
           console.log(`✅ [PUSH SERVICE] Book ${book.cid} marked as synced (ID: ${serverId})`);
           console.log(`🔗 [CASCADE] Updated ${updatedEntries} entries to reference server ID: ${serverId}`);
+          
+          // 🛡️ IDENTITY BLACK HOLE FIX: Preserve activeBook during sync
+          const vaultStore = getVaultStore();
+          await vaultStore.refreshBooks();
+          
+          // Check if synced book is the current activeBook and update it
+          const currentActiveBook = vaultStore.activeBook;
+          if (currentActiveBook && (
+            currentActiveBook.localId === book.localId || 
+            currentActiveBook.cid === book.cid ||
+            currentActiveBook._id === book.localId
+          )) {
+            // Fetch fresh book data with server ID
+            const updatedBook = await db.books.get(book.localId!);
+            if (updatedBook) {
+              await vaultStore.setActiveBook(updatedBook);
+              console.log(`🛡️ [IDENTITY FIX] Updated activeBook with server data: ${updatedBook.cid}`);
+            }
+          }
         }
         
         return { success: true };

@@ -34,7 +34,7 @@ export const generateUUID = (): string => {
 
 /**
  * ⏰ GET TIMESTAMP - Consistent Timestamp Generation
- * Returns Unix timestamp in milliseconds
+ * Returns Unix timestamp in milliseconds with maximum authority
  */
 export const getTimestamp = (): number => {
   return Date.now();

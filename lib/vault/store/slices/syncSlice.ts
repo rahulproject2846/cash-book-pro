@@ -208,6 +208,23 @@ export const createSyncSlice: StateCreator<
           console.log(' [SYNC SLICE] Manual sync completed successfully');
         } else {
           console.error(' [SYNC SLICE] Manual sync failed:', result.errors);
+          
+          // 🚀 PATHOR: Check for media-pending error and show user-friendly toast
+          const hasMediaPendingError = result.errors?.some((error: any) => 
+            typeof error === 'string' && error.includes('Media upload pending')
+          );
+          
+          if (hasMediaPendingError) {
+            get().showToast({
+              type: 'sync-delay',
+              message: 'Network unstable. Data safe offline.',
+              countdown: 7, // 7-second countdown
+              onRetry: () => {
+                // Trigger manual retry
+                get().triggerManualSync();
+              }
+            });
+          }
         }
         
       } catch (error) {

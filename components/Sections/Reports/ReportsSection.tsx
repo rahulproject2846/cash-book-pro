@@ -71,7 +71,7 @@ export const ReportsSection = ({ currentUser }: any) => {
 
         const catMap = new Map();
         filtered.filter(e => e.type.toLowerCase() === 'expense').forEach(e => {
-            const cat = (e.category || 'GENERAL').to ();
+            const cat = (e.category || 'GENERAL').toUpperCase();
             if (!catMap.has(cat)) catMap.set(cat, { name: cat, value: 0 });
             catMap.get(cat).value += e.amount;
         });

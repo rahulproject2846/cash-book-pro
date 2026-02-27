@@ -136,7 +136,7 @@ export const TimelineFeed = ({
                                                 <td className="py-6 px-4">
                                                     <Tooltip text={`${t('tt_classification')}: ${e.category}`}>
                                                         <span className="px-3 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-black    cursor-default">
-                                                            {e.category?.to () || 'GENERAL'}
+                                                            {e.category?.toUpperCase() || 'GENERAL'}
                                                         </span>
                                                     </Tooltip>
                                                 </td>

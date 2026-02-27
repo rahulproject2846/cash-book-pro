@@ -10,6 +10,7 @@ export interface HydrationResult {
   success: boolean;
   error?: string;
   count?: number;
+  id?: number;
   booksCount?: number;
   entriesCount?: number;
   source?: string;

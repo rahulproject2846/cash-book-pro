@@ -9,11 +9,25 @@ import { snipedInSession } from '../sessionGuard';
 import { immer } from 'zustand/middleware/immer';
 import { HydrationController } from '../../hydration/HydrationController';
 
+// 📚 LIGHTWEIGHT MATRIX INTERFACE
+interface BookMatrixItem {
+  localId: string;
+  userId: string;
+  _id: string;
+  cid: string;
+  name: string;
+  image: string;
+  mediaCid: string;
+  isPinned: number;
+  updatedAt: number;
+  cachedBalance?: number;
+}
+
 // 📚 BOOK STATE INTERFACE
 export interface BookState {
   books: any[];
   filteredBooks: any[];
-  allBookIds: { localId: string; name: string; isPinned: number; updatedAt: number; cachedBalance?: number }[]; // 🆕 Lightweight matrix for performance
+  allBookIds: BookMatrixItem[]; // 🆕 Lightweight matrix for performance
   totalBookCount: number; // 🆕 Total count for pagination UI
   searchQuery: string;
   sortOption: string;
@@ -57,7 +71,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   allBookIds: [], // 🆕 Lightweight matrix for performance
   totalBookCount: 0, // 🆕 Total count for pagination UI
   searchQuery: '',
-  sortOption: 'Activity',
+  sortOption: 'Activity', // 🛡️ ACTIVITY DEFAULT: Always sort by recent activity
   isRefreshing: false,
   activeBook: null,
   bookId: '',
@@ -88,7 +102,8 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
           const localId = book.localId || book._id || book.cid;
           if (!localId) return null; // 🛡️ GUARD: Filter out invalid IDs
           return {
-            localId: book.localId || book._id, // ✅ RESTORE CORRECT NAME
+            localId: book.localId || book._id || book.cid, // ✅ ENSURE localId IS CLEARLY RETURNED
+            userId: book.userId, // Ensure userId is captured in the lightweight matrix
             _id: book._id || book.cid, // 🆕 PRIORITY: Use server ID or CID for display
             cid: book.cid, // 🆕 PRESERVE: Keep CID for reference
             name: book.name || '',
@@ -97,7 +112,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
             isPinned: book.isPinned || 0,
             updatedAt: book.updatedAt || 0,
             cachedBalance: 0 // Will be calculated later
-          };
+          } as BookMatrixItem;
         }).filter(Boolean)); // 🛡️ FILTER: Remove null entries
 
       // Store lightweight matrix in state
@@ -134,7 +149,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     // Get IDs for current page
     const currentPageIds = allBookIds
       .slice(startIndex, endIndex)
-      .map((book: any) => book.localId);
+      .map((book: BookMatrixItem) => book.localId);
     
     // 🆕 STEP B: Fetch FULL objects including image fields
     const fullBooks = await db.books
@@ -186,12 +201,15 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     registerAction(actionId);
     
     try {
+      // 🛡️ IMAGE EDIT SYNC TRIGGER: Any CID forces sync regardless of previous state
+      const hasImageChange = bookData.image && bookData.image.startsWith('cid_');
+      
       const bookPayload = {
         ...bookData,
         _id: editTarget?._id || bookData?._id,
         cid: editTarget?.cid || bookData?.cid || (await import('@/lib/offlineDB')).generateCID(),
-        userId: String(userId),
-        vKey: editTarget ? Number(editTarget.vKey || 0) + 1 : 1,
+        userId: String(get().userId || identityManager.getUserId()),
+        vKey: editTarget ? Number(editTarget.vKey || 0) + (hasImageChange ? 2 : 1) : 1, // 🚨 DOUBLE increment for image changes
         synced: 0,
         syncAttempts: 0, // ✅ Ensure initialization
         updatedAt: getTimestamp()
@@ -205,9 +223,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         throw new Error('Failed to normalize book data');
       }
 
-      // 🔵 [FORENSIC AUDIT] Log what we're saving to Dexie
-      console.log(`🔵 [SAVE BOOK] Saving book to Dexie with image:`, normalized.image || 'EMPTY');
-
       const { db } = await import('@/lib/offlineDB');
       let id: number = 0;
       
@@ -220,17 +235,35 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         throw new Error(result.error || 'Failed to save book via HydrationController');
       }
       
-      id = result.count || 0;
+      id = result.id || result.count || 0;
       
-      // 🆕 OPTIMISTIC UPDATE: Add to Zustand immediately
+      // : Update Main Array + Matrix + Count
       const currentBooks = get().books;
       const newBook = { ...normalized, localId: id };
-      const updatedBooks = [newBook, ...currentBooks.filter((b: any) => (b._id || b.localId) !== (newBook._id || newBook.localId))];
-      set({ books: updatedBooks });
+      const updatedBooks = [newBook, ...currentBooks.filter((b: any) => String(b._id || b.localId) !== String(newBook._id || newBook.localId))];
+      const updatedMatrix: BookMatrixItem[] = [{ 
+        localId: newBook.localId, 
+        userId: newBook.userId,
+        _id: newBook._id, 
+        cid: newBook.cid, 
+        name: newBook.name, 
+        image: newBook.image || '',
+        mediaCid: newBook.mediaCid || '',
+        isPinned: newBook.isPinned || 0, 
+        updatedAt: newBook.updatedAt 
+      }, ...get().allBookIds.filter((b: BookMatrixItem) => String(b._id || b.localId) !== String(newBook._id || newBook.localId))];
+
+      set({ 
+        books: updatedBooks, 
+        allBookIds: updatedMatrix,
+        totalBookCount: updatedMatrix.length,
+        filteredBooks: updatedBooks // : Set filteredBooks immediately
+      });
       
-      // 🆕 OPTIMISTIC RE-SORT: Apply filters and sort immediately
+      // : Apply filters and sort immediately
       get().applyFiltersAndSort();
       
+      // : Trigger sync for new books or non-image updates
       // 🆕 SAFE IGNITION: Trigger sync for new books or non-image updates
       const isNewBook = !editTarget?._id;
       const hasNoImageChange = !bookData.image || !bookData.image.startsWith('cid_');
@@ -240,11 +273,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       // 🆕 SILENT SAVE: No sync trigger - let MediaStore handle it
       // const { orchestrator } = await import('../../core/SyncOrchestrator');
       // orchestrator.triggerSync();
-      
-      // 🆕 DEFERRED REFRESH: Wait for transaction to settle
-      setTimeout(async () => {
-        await get().refreshBooks();
-      }, 100);
       
       return { success: true, book: { ...normalized, localId: id } };
     } catch (error) {
@@ -367,18 +395,25 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     const state = get();
     const { allBookIds, searchQuery, sortOption } = state;
     
-    let filtered = [...allBookIds]; // ✅ Work with lightweight matrix
+    const currentUserId = String(get().userId || identityManager.getUserId() || "");
+    if (!currentUserId) {
+      console.warn('⚠️ [BOOK SLICE] No userId available for filtering');
+      return;
+    }
+
+    // Filter the matrix by userId before applying search and sort
+    let filtered = allBookIds.filter((book: BookMatrixItem) => String(book.userId) === currentUserId);
 
     const q = (searchQuery || "").toLowerCase().trim();
     if (q) {
-      filtered = filtered.filter((book: any) => 
+      filtered = filtered.filter((book: BookMatrixItem) => 
         (book.name || "").toLowerCase().includes(q)
       );
     }
 
     switch (sortOption) {
       case 'Activity':
-        filtered.sort((a: any, b: any) => {
+        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => {
           if ((a.isPinned || 0) !== (b.isPinned || 0)) {
             return (b.isPinned || 0) - (a.isPinned || 0);
           }
@@ -386,15 +421,15 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         });
         break;
       case 'Name':
-        filtered.sort((a: any, b: any) => 
+        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => 
           (a.name || "").localeCompare(b.name || "")
         );
         break;
       case 'Balance High':
-        filtered.sort((a: any, b: any) => get().getBookBalance(b.id) - get().getBookBalance(a.id));
+        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => get().getBookBalance(b.localId) - get().getBookBalance(a.localId));
         break;
       case 'Balance Low':
-        filtered.sort((a: any, b: any) => get().getBookBalance(a.id) - get().getBookBalance(b.id));
+        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => get().getBookBalance(a.localId) - get().getBookBalance(b.localId));
         break;
     }
 
@@ -402,20 +437,23 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     set({ filteredBooks: filtered });
     
     // 🆕 STEP D: Fetch full objects for filtered IDs
-    const filteredIds = filtered.map(book => book.id);
+    const filteredIds = filtered.map((book: BookMatrixItem) => book.localId).filter(Boolean);
     const fullBooks = await db.books
       .where('localId')
       .anyOf(filteredIds)
       .toArray();
     
-    // 🛡️ OPTIMISTIC RETENTION: Don't wipe UI if we already have data and the new fetch is mysteriously empty during a background process
-    if (fullBooks.length === 0 && get().books.length > 0 && get().isRefreshing) {
-       console.warn('🛡️ [BOOK SLICE] Guarded against UI wipe during background refresh.');
-       return;
-    }
-    
-    // Update state with full objects
-    set({ books: fullBooks });
+    // 🛡️ OPTIMIZED PROTECTION: Merge DB results with existing state to prevent new book invisibility
+    const currentBooks = get().books;
+    const finalBooks = fullBooks.length > 0 ? fullBooks : currentBooks;
+
+    // If we have a new book in the matrix that isn't in fullBooks yet, keep it from currentBooks
+    const missingOptimisticBooks = currentBooks.filter((cb: any) => 
+      !fullBooks.some((fb: any) => String(fb.localId) === String(cb.localId)) &&
+      filtered.some((f: BookMatrixItem) => String(f.localId) === String(cb.localId))
+    );
+
+    set({ books: [...missingOptimisticBooks, ...fullBooks] });
   },
 
 
@@ -429,7 +467,10 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     // 🚀 HYDRATE: Find full book in Dexie to get its _id and cid
     const { db } = await import('@/lib/offlineDB');
     const fullBook = await db.books.get(book.localId) || book;
-    set({ activeBook: fullBook, bookId: String(fullBook._id || fullBook.localId) });
+    
+    // 🛡️ IDENTITY BLACK HOLE FIX: Never set activeBook to undefined/incomplete
+    const safeBook = fullBook && fullBook.localId ? fullBook : book;
+    set({ activeBook: safeBook, bookId: String(safeBook._id || safeBook.localId) });
     
     setTimeout(() => get().processEntries(), 50);
   },

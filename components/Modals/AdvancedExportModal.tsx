@@ -76,7 +76,7 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                     ["GENERATED: " + new Date().toLocaleString()], ["SECURITY: ENCRYPTED ARCHIVE"], [],
                     ["Date", "Title", "Category", "Method", "Type", "Amount", "Status"]
                 ];
-                dataToExport.forEach((e: any) => worksheetData.push([new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.to (), e.amount, e.status]));
+                dataToExport.forEach((e: any) => worksheetData.push([new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.toUpperCase(), e.amount, e.status]));
                 
                 const ws = XLSX.utils.aoa_to_sheet(worksheetData);
                 const wb = XLSX.utils.book_new();
@@ -90,7 +90,7 @@ export const AdvancedExportModal = ({ isOpen, onClose, entries = [], bookName }:
                 const doc = new jsPDF();
                 doc.setFontSize(22); doc.setTextColor(249, 115, 22); doc.text("VAULT PRO", 14, 20);
                 doc.setFontSize(9); doc.setTextColor(120); doc.text(`ARCHIVE: ${bookName.to ()} | SECURE PROTOCOL`, 14, 28);
-                const rows = dataToExport.map((e: any) => [new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.to (), e.amount.toLocaleString(), e.status]);
+                const rows = dataToExport.map((e: any) => [new Date(e.date).toLocaleDateString('en-GB'), e.title, e.category, e.paymentMethod || "CASH", e.type.toUpperCase(), e.amount.toLocaleString(), e.status]);
                 autoTable(doc, { head: [["DATE", "TITLE", "TAG", "VIA", "TYPE", "AMOUNT", "STATUS"]], body: rows, startY: 40, theme: 'grid' });
                 doc.save(`${bookName}_Archive.pdf`);
             }

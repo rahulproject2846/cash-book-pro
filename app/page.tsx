@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, Suspense } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
@@ -31,6 +32,9 @@ function CashBookAppContent() {
   const bookIdFromUrl = searchParams.get('id');
   
   const isLoggedIn = !!userId;
+
+  // 🛡️ UNIFIED SECTION LOGIC: Single source of truth for transitions
+  const effectiveSection = activeBook ? 'book-details' : (tabFromUrl || activeSection || 'books');
 
   // 🎯 URL PRIORITY SYNC
   useEffect(() => {
@@ -66,8 +70,6 @@ function CashBookAppContent() {
       return <BookDetails currentUser={currentUser} bookId={String(effectiveBookId)} />;
     }
 
-    const effectiveSection = tabFromUrl || activeSection || 'books';
-    
     return (
       <div className="relative w-full h-full">
         {/* 🚀 PERSISTENT MOUNTING: Scroll memory and state preserved */}
@@ -99,7 +101,18 @@ function CashBookAppContent() {
 
   return (
     <DashboardLayout>
-      {renderView()}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={effectiveSection}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
+          className="relative w-full h-full"
+        >
+          {renderView()}
+        </motion.div>
+      </AnimatePresence>
     </DashboardLayout>
   );
 }

@@ -285,7 +285,7 @@ export class HydrationController {
    * This is the ONLY way UI components can write to the database
    * All local mutations must pass through the HydrationEngine pipeline
    */
-  public async ingestLocalMutation(type: 'BOOK' | 'ENTRY', records: any[]): Promise<{ success: boolean; error?: string; count?: number }> {
+  public async ingestLocalMutation(type: 'BOOK' | 'ENTRY', records: any[]): Promise<{ success: boolean; error?: string; count?: number; id?: number }> {
     try {
       console.log(`[CONTROLLER] Local mutation request: ${type} | Records: ${records.length} | Source: LOCAL_USER_ACTION`);
       
@@ -322,7 +322,8 @@ export class HydrationController {
         
         return { 
           success: true, 
-          count: result.count 
+          count: result.count,
+          id: result.id
         };
       } else {
         console.error(`[CONTROLLER] Local mutation failed: ${result.error}`);

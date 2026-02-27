@@ -29,7 +29,7 @@ export const AnalyticsChart = ({ entries = [] }: { entries: any[] }) => {
                 String(e.status).toLowerCase() === 'completed'
             )
             .reduce((acc: any, curr) => {
-                const catName = (curr.category || 'GENERAL').to ();
+                const catName = (curr.category || 'GENERAL').toUpperCase();
                 const amount = Number(curr.amount) || 0;
                 const found = acc.find((item: any) => item.name === catName);
                 if (found) found.value += amount;

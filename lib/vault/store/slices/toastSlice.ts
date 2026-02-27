@@ -6,11 +6,12 @@ import { subscribeWithSelector } from 'zustand/middleware';
 // 🍎 TOAST ITEM INTERFACE
 export interface ToastItem {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'undo';
+  type: 'success' | 'error' | 'warning' | 'undo' | 'sync-delay';
   message: string;
   duration?: number;
   countdown?: number;
   onUndo?: () => void;
+  onRetry?: () => void;
 }
 
 // 🍎 TOAST STATE INTERFACE

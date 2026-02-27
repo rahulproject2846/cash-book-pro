@@ -124,6 +124,7 @@ export class HydrationEngine {
       }
 
       // ⚛️ ATOMIC TRANSACTION: Perform database operation
+      let finalId: any;
       const result = await db.transaction('rw', db.books, db.entries, db.users, async () => {
         let processedCount = 0;
 
@@ -136,9 +137,11 @@ export class HydrationEngine {
             if (existing) {
               await db.books.update(existing.localId!, record);
               console.log(`✅ [IRON GATE] Updated book: ${record.cid}`);
+              finalId = existing.localId;
             } else {
-              await db.books.add(record);
+              const newId = await db.books.add(record);
               console.log(`✅ [IRON GATE] Added book: ${record.cid}`);
+              finalId = newId;
             }
             processedCount = 1;
           } else {
@@ -198,6 +201,7 @@ export class HydrationEngine {
       return { 
         success: true, 
         count: result, 
+        id: finalId,
         source,
         error: undefined 
       };

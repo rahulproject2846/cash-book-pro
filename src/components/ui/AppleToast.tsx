@@ -2,23 +2,25 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, AlertTriangle, RotateCcw } from 'lucide-react';
+import { CheckCircle, AlertTriangle, RotateCcw, CloudOff } from 'lucide-react';
 import { useVaultStore } from '@/lib/vault/store';
 import { cn } from '@/lib/utils/helpers';
 
 export interface AppleToastProps {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'undo';
+  type: 'success' | 'error' | 'warning' | 'undo' | 'sync-delay';
   message: string;
   duration?: number;
   countdown?: number;
   onUndo?: () => void;
+  onRetry?: () => void;
 }
 
 export const AppleToast: React.FC<AppleToastProps> = ({ 
-  id, type, message, duration = 3000, countdown, onUndo 
+  id, type, message, duration = 3000, countdown, onUndo, onRetry 
 }) => {
   const [progress, setProgress] = useState(100);
+  // হুক সবসময় টপ-লেভেলে থাকতে হবে
   // ✅ হুক সবসময় টপ-লেভেলে থাকতে হবে
   const { hideToast } = useVaultStore();
   
@@ -68,7 +70,15 @@ export const AppleToast: React.FC<AppleToastProps> = ({
           text: '#ef4444'
         };
       
-      default: // undo/warning
+      case 'sync-delay':
+        return {
+          background: 'rgba(59, 130, 246, 0.15)',
+          border: 'rgba(59, 130, 246, 0.3)',
+          glow: '0 0 20px rgba(59, 130, 246, 0.3)',
+          text: '#3b82f6'
+        };
+      
+      default: // undo/warning/sync-delay
         return {
           background: 'rgba(251, 191, 36, 0.15)',
           border: 'rgba(251, 191, 36, 0.3)',
@@ -116,6 +126,7 @@ export const AppleToast: React.FC<AppleToastProps> = ({
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onUndo) onUndo();
+    if (onRetry) onRetry();
     hideToast(id); // ✅ এখানে আর হুক কল হচ্ছে না, উপরে ডিফাইন করা ফাংশন কল হচ্ছে
   };
 
@@ -149,6 +160,7 @@ export const AppleToast: React.FC<AppleToastProps> = ({
           {type === 'error' && <AlertTriangle size={24} style={{ color: colors.text }} />}
           {type === 'warning' && <AlertTriangle size={24} style={{ color: colors.text }} />}
           {type === 'undo' && <RotateCcw size={24} style={{ color: colors.text }} />}
+          {type === 'sync-delay' && <CloudOff size={24} style={{ color: colors.text }} />}
         </div>
         
         {/* Message */}

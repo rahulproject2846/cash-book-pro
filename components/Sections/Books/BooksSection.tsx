@@ -64,7 +64,7 @@ const BooksSection = memo(({ currentUser }: any) => {
         if (!activeUserId || !mounted || refreshLock.current) return;
 
         // If we already have books in RAM, skip the initial skeleton/refresh loop
-        if (books.length > 0 && bootStatus === 'READY') {
+        if (books.length > 0) {
             setShowSkeleton(false);
             return;
         }

@@ -104,7 +104,7 @@ const LedgerRow = memo(({ e, onEdit, onDelete, onToggleStatus, activeId, setActi
                         <h4 className="text-[15px] font-black text-[var(--text-main)] truncate">{e.title}</h4>
                         <div className="flex items-center gap-2">
                             <span className="text-[8px] font-black text-orange-500   bg-orange-500/5 px-2 py-0.5 rounded-md border border-orange-500/10">
-                                {e.category?.to ()}
+                                {e.category?.toUpperCase()}
                             </span>
                             <span className="text-[8px] font-bold text-[var(--text-muted)] opacity-30">
                                 {toBn(String(rowId).slice(-4), lang)}

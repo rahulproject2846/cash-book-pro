@@ -139,7 +139,7 @@ export class FinanceService {
       
       const finalAmount = Number(entryData.amount) || 0;
       const finalDate = entryData.date || new Date().toISOString().split('T')[0];
-      const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category.to ()} RECORD` : 'GENERAL RECORD');
+      const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category?.toUpperCase()} RECORD` : 'GENERAL RECORD');
 
       // 🎯 SAFE VKEY LOGIC: Handle NEW vs EXISTING records
       let finalVKey: number;
@@ -264,7 +264,46 @@ export class FinanceService {
       // 🆕 OPTIMISTIC RE-SORT: Apply filters and sort immediately
       get().processEntries();
       
-      // 🎯 ATOMIC BALANCE PULSE: Update cached balance after successful batch
+      // � ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
+      if (bookSignalPayload && activeBook) {
+        // Fetch fresh parent book and update timestamp
+        const parentBook = await db.books.get(String(activeBook._id || activeBook.localId));
+        if (parentBook) {
+          const updatedBook = {
+            ...parentBook,
+            updatedAt: getTimestamp(),
+            vKey: Number(parentBook.vKey || 1) + 1
+          };
+          
+          // Update parent book in Dexie
+          await db.books.update(String(parentBook.localId), {
+            updatedAt: updatedBook.updatedAt,
+            vKey: updatedBook.vKey
+          });
+          
+          // 🛡️ ACTIVITY PULSE: Trigger dashboard re-sort instantly
+          const { getVaultStore } = await import('../store/storeHelper');
+          const vaultStore = getVaultStore();
+          if (vaultStore.applyFiltersAndSort) {
+            vaultStore.applyFiltersAndSort();
+          }
+          
+          // Update store's books array with fresh timestamp
+          if (vaultStore.books) {
+            const updatedBooks = vaultStore.books.map((book: any) => 
+              (book._id === updatedBook._id || book.localId === updatedBook.localId) 
+                ? { ...book, updatedAt: updatedBook.updatedAt, vKey: updatedBook.vKey }
+                : book
+            );
+            // Trigger vault update event to refresh books array
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('vault-updated'));
+            }
+          }
+        }
+      }
+      
+      // �� ATOMIC BALANCE PULSE: Update cached balance after successful batch
       if (bookSignalPayload && activeBook) {
         const newBalance = this.getBookBalance(get, String(activeBook._id || activeBook.localId));
         set((state: any) => ({
@@ -417,6 +456,40 @@ export class FinanceService {
       
       // ✅ CRITICAL: Trigger processing engine to update processedEntries
       get().processEntries();
+      
+      // 🆕 ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
+      if (parentBookId) {
+        const activeBook = get().activeBook;
+        if (activeBook && (String(activeBook._id) === String(parentBookId) || String(activeBook.localId) === String(parentBookId))) {
+          // Fetch fresh parent book and update timestamp
+          const parentBook = await db.books.get(String(activeBook._id || activeBook.localId));
+          if (parentBook) {
+            const updatedBook = {
+              ...parentBook,
+              updatedAt: getTimestamp(),
+              vKey: Number(parentBook.vKey || 1) + 1
+            };
+            
+            // Update parent book in Dexie
+            await db.books.update(String(parentBook.localId), {
+              updatedAt: updatedBook.updatedAt,
+              vKey: updatedBook.vKey
+            });
+            
+            // 🛡️ ACTIVITY PULSE: Trigger dashboard re-sort instantly
+            const { getVaultStore } = await import('../store/storeHelper');
+            const vaultStore = getVaultStore();
+            if (vaultStore.applyFiltersAndSort) {
+              vaultStore.applyFiltersAndSort();
+            }
+            
+            // Trigger vault update event to refresh books array
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('vault-updated'));
+            }
+          }
+        }
+      }
       
       return { success: true };
     } catch (error) {

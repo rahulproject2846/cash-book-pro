@@ -103,7 +103,7 @@ export const useMediaStore = create<MediaStoreState>()(
                     cloudinaryUrl: url,
                     cloudinaryPublicId: publicId,
                     uploadedAt: Date.now(),
-                    blobData: shouldDeleteBlob ? undefined : mediaRecord.blobData // 🛡️ Conditional cleanup
+                    blobData: mediaRecord.blobData // 🛡️ Keep blob for now - prevent immediate deletion
                 });
                 
                 if (shouldDeleteBlob) {

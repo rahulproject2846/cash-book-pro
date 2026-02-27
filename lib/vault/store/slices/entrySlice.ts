@@ -117,32 +117,6 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
   processEntries: () => {
     const { entries, entrySortConfig, entryCategoryFilter, entrySearchQuery, allEntries, activeBook, entryPagination } = get();
     
-    // 🔍 FORENSIC AUDIT: RAM Content Verification
-    console.log('🔍 [FORENSIC AUDIT] allEntries.length:', allEntries.length);
-    if (allEntries.length > 0) {
-      const sampleEntry = allEntries[0];
-      console.log('🔍 [FORENSIC AUDIT] Sample Entry:', {
-        bookId: sampleEntry.bookId,
-        bookIdType: typeof sampleEntry.bookId,
-        bookIdLength: sampleEntry.bookId?.length,
-        bookIdTrimmed: `"${sampleEntry.bookId}"`,
-        userId: sampleEntry.userId,
-        userIdType: typeof sampleEntry.userId
-      });
-    }
-    
-    console.log('🔍 [FORENSIC AUDIT] activeBook:', {
-      _id: activeBook?._id,
-      _idType: typeof activeBook?._id,
-      localId: activeBook?.localId,
-      localIdType: typeof activeBook?.localId,
-      cid: activeBook?.cid,
-      cidType: typeof activeBook?.cid,
-      _idTrimmed: `"${activeBook?._id}"`,
-      localIdTrimmed: `"${activeBook?.localId}"`,
-      cidTrimmed: `"${activeBook?.cid}"`
-    });
-    
     // 🆕 TRIPLE-LINK PROTOCOL: Start with all entries and filter by active book
     let processed = [];
     if (activeBook) {
@@ -152,26 +126,8 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
         const bLocalId = String(activeBook?.localId || "");
         const bCid = String(activeBook?.cid || "");
 
-        // � FORENSIC AUDIT: Strict Comparison Analysis
-        const match1 = eBookId === bId;
-        const match2 = eBookId === bLocalId;
-        const match3 = eBookId === bCid;
-        
-        if (allEntries.indexOf(entry) === 0) { // Only log for first entry
-          console.log('🔍 [FORENSIC AUDIT] Comparison Analysis:', {
-            eBookId: `"${eBookId}"`,
-            bId: `"${bId}"`,
-            bLocalId: `"${bLocalId}"`,
-            bCid: `"${bCid}"`,
-            match1,
-            match2,
-            match3,
-            isMatch: match1 || match2 || match3
-          });
-        }
-
-        // 🛡️ TRIPLE-LINK LAW: Match ANY of the 3 IDs
-        const isMatch = (match1 || match2 || match3);
+        // 🛡️ TRIPLE-LINK LAW: Match ANY of 3 IDs
+        const isMatch = (eBookId === bId || eBookId === bLocalId || eBookId === bCid);
         const isNotDeleted = (entry.isDeleted === 0 || entry.isDeleted === undefined || entry.isDeleted === null);
 
         return isMatch && isNotDeleted;
@@ -179,8 +135,6 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
     } else {
       processed = []; // No active book = no entries
     }
-    
-    console.log('🔍 [FORENSIC AUDIT] Final processed.length:', processed.length);
     
     // Apply category filter
     if (entryCategoryFilter !== 'all') {
