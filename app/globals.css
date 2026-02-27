@@ -388,7 +388,7 @@ html {
     scrollbar-width: none;  /* Firefox */
   }
 
-  /* ৫. গ্লাস স্ক্রলবার (মডালের ভেতরের জন্য) */
+  /* ��. গ্লাস স্ক্রলবার (মডালের ভেতরের জন্য) */
   .glass-scroll::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
@@ -489,10 +489,19 @@ body.turbo-active .glass-heavy {
 
 
 /* ৪. ইনপুট এবং ছোট বাটন ফিক্স (যাতে হিজিবিজি না লাগে) — scoped to app only */
-:not([data-site]) input, .tag-item {
+input, .tag-item {
   box-shadow: none !important;
   border: 1px solid rgba(0, 0, 0, 0.04) !important;
   background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Override: restore normal input styling inside site pages */
+[data-site] input,
+[data-site] select,
+[data-site] textarea {
+  box-shadow: unset !important;
+  border: unset !important;
+  background: unset !important;
 }
 
 

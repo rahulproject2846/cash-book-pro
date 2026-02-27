@@ -16,6 +16,9 @@ import { ProfileSection } from '@/components/Sections/Profile/ProfileSection';
 import { useBootStatus, useVaultState } from '@/lib/vault/store/storeHelper';
 import { orchestrator } from '@/lib/vault/core/SyncOrchestrator';
 
+// Providers wrapper
+import { Providers } from './providers';
+
 function CashBookAppContent() {
   const { isSystemReady } = useBootStatus();
   const { 
@@ -106,9 +109,11 @@ function CashBookAppContent() {
 
 export default function CashBookApp() {
   return (
-    // 🛡️ NO-FLICKER FALLBACK
-    <Suspense fallback={<div className="h-screen w-screen bg-[var(--bg-app)]" />}>
-      <CashBookAppContent />
-    </Suspense>
+    <Providers>
+      {/* No-flicker fallback */}
+      <Suspense fallback={<div className="h-screen w-screen bg-[var(--bg-app)]" />}>
+        <CashBookAppContent />
+      </Suspense>
+    </Providers>
   );
 }

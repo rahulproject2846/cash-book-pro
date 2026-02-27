@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Providers } from "./providers";
 
 const geist = Geist({ 
   subsets: ["latin"],
@@ -91,7 +90,6 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: "cover",
-  colorScheme: "dark",
   interactiveWidget: "resizes-visual",
 };
 
@@ -99,9 +97,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased selection:bg-orange-500/30 overflow-x-hidden`} suppressHydrationWarning >
-        <Providers>
-            {children}
-        </Providers>
+          {children}
       </body>
     </html>
   );
