@@ -8,7 +8,7 @@ import { CtaSection } from "@/components/site/home/CtaSection"
 
 export default function SiteHomePage() {
   return (
-    <div className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]">
+    <div data-site className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]">
       <SiteHeader />
       <main>
         <HeroSection />

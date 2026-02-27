@@ -42,7 +42,7 @@ export default function ContactPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]">
+    <div data-site className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]">
       <SiteHeader />
       <main>
         {/* Hero */}

@@ -393,6 +393,30 @@ html {
     background-color: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
   }
+
+  /* Site Skeleton shimmer */
+  .site-skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--site-surface);
+    border-radius: 0.75rem;
+  }
+  .site-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      transparent 100%
+    );
+    animation: site-shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes site-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
 }
 
 
@@ -464,8 +488,8 @@ body.turbo-active .glass-heavy {
 }
 
 
-/* ৪. ইনপুট এবং ছোট বাটন ফিক্স (যাতে হিজিবিজি না লাগে) */
-input, .tag-item {
+/* ৪. ইনপুট এবং ছোট বাটন ফিক্স (যাতে হিজিবিজি না লাগে) — scoped to app only */
+:not([data-site]) input, .tag-item {
   box-shadow: none !important;
   border: 1px solid rgba(0, 0, 0, 0.04) !important;
   background: rgba(0, 0, 0, 0.02) !important;
