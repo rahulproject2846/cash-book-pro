@@ -10,7 +10,9 @@ import mongoose, { Schema, model, models, Document } from 'mongoose';
 export interface IBook extends Document {
   cid: string;        
   name: string;
+  entryCount?: number;
   description?: string;
+  color?: string;
   vKey: number;         
   syncAttempts: number; 
   lastAttempt?: number; 
@@ -22,6 +24,9 @@ export interface IBook extends Document {
   phone?: string;
   image?: string; 
   isDeleted?: number;
+  conflicted?: number;
+  conflictReason?: string;
+  serverData?: any;
   createdAt: Date;
   updatedAt: Date; // কেবল একবার রাখা হয়েছে
   mediaCid?: string; // ✅ ADDED: Cloudinary URL reference
@@ -37,8 +42,7 @@ const BookSchema = new Schema<IBook>({
   },
   userId: { 
     type: String, // Interface এর সাথে মিল রাখতে String করা হয়েছে (Casting Error এড়াতে)
-    required: true,
-    index: true 
+    required: true
   },
   name: { 
     type: String, 
@@ -51,6 +55,10 @@ const BookSchema = new Schema<IBook>({
     trim: true,
     maxlength: [200, "Description cannot exceed 200 characters"],
     default: ""
+  },
+  color: {
+    type: String,
+    default: "var(--accent)"
   },
   vKey: {
     type: Number,
@@ -102,6 +110,19 @@ const BookSchema = new Schema<IBook>({
     type: Number,
     default: 0,
     index: true
+  },
+  conflicted: {
+    type: Number,
+    default: 0,
+    index: true
+  },
+  conflictReason: {
+    type: String,
+    default: ""
+  },
+  serverData: {
+    type: Schema.Types.Mixed,
+    default: null
   }
 }, { 
   timestamps: true, 

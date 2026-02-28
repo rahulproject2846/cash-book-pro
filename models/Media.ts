@@ -25,8 +25,7 @@ const MediaSchema = new Schema<IMedia>({
   // User identification for security and data isolation
   userId: { 
     type: String, 
-    required: [true, "User ID is mandatory for media records"],
-    index: true 
+    required: [true, "User ID is mandatory for media records"]
   },
   
   // Media identifier (globally unique)

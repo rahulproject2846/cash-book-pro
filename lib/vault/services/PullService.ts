@@ -355,7 +355,7 @@ export class PullService {
   /**
    * 🧑 PULL USER SETTINGS - Fetch user profile and update local state
    */
-  private async pullUserSettings(): Promise<{ success: boolean; error?: string }> {
+  public async pullUserSettings(): Promise<{ success: boolean; error?: string }> {
     try {
       console.log('🧑 [PULL SERVICE] Fetching user settings from server...');
       
@@ -378,10 +378,14 @@ export class PullService {
       }
       
       // 🎯 UPDATE LOCAL ZUSTAND STATE
-      const store = getVaultStore();
+      const { useVaultStore } = await import('../store/index');
+      
+      // 🔄 FLAG AS REMOTE MUTATION TO PREVENT LOOP
+      useVaultStore.setState({ isRemoteMutation: true });
       
       // Extract user settings
       const { categories, currency, preferences } = user;
+      const store = useVaultStore.getState();
       
       // Update store if values are present
       if (categories && Array.isArray(categories)) {
@@ -405,6 +409,9 @@ export class PullService {
           store.setPreferences(preferences);
         }
       }
+      
+      // 🔄 CLEAR REMOTE MUTATION FLAG
+      useVaultStore.setState({ isRemoteMutation: false });
       
       console.log('✅ [PULL SERVICE] User settings pulled successfully');
       return { success: true };

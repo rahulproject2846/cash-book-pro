@@ -1,94 +1,71 @@
 "use client";
-import React, { useState, useEffect, useRef, useMemo, memo, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-    Layout, FileUp, CloudSync, RefreshCw, AlertTriangle, X, GitCommit, Zap
+    Layout, FileUp, CloudSync, RefreshCw, AlertTriangle, X, Zap 
 } from 'lucide-react';
-import { BookCardSkeleton } from './BookCardSkeleton';
+import { useRouter } from 'next/navigation';
 
-// Global Engine Hooks & Components
-import { useModal } from '@/context/ModalContext';
+// --- 🛡️ HOLLY GRILL CORE ENGINE ---
+import { useVaultStore } from '@/lib/vault/store';
+import { identityManager } from '@/lib/vault/core/IdentityManager';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Tooltip } from '@/components/UI/Tooltip';
-import { HubHeader } from '@/components/Layout/HubHeader';
+import { useModal } from '@/context/ModalContext';
 import { cn, toBn } from '@/lib/utils/helpers';
 
-// Domain-Driven Components
+// --- 🧩 DOMAIN-DRIVEN COMPONENTS ---
+import { HubHeader } from '@/components/Layout/HubHeader';
+import { BooksList } from './BooksList';
 import { BookDetails } from './BookDetails';
-import { BooksList } from './BooksList'; 
-import ConflictManagementList from '@/components/UI/ConflictManagementList'; 
-
-// Core Logic Engine
-import { useVaultStore } from '@/lib/vault/store';
-import { getVaultStore } from '@/lib/vault/store/storeHelper'; 
-import { identityManager } from '@/lib/vault/core/IdentityManager'; 
-import { useRouter, useSearchParams } from 'next/navigation'; 
+import { BookCardSkeleton } from './BookCardSkeleton';
+import ConflictManagementList from '@/components/UI/ConflictManagementList';
+import { Tooltip } from '@/components/UI/Tooltip';
 
 /**
- * VAULT PRO: MASTER BOOKS SECTION (V14.0 - ATOMIC READINESS)
- * --------------------------------------------------------
- * Status: Refactored for Zero-Flicker & Native iOS Fluidity.
- * 🛡️ Guarded by Master Architect DNA.
+ * 🏆 MASTER BOOKS SECTION V15.0 (HOLLY GRILL DEFINITIVE)
+ * -------------------------------------------------------
+ * Logic: Triple-Link Identity Protocol | SSOT Architecture.
+ * Physics: Royal Glide Spring (300/35/1).
+ * Features: Morphic Transition, Predictive Prefetching, Double-Buffer Scroll.
  */
-const BooksSection = memo(({ currentUser }: any) => {
+export const BooksSection = ({ currentUser }: any) => {
     const router = useRouter();
-    const searchParams = useSearchParams();
     const { openModal } = useModal();
     const { t, language } = useTranslation();
 
-    // 🎯 STABLE STATE INITIALIZATION
+    // 🎯 RECONSTRUCTION STATE
     const [mounted, setMounted] = useState(false);
     const [dashPage, setDashPage] = useState(1);
-    const [showConflictList, setShowConflictList] = useState(false); 
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [showConflictList, setShowConflictList] = useState(false);
     const refreshLock = useRef(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // 🎯 BOOT STATUS & STORE SELECTORS
+    // 🚀 SINGLE SOURCE OF TRUTH SELECTORS
     const {
-        books, bootStatus, activeBook, setActiveBook, 
-        filteredBooks, isLoading, isRefreshing,
-        saveBook, saveEntry, deleteBook, toggleEntryStatus, togglePin, 
-        conflictedCount, hasConflicts, unsyncedCount,
-        searchQuery, setSearchQuery, userId, refreshBooks, fetchPageChunk,
-        globalStats, entries, setLastScrollPosition, lastScrollPosition
+        books, filteredBooks, activeBook, bootStatus, isLoading, isRefreshing,
+        searchQuery, setSearchQuery, conflictedCount, hasConflicts, unsyncedCount,
+        lastScrollPosition, setLastScrollPosition, globalStats,
+        setActiveBook, refreshBooks, fetchPageChunk, saveBook, deleteBook,
+        saveEntry, toggleEntryStatus, togglePin, userId, getBookBalance
     } = useVaultStore();
 
-    // 🛡️ SKELETON GATE: Only show if system isn't READY
+    // 🛡️ SKELETON PROTECTION GATE
     const [showSkeleton, setShowSkeleton] = useState(bootStatus !== 'READY');
 
     useEffect(() => { setMounted(true); }, []);
 
-    // 🚀 IDENTITY & DATA FETCHING WITH REFRESH LOCK
-    useEffect(() => {
-        const activeUserId = currentUser?._id || userId || identityManager.getUserId();
-        if (!activeUserId || !mounted || refreshLock.current) return;
-
-        // If we already have books in RAM, skip the initial skeleton/refresh loop
-        if (books.length > 0) {
-            setShowSkeleton(false);
-            return;
-        }
-
-        refreshLock.current = true;
-        refreshBooks().finally(() => {
-            // Unlock after delay to prevent rapid re-triggers
-            setTimeout(() => { refreshLock.current = false; }, 5000);
-        });
-    }, [currentUser?._id, userId, mounted, bootStatus]);
-
-    // 🛡️ NATIVE UX DELAY: Keep skeleton until boot sequence and processing are complete
+    // 🌊 NATIVE FLUIDITY DELAY
     useEffect(() => {
         if (bootStatus === 'READY' && mounted) {
-            const timer = setTimeout(() => {
-                setShowSkeleton(false);
-            }, 350); // Royal Glide Delay
+            const timer = setTimeout(() => setShowSkeleton(false), 350);
             return () => clearTimeout(timer);
         }
     }, [bootStatus, mounted]);
 
-    // 🎯 SCROLL RESTORATION WITH DOUBLE FRAME BUFFER
+    // 🎯 SMART SCROLL RESTORATION (Double Buffer)
     useEffect(() => {
-        if (lastScrollPosition > 0 && mounted && !showSkeleton) {
+        if (lastScrollPosition > 0 && mounted && !showSkeleton && !activeBook) {
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     const scrollEl = document.querySelector('main');
@@ -99,202 +76,165 @@ const BooksSection = memo(({ currentUser }: any) => {
                 });
             });
         }
-    }, [mounted, showSkeleton]);
+    }, [mounted, showSkeleton, activeBook, lastScrollPosition, setLastScrollPosition]);
 
-    // 🚀 CHUNK FETCH ON PAGE CHANGE
+    // 📱 RESPONSIVE CHUNK FETCHING
     const isMobile = useMemo(() => typeof window !== 'undefined' && window.innerWidth < 768, []);
     useEffect(() => {
-        if (bootStatus === 'READY') {
+        // 🆕 GHOST RACE CONDITION FIX: Only fetch if NOT searching
+        if (bootStatus === 'READY' && !activeBook && !searchQuery) {
             fetchPageChunk(dashPage, isMobile);
         }
-    }, [dashPage, bootStatus, isMobile]);
+    }, [dashPage, bootStatus, isMobile, activeBook, fetchPageChunk, searchQuery]);
 
-    // 🛡️ STABLE CALLBACKS: Fixed Reference Inconsistency
+    // 🛡️ STABLE ACTION HANDLERS
     const onEdit = useCallback((book: any) => {
         openModal('addBook', { editTarget: book, onSubmit: (data: any) => saveBook(data, book), currentUser });
     }, [openModal, saveBook, currentUser]);
 
     const onDelete = useCallback((book: any) => {
-        openModal('deleteConfirm', { targetName: book.name, onConfirm: () => deleteBook(book, router) });
+        openModal('deleteConfirm', { 
+            targetName: book.name, 
+            onConfirm: () => deleteBook(book, router) 
+        });
     }, [openModal, deleteBook, router]);
 
-    const handleEntryEdit = useCallback((e: any) => {
+    const handleEntryEdit = useCallback((entry: any) => {
         openModal('addEntry', { 
-            entry: e, 
+            entry, 
             currentBook: activeBook, 
             currentUser: currentUser || { _id: userId }, 
             onSubmit: (data: any) => saveEntry(data) 
         });
     }, [activeBook, currentUser, userId, openModal, saveEntry]);
 
-    const getBookBalance = useCallback((id: any) => {
-        return getVaultStore().getBookBalance(String(id));
-    }, []);
-
-    const handleImportClick = useCallback(() => {
-        fileInputRef.current?.click();
-    }, []);
-
     const handleSoftRefresh = useCallback(() => {
-        if (hasConflicts) {
-            setShowConflictList(true);
-        } else {
-            getVaultStore().refreshData(); // Soft refresh instead of window.reload
-        }
+        if (hasConflicts) setShowConflictList(true);
+        else useVaultStore.getState().refreshData();
     }, [hasConflicts]);
 
     const currencySymbol = useMemo(() => {
         return currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
     }, [currentUser?.currency]);
 
-    // 🎨 MOTION PHYSICS
-    const royalGlide: any = { type: "spring", stiffness: 300, damping: 35, mass: 1 };
+    // 🎨 ROYAL GLIDE PHYSICS
+    const royalGlide = { type: "spring", stiffness: 300, damping: 35, mass: 1 };
+
+    if (!mounted) return null;
 
     return (
-        <div className="w-full relative transition-all duration-500">
+        <div className="w-full relative min-h-screen">
             <AnimatePresence mode="wait">
                 {showSkeleton ? (
-                    <motion.div
-                        key="skeleton-gate"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="w-full"
-                    >
+                    <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
                         <BookCardSkeleton count={isMobile ? 8 : 12} />
                     </motion.div>
                 ) : (
-                    <motion.div
-                        key="content-gate"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={royalGlide}
-                    >
-                        {/* --- 🧠 HUB HEADER --- */}
-                        {!activeBook && (
-                            <HubHeader 
-                                title={t('ledger_hub') || "LEDGER HUB"} 
-                                subtitle={`${toBn(filteredBooks.length, language)} ${t('active_protocols') || "PROTOCOLS ACTIVE"}`}
-                                icon={Layout}
-                                searchQuery={searchQuery}
-                                onSearchChange={setSearchQuery}
-                            >
-                                <Tooltip text={t('tt_import_ledger') || "Import Registry Backup"}>
-                                    <button onClick={handleImportClick} className="h-11 w-11 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border)] rounded-[20px] text-[var(--text-muted)] hover:text-green-500 transition-all active:scale-90 shadow-sm outline-none">
-                                        <FileUp size={20} />
-                                    </button>
-                                </Tooltip>
-                            </HubHeader>
-                        )}
+                    <motion.div key="content" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={royalGlide as any}>
+                        
+                        {/* --- 🧠 MASTER HUB HEADER --- */}
+                        <AnimatePresence>
+                            {!activeBook && (
+                                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                                    <HubHeader 
+                                        title={t('ledger_hub') || "LEDGER HUB"} 
+                                        subtitle={`${toBn(filteredBooks.length, language)} ${t('active_protocols') || "PROTOCOLS ACTIVE"}`}
+                                        icon={Layout}
+                                        searchQuery={searchQuery}
+                                        onSearchChange={setSearchQuery}
+                                    >
+                                        <Tooltip text={t('tt_import_ledger')}>
+                                            <button onClick={() => fileInputRef.current?.click()} className="h-11 w-11 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border)] rounded-[20px] text-[var(--text-muted)] hover:text-orange-500 transition-all active:scale-90 shadow-sm outline-none">
+                                                <FileUp size={20} />
+                                            </button>
+                                        </Tooltip>
+                                    </HubHeader>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* --- 🌩 SYNC WATCHMAN BAR --- */}
                         <AnimatePresence>
                             {(unsyncedCount > 0 || hasConflicts) && (
-                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-6">
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-8 px-1">
                                     <div className={cn(
-                                        "rounded-[28px] p-4 flex items-center justify-between shadow-lg backdrop-blur-md",
+                                        "rounded-[32px] p-5 flex items-center justify-between shadow-xl border backdrop-blur-xl",
                                         hasConflicts ? "bg-red-500/10 border-red-500/20" : "bg-orange-500/10 border-orange-500/20"
                                     )}>
-                                        <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-5">
                                             <div className={cn(
-                                                "w-10 h-10 rounded-full flex items-center justify-center text-white animate-pulse shadow-lg",
-                                                hasConflicts ? "bg-red-500 shadow-red-500/20" : "bg-orange-500 shadow-orange-500/20"
+                                                "w-12 h-12 rounded-full flex items-center justify-center text-white animate-pulse shadow-lg",
+                                                hasConflicts ? "bg-red-500" : "bg-orange-500"
                                             )}>
-                                                {hasConflicts ? <AlertTriangle size={20} /> : <CloudSync size={20} />}
+                                                {hasConflicts ? <AlertTriangle size={24} /> : <CloudSync size={24} />}
                                             </div>
-                                            <div className="space-y-0.5">
-                                                <p className={cn("text-[10px] font-black     ", hasConflicts ? "text-red-500" : "text-orange-500")}>
-                                                    {hasConflicts 
-                                                        ? `${toBn(conflictedCount, language)} conflicts found${unsyncedCount > 0 ? `, ${toBn(unsyncedCount, language)} pending` : ''}` 
-                                                        : `${toBn(unsyncedCount, language)} ${t('unsynced_units') || "UNITS SECURED"}`
-                                                    }
+                                            <div>
+                                                <p className={cn("text-[11px] font-black uppercase tracking-wider", hasConflicts ? "text-red-500" : "text-orange-500")}>
+                                                    {hasConflicts ? `${toBn(conflictedCount, language)} Conflicts Identified` : `${toBn(unsyncedCount, language)} Units Pending`}
                                                 </p>
-                                                <p className={cn("text-[9px] font-bold     ", hasConflicts ? "text-red-500/60" : "text-orange-500/60")}>
-                                                    {hasConflicts ? "Vault Conflicts Detected" : "Vault Buffer Active"}
-                                                </p>
+                                                <p className="text-[9px] font-bold opacity-60 text-[var(--text-main)]">System Integrity Check Active</p>
                                             </div>
                                         </div>
-                                        <Tooltip text={hasConflicts ? "Manage all data version mismatches." : (t('tt_force_sync') || "Force protocol refresh")}>
-                                            <button 
-                                                onClick={handleSoftRefresh} 
-                                                className={cn(
-                                                    "p-3 rounded-xl transition-all active:scale-90 shadow-inner flex items-center gap-2 text-[10px] font-bold  ",
-                                                    hasConflicts ? "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white" : "bg-orange-500/10 text-orange-500 hover:bg-orange-500 hover:text-white"
-                                                )}
-                                            >
-                                                {hasConflicts ? 'Manage Conflicts' : 'Force Sync'}
-                                                <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
-                                            </button>
-                                        </Tooltip>
+                                        <button onClick={handleSoftRefresh} className={cn("px-5 py-3 rounded-2xl font-black text-[10px] uppercase transition-all active:scale-95 shadow-sm", hasConflicts ? "bg-red-500 text-white" : "bg-orange-500 text-white")}>
+                                            {hasConflicts ? 'Resolve Mismatch' : 'Sync DNA'}
+                                        </button>
                                     </div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
 
-                        {/* --- 🚨 CONFLICT MANAGEMENT CENTER --- */}
+                        {/* --- 🚨 CONFLICT RESOLUTION OVERLAY --- */}
                         <AnimatePresence>
                             {showConflictList && (
-                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="relative w-full max-w-4xl max-h-[80vh] bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-                                        <div className="flex items-center justify-between p-6 border-b border-[var(--border)] bg-gradient-to-r from-red-500/10 to-transparent">
-                                            <div className="flex items-center gap-3">
-                                                <AlertTriangle className="text-red-500" size={24} />
-                                                <h2 className="text-xl font-bold">{t('conflict_center') || "Conflict Management Center"}</h2>
-                                            </div>
-                                            <button onClick={() => setShowConflictList(false)} className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-red-500/10 transition-colors"><X size={20} /></button>
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+                                    <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="w-full max-w-5xl h-[85vh] bg-[var(--bg-app)] border border-[var(--border)] rounded-[40px] shadow-2xl overflow-hidden flex flex-col">
+                                        <div className="flex items-center justify-between p-8 border-b border-[var(--border)]">
+                                            <h2 className="text-2xl font-black text-[var(--text-main)]">INTEGRITY COMMAND</h2>
+                                            <button onClick={() => setShowConflictList(false)} className="p-3 bg-[var(--bg-card)] rounded-2xl hover:text-red-500 transition-colors"><X size={24}/></button>
                                         </div>
-                                        <div className="flex-1 overflow-y-auto p-6"><ConflictManagementList currentUser={currentUser} /></div>
+                                        <div className="flex-1 overflow-y-auto p-8"><ConflictManagementList currentUser={currentUser} /></div>
                                     </motion.div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
 
-                        {/* --- 📚 MAIN VIEW SWITCHER --- */}
+                        {/* --- 📚 SWITCHABLE CONTENT AREA --- */}
                         <div className="relative w-full">
                             <AnimatePresence mode="wait">
                                 {!activeBook ? (
-                                    <motion.div 
-                                        key="books-list-view"
-                                        layoutId="main-vault-view"
-                                        initial={{ opacity: 0, x: -20 }} 
-                                        animate={{ opacity: 1, x: 0 }} 
-                                        exit={{ opacity: 0, x: -20 }} 
-                                        transition={royalGlide}
-                                    >
+                                    /* --- VAULT LIST VIEW --- */
+                                    <motion.div key="list" layoutId="main-vault-view" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={royalGlide as any}>
                                         <BooksList 
                                             onAddClick={() => openModal('addBook', { onSubmit: (data: any) => saveBook(data), currentUser })}
-                                            onBookClick={(b: any) => { setActiveBook(b); }} 
-                                            onQuickAdd={(b: any) => { 
-                                                setActiveBook(b); 
-                                                setTimeout(() => openModal('addEntry', { currentUser: currentUser || { _id: userId }, currentBook: b, onSubmit: (data: any) => saveEntry(data) }), 300); 
+                                            onBookClick={(b: any) => {
+                                                const scrollEl = document.querySelector('main');
+                                                if (scrollEl) setLastScrollPosition(scrollEl.scrollTop);
+                                                setActiveBook(b);
+                                            }} 
+                                            onQuickAdd={(b: any) => {
+                                                setActiveBook(b);
+                                                setTimeout(() => openModal('addEntry', { currentUser: currentUser || { _id: userId }, currentBook: b, onSubmit: (data: any) => saveEntry(data) }), 300);
                                             }}
+                                            onEdit={onEdit}
+                                            onDelete={onDelete}
                                             getBookBalance={getBookBalance}
                                             currencySymbol={currencySymbol}
                                         />
                                     </motion.div>
                                 ) : (
-                                    <motion.div 
-                                        key="book-details-view"
-                                        layoutId="main-vault-view"
-                                        initial={{ opacity: 0, x: 20 }} 
-                                        animate={{ opacity: 1, x: 0 }} 
-                                        exit={{ opacity: 0, x: 20 }} 
-                                        transition={royalGlide}
-                                    >
+                                    /* --- BOOK DATA-INTEL VIEW --- */
+                                    <motion.div key="details" layoutId="main-vault-view" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={royalGlide as any}>
                                         <BookDetails 
                                             currentBook={activeBook} 
                                             bookStats={globalStats} 
                                             currentUser={currentUser || { _id: userId }} 
                                             onBack={() => {
-                                                const scrollEl = document.querySelector('main');
-                                                if (scrollEl) setLastScrollPosition(scrollEl.scrollTop);
                                                 router.push('?tab=books');
                                                 requestAnimationFrame(() => setActiveBook(null));
                                             }}
                                             onAdd={() => openModal('addEntry', { currentUser: currentUser || { _id: userId }, currentBook: activeBook, onSubmit: (data: any) => saveEntry(data) })}
                                             onEdit={handleEntryEdit}
-                                            onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => getVaultStore().deleteEntry(e) })}
+                                            onDelete={(e: any) => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => useVaultStore.getState().deleteEntry(e) })}
                                             onToggleStatus={toggleEntryStatus}
                                             onTogglePin={togglePin}
                                         />
@@ -302,13 +242,14 @@ const BooksSection = memo(({ currentUser }: any) => {
                                 )}
                             </AnimatePresence>
                         </div>
+
                         <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" />
                     </motion.div>
                 )}
             </AnimatePresence>
         </div>
     );
-});
+};
 
 BooksSection.displayName = 'BooksSection';
 export default BooksSection;

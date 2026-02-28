@@ -22,8 +22,7 @@ const AuditSchema = new Schema<IAudit>({
   // User identification for data isolation
   userId: { 
     type: String, 
-    required: [true, "User ID is mandatory for audit logs"],
-    index: true 
+    required: [true, "User ID is mandatory for audit logs"]
   },
   
   // Conflict identifier (optional for general audit logs)

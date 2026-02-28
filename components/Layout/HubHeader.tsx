@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, LucideIcon, Check, ArrowDownUp, Zap } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils/helpers';
-import { useVaultState } from '@/lib/vault/store/storeHelper';
+import { useVaultStore } from '@/lib/vault/store';
 import { AppleMenu } from '@/components/UI/AppleMenu';
 
 interface HubHeaderProps {
@@ -33,7 +33,7 @@ export const HubHeader = ({
     const [isScrolled, setIsScrolled] = useState(false);
     const [searchHasFocus, setSearchHasFocus] = useState(false);
 
-    const { isSearchOpen, toggleSearch, dynamicHeaderHeight } = useVaultState();
+    const { isSearchOpen, toggleSearch, dynamicHeaderHeight } = useVaultStore();
 
     // SCROLL DETECTION
     useEffect(() => {

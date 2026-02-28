@@ -31,10 +31,18 @@ export interface IUser extends Document {
   // System Settings
   categories: string[];
   currency: string;
+  vKey: number;
   preferences: {
+    turboMode: boolean;
+    isMidnight: boolean;
+    compactMode: boolean;
+    autoLock: boolean;
     dailyReminder: boolean;
     weeklyReports: boolean;
     highExpenseAlert: boolean;
+    showTooltips: boolean;
+    expenseLimit: number;
+    language: string;
   };
   
   // 🔐 LICENSE & SECURITY FIELDS
@@ -125,9 +133,16 @@ const UserSchema = new Schema<IUser>({
     trim: true 
   },
   preferences: {
+    turboMode: { type: Boolean, default: false },
+    isMidnight: { type: Boolean, default: false },
+    compactMode: { type: Boolean, default: false },
+    autoLock: { type: Boolean, default: false },
     dailyReminder: { type: Boolean, default: false },
     weeklyReports: { type: Boolean, default: false },
-    highExpenseAlert: { type: Boolean, default: false }
+    highExpenseAlert: { type: Boolean, default: false },
+    showTooltips: { type: Boolean, default: true },
+    expenseLimit: { type: Number, default: 0 },
+    language: { type: String, default: 'en' }
   },
   plan: { type: String, enum: ['free', 'pro'], default: 'free' },
   offlineExpiry: { type: Number, default: 0 },

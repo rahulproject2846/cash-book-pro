@@ -101,7 +101,7 @@ const LedgerRow = memo(({ e, onEdit, onDelete, onToggleStatus, activeId, setActi
                         {isIncome ? <ArrowDownLeft size={24} strokeWidth={3} /> : <ArrowUpRight size={24} strokeWidth={3} />}
                     </div>
                     <div className="min-w-0 space-y-1">
-                        <h4 className="text-[15px] font-black text-[var(--text-main)] truncate">{e.title}</h4>
+                        <h4 className="text-[15px] font-black text-[var(--text-main)] truncate">{(e.title || 'Untitled Entry')}</h4>
                         <div className="flex items-center gap-2">
                             <span className="text-[8px] font-black text-orange-500   bg-orange-500/5 px-2 py-0.5 rounded-md border border-orange-500/10">
                                 {e.category?.toUpperCase()}
@@ -118,7 +118,7 @@ const LedgerRow = memo(({ e, onEdit, onDelete, onToggleStatus, activeId, setActi
                         "text-[20px] font-mono-finance font-black leading-none mb-2",
                         isIncome ? 'text-green-500' : 'text-red-500'
                     )}>
-                        {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), lang)}
+                        {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount || 0).toLocaleString(), lang)}
                     </div>
                     <button 
                         onClick={(event) => { event.stopPropagation(); onToggleStatus(e); }}

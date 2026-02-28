@@ -3,6 +3,7 @@
 import { getTimestamp } from '@/lib/shared/utils';
 import { identityManager } from '../../core/IdentityManager';
 import { db } from '@/lib/offlineDB';
+import Dexie from 'dexie';
 import { financeService } from '../../services/FinanceService';
 import { LocalEntry } from '@/lib/offlineDB';
 import { snipedInSession } from '../sessionGuard';
@@ -28,6 +29,7 @@ export interface BookState {
   books: any[];
   filteredBooks: any[];
   allBookIds: BookMatrixItem[]; // 🆕 Lightweight matrix for performance
+  filteredBookMatrix: BookMatrixItem[]; // 🆕 Filtered matrix for current search/sort
   totalBookCount: number; // 🆕 Total count for pagination UI
   searchQuery: string;
   sortOption: string;
@@ -36,12 +38,13 @@ export interface BookState {
   bookId: string;
   lastScrollPosition: number; // 🆕 SCROLL MEMORY
   pendingDeletion: { bookId: string; timeoutId: any; expiresAt: number } | null; // 🆕 9-SECOND DELAYED DELETE
+  lastSearchId: number; // 🆕 Race condition guard
 }
 
 // 📚 BOOK ACTIONS INTERFACE
 export interface BookActions {
   refreshBooks: () => Promise<boolean>;
-  fetchPageChunk: (page: number, isMobile: boolean) => Promise<void>; // 🆕 Chunk fetching for performance
+  fetchPageChunk: (page: number, isMobile: boolean, overrideMatrix?: BookMatrixItem[]) => Promise<void>; // 🆕 Chunk fetching for performance
   prefetchBookEntries: (bookId: string) => Promise<void>; // 🆕 Smart pre-fetching for zero-lag
   saveBook: (bookData: any, editTarget?: any) => Promise<{ success: boolean; book?: any; error?: Error }>;
   deleteBook: (book: any, router: any) => Promise<{ success: boolean; error?: Error }>;
@@ -58,6 +61,7 @@ export interface BookActions {
   cancelDeletion: () => void; // 🆕 CANCEL PENDING DELETION
   completeDeletionAndRedirect: (router: any) => void; // 🆕 COMPLETE DELETION AND REDIRECT
   executeFinalDeletion: (book: any, userId: string) => Promise<void>; // 🆕 EXECUTE FINAL DELETION
+  syncMatrixItem: (bookId: string) => Promise<void>; // 🆕 MATRIX SYNC FOR ACTIVITY SORT
 }
 
 // 📚 COMBINED BOOK STORE TYPE
@@ -69,6 +73,7 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   books: [],
   filteredBooks: [],
   allBookIds: [], // 🆕 Lightweight matrix for performance
+  filteredBookMatrix: [], // 🆕 Filtered matrix for current search/sort
   totalBookCount: 0, // 🆕 Total count for pagination UI
   searchQuery: '',
   sortOption: 'Activity', // 🛡️ ACTIVITY DEFAULT: Always sort by recent activity
@@ -77,13 +82,13 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   bookId: '',
   lastScrollPosition: 0,
   pendingDeletion: null, // 🆕 9-SECOND DELAYED DELETE
+  lastSearchId: 0, // 🆕 Race condition guard
 
   // 🔄 REFRESH BOOKS WITH LIGHTWEIGHT MATRIX
   refreshBooks: async () => {
     // 🛡️ IDENTITY SYNC: Get userId directly from identityManager
     const userId = identityManager.getUserId();
     if (!userId) {
-      console.warn('⚠️ [BOOK SLICE] Refresh blocked: No userId available.');
       return false;
     }
     
@@ -94,16 +99,17 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     }
     
     try {
-      // 🆕 STEP A: Load lightweight matrix (84% memory reduction)
+      // 🆕 STEP A: Load lightweight matrix with TRIPLE COMPOUND INDEX
       const bookMatrix = await db.books
-        .where('[userId+isDeleted]')
-        .equals([String(userId), 0])
+        .where('[userId+isDeleted+updatedAt]')
+        .between([String(userId), 0, Dexie.minKey], [String(userId), 0, Dexie.maxKey])
+        .reverse() // 🚀 Get newest records first at DB level
         .toArray((books: any[]) => books.map((book: any) => {
           const localId = book.localId || book._id || book.cid;
           if (!localId) return null; // 🛡️ GUARD: Filter out invalid IDs
           return {
             localId: book.localId || book._id || book.cid, // ✅ ENSURE localId IS CLEARLY RETURNED
-            userId: book.userId, // Ensure userId is captured in the lightweight matrix
+            userId: book.userId, // Ensure userId is captured in lightweight matrix
             _id: book._id || book.cid, // 🆕 PRIORITY: Use server ID or CID for display
             cid: book.cid, // 🆕 PRESERVE: Keep CID for reference
             name: book.name || '',
@@ -118,16 +124,15 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       // Store lightweight matrix in state
       set({ 
         allBookIds: bookMatrix,
+        filteredBookMatrix: bookMatrix, // 🆕 Initialize filtered matrix with full matrix
         totalBookCount: bookMatrix.length // 🆕 Update total count for pagination UI
       });
 
-      // 🆕 STEP D: Fetch first page chunk immediately
-      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-      await get().fetchPageChunk(1, isMobile);
+      // 🆕 RE-APPLY EXISTING FILTER: Instead of resetting to full list
+      get().applyFiltersAndSort();
       
       return true;
     } catch (error) {
-      console.error('❌ [BOOK SLICE] Books refresh failed:', error);
       return false;
     } finally {
       set({ isRefreshing: false });
@@ -135,9 +140,18 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   },
 
   // 🆕 CHUNK FETCHING FOR PERFORMANCE
-  fetchPageChunk: async (page: number, isMobile: boolean) => {
+  fetchPageChunk: async (page: number, isMobile: boolean, overrideMatrix?: BookMatrixItem[], currentId?: number) => {
     const state = get();
-    const { allBookIds } = state;
+    const { filteredBookMatrix } = state;
+    
+    // 🆕 RACE CONDITION GUARD: Abort if newer search is running
+    if (currentId && currentId !== get().lastSearchId) {
+      console.log("🛡️ ABORT: Newer search detected, skipping chunk fetch");
+      return;
+    }
+    
+    // 🆕 DIRECT MATRIX ACCESS: Use overrideMatrix if provided (for search)
+    const matrixToUse = overrideMatrix || filteredBookMatrix;
     
     // Device-specific slot allocation
     const REAL_BOOK_SLOTS = isMobile ? 16 : 15; // Mobile: 16 real, Desktop: 15 real + 1 dummy
@@ -146,8 +160,8 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     const startIndex = (page - 1) * REAL_BOOK_SLOTS;
     const endIndex = page * REAL_BOOK_SLOTS;
     
-    // Get IDs for current page
-    const currentPageIds = allBookIds
+    // Get IDs for current page from MATRIX
+    const currentPageIds = matrixToUse
       .slice(startIndex, endIndex)
       .map((book: BookMatrixItem) => book.localId);
     
@@ -157,20 +171,35 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       .anyOf(currentPageIds)
       .toArray();
     
+    // 🛡️ RACE CONDITION GUARD: Check again after async operation
+    if (currentId && currentId !== get().lastSearchId) {
+      console.log("🛡️ ABORT: Newer search detected after DB fetch");
+      return;
+    }
+    
     // 🛡️ OPTIMISTIC RETENTION: Don't wipe UI if we already have data and the new fetch is mysteriously empty during a background process
     if (fullBooks.length === 0 && get().books.length > 0 && get().isRefreshing) {
-       console.warn('🛡️ [BOOK SLICE] Guarded against UI wipe during background refresh.');
        return;
     }
     
-    // Update state with full objects - IMMEDIATE fallback before sorting
+    // 🆕 RESTORE MATRIX ORDER: Re-sort to match currentPageIds order
+    let sortedBooks = currentPageIds.map((id: string) => 
+      fullBooks.find((book: any) => String(book.localId) === String(id))
+    ).filter(Boolean);
+    
+    // 🆕 EMERGENCY FALLBACK: If sorting fails but we have data, use fullBooks
+    if (sortedBooks.length === 0 && fullBooks.length > 0) {
+      console.log("⚠️ SORTING FAILED - USING FALLBACK");
+      sortedBooks = fullBooks;
+    }
+    
+    // Update state with SORTED objects - ONLY STATE WRITER
     set({ 
-      books: fullBooks,
-      filteredBooks: fullBooks // Immediate fallback for UI
+      books: sortedBooks,
+      filteredBooks: sortedBooks
     });
     
-    // Trigger filtering and sorting on chunk (async, but UI already has data)
-    get().applyFiltersAndSort();
+    console.log("Chunk Fetched. Displaying:", sortedBooks.length, "items for search:", get().searchQuery);
   },
 
   // 📚 SAVE BOOK
@@ -181,19 +210,16 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
     const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
     if (isSecurityLockdown) {
-      console.warn('🚫 [BOOK SLICE] Blocked book save during security lockdown');
       return { success: false, error: new Error('App in security lockdown') };
     }
     
     // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
     const actionId = 'save-book';
     if (isGlobalAnimating) {
-      console.warn('🚫 [BOOK SLICE] Blocked book save during animation');
       return { success: false, error: new Error('System busy - animation in progress') };
     }
     
     if (activeActions.includes(actionId)) {
-      console.warn('🚫 [BOOK SLICE] Blocked duplicate book save action');
       return { success: false, error: new Error('Book save already in progress') };
     }
     
@@ -276,7 +302,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       
       return { success: true, book: { ...normalized, localId: id } };
     } catch (error) {
-      console.error('❌ [BOOK SLICE] saveBook failed:', error);
       return { success: false, error: error as Error };
     } finally {
       // 🛡️ SAFE ACTION SHIELD: Always unregister action
@@ -323,7 +348,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
           get().hideToast(activeToastId);
           get().completeDeletionAndRedirect(router);
         } catch (err) {
-          console.error('Final Deletion Failed:', err);
           // THIRD: Unlock UI on error
           set({ isInteractionLocked: false });
         }
@@ -345,13 +369,10 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
     const { isSecurityLockdown } = get();
     if (isSecurityLockdown) {
-      console.warn('🚫 [BOOK SLICE] Blocked book restore during security lockdown');
       return { success: false, error: new Error('App in security lockdown') };
     }
     
     try {
-      console.log('🔄 [BOOK SLICE] Restoring book:', book.localId);
-      
       const { HydrationController } = await import('../../hydration/HydrationController');
       const controller = HydrationController.getInstance();
       
@@ -372,16 +393,15 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
       get().refreshBooks();
       
-      console.log('✅ [BOOK SLICE] Book restored successfully');
       return { success: true };
     } catch (error) {
-      console.error('❌ [BOOK SLICE] Failed to restore book:', error);
       return { success: false, error: error as Error };
     }
   },
 
   // 🔍 SEARCH & SORT ACTIONS
   setSearchQuery: (query: string) => {
+    console.log("STORE: searchQuery updated to:", query);
     set({ searchQuery: query });
     get().applyFiltersAndSort();
   },
@@ -392,68 +412,63 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   },
 
   applyFiltersAndSort: async () => {
-    const state = get();
-    const { allBookIds, searchQuery, sortOption } = state;
-    
-    const currentUserId = String(get().userId || identityManager.getUserId() || "");
-    if (!currentUserId) {
-      console.warn('⚠️ [BOOK SLICE] No userId available for filtering');
-      return;
-    }
-
-    // Filter the matrix by userId before applying search and sort
-    let filtered = allBookIds.filter((book: BookMatrixItem) => String(book.userId) === currentUserId);
-
+    const { allBookIds, searchQuery, sortOption } = get();
+    const userId = identityManager.getUserId();
     const q = (searchQuery || "").toLowerCase().trim();
-    if (q) {
-      filtered = filtered.filter((book: BookMatrixItem) => 
-        (book.name || "").toLowerCase().includes(q)
-      );
+    
+    // 🆕 RACE CONDITION GUARD: Increment search ID to track current operation
+    const currentId = ++get().lastSearchId;
+    
+    // 🆕 MATRIX DIRTY CHECK: Force refresh if matrix is stale after entry updates
+    const needsMatrixRefresh = !allBookIds || allBookIds.length === 0;
+    
+    // 🆕 STEP A: Load lightweight matrix with TRIPLE COMPOUND INDEX
+    let matrix = allBookIds;
+    if (needsMatrixRefresh) {
+      matrix = await db.books
+        .where('[userId+isDeleted+updatedAt]')
+        .between([String(userId), 0, Dexie.minKey], [String(userId), 0, Dexie.maxKey])
+        .reverse() // 🚀 Get newest records first at DB level
+        .toArray((books: any[]) => books.map((book: any) => {
+          const localId = book.localId || book._id || book.cid;
+          if (!localId) return null; // 🛡️ GUARD: Filter out invalid IDs
+          return {
+            localId: book.localId || book._id || book.cid, // ✅ ENSURE localId IS CLEARLY RETURNED
+            userId: book.userId, // Ensure userId is captured in lightweight matrix
+            _id: book._id || book.cid, // 🆕 PRIORITY: Use server ID or CID for display
+            cid: book.cid, // 🆕 PRESERVE: Keep CID for reference
+            name: book.name || '',
+            image: book.image || '',      // ✅ RESTORED
+            mediaCid: book.mediaCid || '', // ✅ RESTORED
+            isPinned: book.isPinned || 0,
+            updatedAt: book.updatedAt || 0,
+            cachedBalance: 0 // Will be calculated later
+          } as BookMatrixItem;
+        }).filter(Boolean)); // 🛡️ FILTER: Remove null entries
+    }
+    
+    // 1. Filter Master Matrix by name (matrix is pre-sorted from DB)
+    let filtered = q 
+      ? matrix.filter((b: BookMatrixItem) => (b.name || "").toLowerCase().includes(q))
+      : [...matrix];
+
+    // 2. Sort by updatedAt (only needed if not Activity sort, since DB already pre-sorted)
+    if (sortOption === 'Activity') {
+      filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
     }
 
-    switch (sortOption) {
-      case 'Activity':
-        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => {
-          if ((a.isPinned || 0) !== (b.isPinned || 0)) {
-            return (b.isPinned || 0) - (a.isPinned || 0);
-          }
-          return (b.updatedAt || 0) - (a.updatedAt || 0);
-        });
-        break;
-      case 'Name':
-        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => 
-          (a.name || "").localeCompare(b.name || "")
-        );
-        break;
-      case 'Balance High':
-        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => get().getBookBalance(b.localId) - get().getBookBalance(a.localId));
-        break;
-      case 'Balance Low':
-        filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => get().getBookBalance(a.localId) - get().getBookBalance(b.localId));
-        break;
+    // 3. 🆕 UPDATE FILTERED MATRIX
+    set({ filteredBookMatrix: filtered });
+
+    // 🆕 EMPTY STATE HANDLING: If no results, ensure UI shows empty state
+    if (filtered.length === 0) {
+      set({ books: [], filteredBooks: [] });
+      return; // 🚨 EARLY RETURN - Don't call fetchPageChunk
     }
 
-    // 🆕 STEP C: Update filtered matrix and fetch chunk
-    set({ filteredBooks: filtered });
-    
-    // 🆕 STEP D: Fetch full objects for filtered IDs
-    const filteredIds = filtered.map((book: BookMatrixItem) => book.localId).filter(Boolean);
-    const fullBooks = await db.books
-      .where('localId')
-      .anyOf(filteredIds)
-      .toArray();
-    
-    // 🛡️ OPTIMIZED PROTECTION: Merge DB results with existing state to prevent new book invisibility
-    const currentBooks = get().books;
-    const finalBooks = fullBooks.length > 0 ? fullBooks : currentBooks;
-
-    // If we have a new book in the matrix that isn't in fullBooks yet, keep it from currentBooks
-    const missingOptimisticBooks = currentBooks.filter((cb: any) => 
-      !fullBooks.some((fb: any) => String(fb.localId) === String(cb.localId)) &&
-      filtered.some((f: BookMatrixItem) => String(f.localId) === String(cb.localId))
-    );
-
-    set({ books: [...missingOptimisticBooks, ...fullBooks] });
+    // 4. 🆕 TRIGGER CHUNK FETCH WITH DIRECT MATRIX PASS
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    await get().fetchPageChunk(1, isMobile, filtered, currentId);
   },
 
 
@@ -490,7 +505,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   // 🛡️ RESURRECT BOOK CHAIN: Handle parent_deleted conflict resolution
   resurrectBookChain: async (bookCid: string) => {
     try {
-      console.log(`🛡️ [BOOK SLICE] Starting resurrection for book: ${bookCid}`);
       
       // 🎯 STEP 1: FIND THE BOOK
       const book = await db.books.where('cid').equals(bookCid).first();
@@ -539,7 +553,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         if (!entryResult.success) {
           throw new Error(entryResult.error || 'Failed to resurrect entries via HydrationController');
         }
-        console.log(`🛡️ [BOOK SLICE] Reset ${entryUpdates.length} entries for resurrection`);
       }
       
       // 🎯 STEP 6: TRIGGER BATCHED SYNC
@@ -548,17 +561,41 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
         await triggerManualSync();
       }
       
-      console.log(`✅ [BOOK SLICE] Resurrection complete for book: ${bookCid}`);
       return { success: true, error: undefined };
       
     } catch (error) {
-      console.error(`❌ [BOOK SLICE] Resurrection failed for book ${bookCid}:`, error);
       return { success: false, error: error as Error };
     }
   },
 
+  // 🆕 SCROLL MEMORY
   setLastScrollPosition: (pos: number) => {
     set({ lastScrollPosition: pos });
+  },
+
+  // 🔄 MATRIX SYNC ACTION
+  syncMatrixItem: async (bookId: string) => {
+    const state = get();
+    const { allBookIds } = state;
+    
+    // Find and update the specific book in matrix
+    const updatedMatrix = allBookIds.map((item: BookMatrixItem) => {
+      if (String(item.localId) === bookId) {
+        return {
+          ...item,
+          updatedAt: getTimestamp() // Update timestamp to trigger re-sort
+        };
+      }
+      return item;
+    });
+    
+    // Update matrix with new timestamp
+    set({ allBookIds: updatedMatrix });
+    
+    // Trigger re-sort to reflect the update
+    get().applyFiltersAndSort();
+    
+    console.log('⚡ [RE-SYNC] Matrix and UI Aligned');
   },
 
   // 🆕 SMART PRE-FETCHING FOR ZERO-LAG
@@ -573,19 +610,16 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     
     // If we have sufficient entries, skip fetch
     if (bookEntries.length >= 10) {
-      console.log(`🚀 [PRE-FETCH] Entries already loaded for book ${bookId}: ${bookEntries.length}`);
       return;
     }
     
     try {
-      console.log(`🚀 [PRE-FETCH] Quietly fetching entries for book ${bookId}`);
       
       // Fetch entries quietly without setting loading states
       const orchestrator = (await import('../../core/SyncOrchestrator')) as any;
       await orchestrator.refreshEntries?.();
       
     } catch (error) {
-      console.error(`❌ [PRE-FETCH] Failed to prefetch entries for book ${bookId}:`, error);
     }
   },
 
@@ -623,7 +657,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
     const bookId = String(book._id || book.localId);
     
     try {
-      console.log(`🗑️ [BOOK SLICE] Executing final deletion for book: ${bookId}`);
       
       // Create delete payload with mandatory name field
       const deletePayload = {
@@ -649,7 +682,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
           .equals(bookId)
           .modify({ isDeleted: 1, synced: 0, updatedAt: getTimestamp() });
         
-        console.log(`✅ [BOOK SLICE] Book ${bookId} and entries marked as deleted`);
       });
       
       // b. Fire sync event to trigger 7-second auto-sync
@@ -666,7 +698,6 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
       get().clearActiveBook();
       
     } catch (error) {
-      console.error(`❌ [BOOK SLICE] Final deletion failed for book ${bookId}:`, error);
       throw error;
     }
   },
@@ -674,14 +705,12 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   // 🧭 COMPLETE DELETION AND REDIRECT
   completeDeletionAndRedirect: (router: any) => {
     try {
-      console.log('✅ Database committed. Navigating now.');
       if (typeof window !== 'undefined') {
         if (router) {
           // Using Next.js router for soft navigation
           router.push('/?tab=books');
         } else {
           // 🚫 NO HARD RELOAD: Throw error instead of window.location
-          console.error('[NAVIGATION] Router instance missing, cannot perform soft redirect');
           throw new Error('Router instance required for soft navigation');
         }
       }

@@ -36,15 +36,15 @@ const TransactionCard = memo(({ e, idx, onEdit, onDelete, onContextMenu, languag
                         {isIncome ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
                     </div>
                     <div>
-                        <h4 className="text-[13px] font-black text-[var(--text-main)]     line-clamp-1">{e.title}</h4>
-                        <p className="text-[9px] font-bold text-[var(--text-muted)]     opacity-50">{formatDate(e.date)}</p>
+                        <h4 className="text-[13px] font-black text-[var(--text-main)]     line-clamp-1">{(e.title || 'Untitled Entry')}</h4>
+                        <p className="text-[9px] font-bold text-[var(--text-muted)]     opacity-50">{formatDate(e.date || new Date().toISOString().split('T')[0])}</p>
                     </div>
                 </div>
                 <div className={cn(
                     "text-lg font-mono-finance font-black",
                     isIncome ? "text-green-500" : "text-red-500"
                 )}>
-                    {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), language)}
+                    {isIncome ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount || 0).toLocaleString(), language)}
                 </div>
             </div>
 
@@ -58,7 +58,7 @@ const TransactionCard = memo(({ e, idx, onEdit, onDelete, onContextMenu, languag
                         isCompleted ? "text-green-500" : "text-yellow-500"
                     )}>
                         <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", isCompleted ? "bg-green-500" : "bg-yellow-500")} />
-                        {t(e.status?.toLowerCase() || 'completed')}
+                        {t((e.status?.toLowerCase() || 'completed'))}
                     </div>
                 </div>
                 
@@ -167,21 +167,21 @@ export const TransactionTable = ({ items, onEdit, onDelete, onToggleStatus, curr
                                 className="group grid grid-cols-11 gap-4 px-8 py-5 items-center hover:bg-white/[0.02] transition-all cursor-pointer"
                             >
                                 <h1 className="text-2xl font-black font-mono-finance opacity-20">{toBn(String(idx + 1).padStart(2, '0'), language)}</h1>
-                                <div className="text-[11px] font-black   text-[var(--text-main)]">{formatDate(e.date)}</div>
+                                <div className="text-[11px] font-black   text-[var(--text-main)]">{formatDate(e.date || new Date().toISOString().split('T')[0])}</div>
                                 <div className="text-[10px] font-bold text-[var(--text-muted)]">{toBn(e.time || '00:00', language)}</div>
                                 <div className="flex items-center gap-1 text-[8px] font-black text-orange-500/40">
                                     <ShieldCheck size={10} /> {toBn(String(e.localId || e._id).slice(-6), language)}
                                 </div>
-                                <div className="text-[13px] font-black   text-[var(--text-main)] group-hover:text-orange-500 transition-colors truncate">{e.title}</div>
+                                <div className="text-[13px] font-black   text-[var(--text-main)] group-hover:text-orange-500 transition-colors truncate">{(e.title || 'Untitled Entry')}</div>
                                 <div className="text-[10px] font-medium text-[var(--text-muted)] opacity-30 truncate">{e.note || "—"}</div>
                                 <div className="px-3 py-1 rounded-lg bg-orange-500/5 border border-orange-500/10 text-orange-500 text-[8px] font-black  ">{e.category || 'General'}</div>
                                 <div className="text-[9px] font-black   text-[var(--text-muted)] bg-[var(--bg-app)] px-3 py-1 rounded-lg border border-[var(--border)]">{t((e.paymentMethod || e.via || 'cash').toLowerCase())}</div>
                                 <div className={cn("text-[18px] font-mono-finance font-black text-right", e.type === 'income' ? "text-green-500" : "text-red-500")}>
-                                    {e.type === 'income' ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount).toLocaleString(), language)}
+                                    {e.type === 'income' ? '+' : '-'}{currencySymbol}{toBn(Math.abs(e.amount || 0).toLocaleString(), language)}
                                 </div>
                                 <div className="flex justify-center">
                                     <div className={cn("px-3 py-1.5 rounded-xl border text-[8px] font-black  ", e.status === 'completed' ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20")}>
-                                        {t(e.status?.toLowerCase())}
+                                        {t(e.status?.toLowerCase() || 'completed')}
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">

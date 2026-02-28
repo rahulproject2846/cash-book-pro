@@ -234,7 +234,10 @@ export const DashboardLayout = (props: any) => {
         if (!prefs.autoLock) {
             setIsShielded(false);
         } else {
-            const handleBlur = () => setIsShielded(true);
+            // CRITICAL: Only activate shield when window loses focus, not immediately
+            const handleBlur = () => {
+                setTimeout(() => setIsShielded(true), 500); // 500ms delay to prevent accidental triggers
+            };
             const handleFocus = () => setIsShielded(false);
             window.addEventListener('blur', handleBlur);
             window.addEventListener('focus', handleFocus);
@@ -304,7 +307,7 @@ export const DashboardLayout = (props: any) => {
             
             {/* Shield Overlay */}
             <AnimatePresence mode="wait">
-                {isShielded && (
+                {isShielded && activeSection !== 'settings' && (
                     <motion.div 
                         initial={{ opacity: 0 }} 
                         animate={{ opacity: 1 }} 

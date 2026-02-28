@@ -1,6 +1,7 @@
 import connectDB from "@/lib/db";
 import User from "@/models/User";
 import { NextResponse } from "next/server";
+import { pusherServer } from "@/lib/pusher";
 
 // 🔥 PUT (Update) Logic - এটি আগে থেকেই ছিল
 export async function PUT(req: Request) {
@@ -19,7 +20,8 @@ export async function PUT(req: Request) {
                 $set: { 
                     categories: Array.isArray(categories) ? categories.map(c => c.trim()).filter(c => c !== "") : [], 
                     currency: currency || "BDT (৳)", 
-                    preferences: preferences || {} 
+                    preferences: preferences || {},
+                    vKey: { $inc: 1 } // 🔄 Increment vKey for version tracking
                 } 
             },
             { new: true }
@@ -27,6 +29,18 @@ export async function PUT(req: Request) {
 
         if (!updatedUser) {
             return NextResponse.json({ message: "User identity not found" }, { status: 404 });
+        }
+
+        // 📡 TRIGGER REAL-TIME SETTINGS UPDATE
+        try {
+            await pusherServer.trigger(`vault-channel-${userId}`, 'SETTINGS_UPDATED', { 
+                vKey: updatedUser.vKey,
+                timestamp: Date.now()
+            });
+            console.log(`📡 [SETTINGS] Pusher event triggered for user ${userId}, vKey: ${updatedUser.vKey}`);
+        } catch (pusherError) {
+            console.error('❌ [SETTINGS] Failed to trigger Pusher event:', pusherError);
+            // Continue without failing the request
         }
 
         return NextResponse.json({

@@ -37,7 +37,6 @@ export class FinanceService {
     // 🛡️ IDENTITY SYNC: Get userId directly from identityManager
     const userId = identityManager.getUserId();
     if (!userId) {
-      console.warn('🚨 [FINANCE SERVICE] No userId available, retrying in 100ms...');
       setTimeout(() => this.refreshEntries(get, set), 100);
       return;
     }
@@ -71,7 +70,6 @@ export class FinanceService {
       get().processEntries();
       
     } catch (error) {
-      console.error('❌ [FINANCE SERVICE] Entries refresh failed:', error);
     } finally {
       set({ isRefreshing: false });
     }
@@ -92,26 +90,22 @@ export class FinanceService {
     // 🔍 VALIDATION FIRST - NO LOCK YET
     const userId = identityManager.getUserId();
     if (!userId) {
-      console.error('❌ [FINANCE SERVICE] Invalid user ID for saveEntry');
       return { success: false, error: new Error('Invalid user ID') };
     }
 
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
     const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
     if (isSecurityLockdown) {
-      console.warn('🚫 [FINANCE SERVICE] Blocked entry save during security lockdown');
       return { success: false, error: new Error('App in security lockdown') };
     }
     
     // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
     const actionId = customActionId || `save-entry-${Date.now()}`;
     if (isGlobalAnimating) {
-      console.warn('🚫 [FINANCE SERVICE] Blocked entry save during animation');
       return { success: false, error: new Error('System busy - animation in progress') };
     }
     
     if (activeActions.includes(actionId)) {
-      console.warn('🚫 [FINANCE SERVICE] Blocked duplicate entry save action');
       return { success: false, error: new Error('Entry save already in progress') };
     }
     
@@ -124,7 +118,6 @@ export class FinanceService {
       if (bookId) {
         const currentBook = await db.books.where('_id').equals(bookId).first();
         if (currentBook && currentBook.isDeleted === 1) {
-          console.warn(`🚫 [FINANCE SERVICE] Blocked entry save for deleted book: ${bookId}`);
           return { success: false, error: new Error('This ledger no longer exists') };
         }
       }
@@ -147,7 +140,6 @@ export class FinanceService {
       // Check if this is a NEW entry (no editTarget and no localId)
       if (!editTarget && !entryData.localId) {
         finalVKey = 1; // NEW record starts at vKey: 1
-        console.log('🆕 [FINANCE SERVICE] New entry detected, vKey set to 1');
       } else {
         // EXISTING record - increment current vKey safely
         const recordId = entryData.localId || editTarget?.localId || editTarget?._id;
@@ -158,14 +150,11 @@ export class FinanceService {
           try {
             const dbRecord = await db.entries.get(recordId);
             currentVKey = dbRecord?.vKey || currentVKey || 0;
-            console.log('🔄 [FINANCE SERVICE] Existing entry found, current vKey:', currentVKey);
           } catch (error) {
-            console.warn('⚠️ [FINANCE SERVICE] Failed to fetch existing record, using fallback vKey:', currentVKey);
           }
         }
         
         finalVKey = Number(currentVKey) + 1;
-        console.log('📈 [FINANCE SERVICE] Final vKey calculated:', finalVKey);
       }
 
       const entryPayload = {
@@ -288,6 +277,12 @@ export class FinanceService {
             vaultStore.applyFiltersAndSort();
           }
           
+          // 🆕 MATRIX SYNC: Update matrix to keep Activity sort alive
+          get().syncMatrixItem(String(activeBook._id || activeBook.localId));
+          
+          // 🆕 REFRESH ALL DATA: Update allEntries and books after book update
+          await vaultStore.refreshData();
+          
           // Update store's books array with fresh timestamp
           if (vaultStore.books) {
             const updatedBooks = vaultStore.books.map((book: any) => 
@@ -316,7 +311,6 @@ export class FinanceService {
       
       return { success: true, entry: { ...normalized, localId: batchResult.count || 0 } };
     } catch (error) {
-      console.error('❌ [FINANCE SERVICE] saveEntry failed:', error);
       return { success: false, error: error as Error };
     } finally {
       // 🛡️ SAFE ACTION SHIELD: ALWAYS UNREGISTER ACTION
@@ -342,19 +336,16 @@ export class FinanceService {
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
     const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
     if (isSecurityLockdown) {
-      console.warn('🚫 [FINANCE SERVICE] Blocked entry delete during security lockdown');
       return { success: false, error: new Error('App in security lockdown') };
     }
     
     // 🛡️ SAFE ACTION SHIELD: Block during animations and prevent duplicates
     const actionId = customActionId || 'delete-entry';
     if (isGlobalAnimating) {
-      console.warn('🚫 [FINANCE SERVICE] Blocked entry delete during animation');
       return { success: false, error: new Error('System busy - animation in progress') };
     }
     
     if (activeActions.includes(actionId)) {
-      console.warn('🚫 [FINANCE SERVICE] Blocked duplicate entry delete action');
       return { success: false, error: new Error('Entry delete already in progress') };
     }
     
@@ -368,7 +359,6 @@ export class FinanceService {
       // 🛡️ SAFE ID EXTRACTION: Validate localId before Dexie operations
       const entryLocalId = entry.localId;
       if (!entryLocalId) {
-        console.error('❌ [FINANCE SERVICE] Cannot delete entry: missing localId');
         return { success: false, error: new Error('Entry localId is required for deletion') };
       }
       
@@ -397,9 +387,7 @@ export class FinanceService {
         try {
           const dbRecord = await db.entries.get(entryLocalId);
           currentVKey = dbRecord?.vKey || currentVKey || 0;
-          console.log('🔄 [FINANCE SERVICE] Existing entry found for delete, current vKey:', currentVKey);
         } catch (error) {
-          console.warn('⚠️ [FINANCE SERVICE] Failed to fetch existing record for delete, using fallback vKey:', currentVKey);
         }
       }
       
@@ -493,7 +481,6 @@ export class FinanceService {
       
       return { success: true };
     } catch (error) {
-      console.error('❌ [FINANCE SERVICE] deleteEntry failed:', error);
       return { success: false, error: error as Error };
     } finally {
       // 🛡️ SAFE ACTION SHIELD: ALWAYS UNREGISTER ACTION
@@ -584,7 +571,6 @@ export class FinanceService {
       
       return { success: true, entry: updatePayload };
     } catch (error) {
-      console.error('❌ [FINANCE SERVICE] updateEntry failed:', error);
       return { success: false, error: 'Failed to update entry' };
     }
   }
@@ -606,7 +592,6 @@ export class FinanceService {
     );
     
     if (!book) {
-      console.warn(`🚨 [FINANCE SERVICE] Book not found for balance calculation: ${bookId}`);
       return 0;
     }
     
@@ -668,7 +653,6 @@ export class FinanceService {
       
       return { success: true };
     } catch (error) {
-      console.error('❌ [FINANCE SERVICE] restoreEntry failed:', error);
       return { success: false, error: error as Error };
     }
   }
@@ -720,7 +704,6 @@ export class FinanceService {
       
       return { success: true };
     } catch (error) {
-      console.error('❌ [FINANCE SERVICE] toggleEntryStatus failed:', error);
       return { success: false, error: error as Error };
     }
   }
@@ -772,7 +755,6 @@ export class FinanceService {
       
       return { success: true };
     } catch (error) {
-      console.error('❌ [FINANCE SERVICE] togglePin failed:', error);
       return { success: false, error: error as Error };
     }
   }

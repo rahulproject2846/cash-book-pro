@@ -80,6 +80,9 @@ export class RealtimeEngine {
       channel.bind('ENTRY_UPDATED', (data: any) => this.handleRealtimeEvent('ENTRY_UPDATED', data));
       channel.bind('ENTRY_DELETED', (data: any) => this.handleRealtimeEvent('ENTRY_DELETED', data));
       
+      // ⚙️ SETTINGS SIGNALS: Listen for user settings updates
+      channel.bind('SETTINGS_UPDATED', (data: any) => this.handleRealtimeEvent('SETTINGS_UPDATED', data));
+      
       // 🚨 SECURITY SIGNALS: Listen for security-related events
       channel.bind('USER_DEACTIVATED', (data: any) => this.handleSecurityEvent('USER_DEACTIVATED', data));
       channel.bind('USER_BANNED', (data: any) => this.handleSecurityEvent('USER_BANNED', data));
@@ -199,21 +202,45 @@ export class RealtimeEngine {
   }
 
   /**
-   * 📡 REALTIME EVENT HANDLER: Pure signal delegation with Optimistic Injection
+   * REALTIME EVENT HANDLER: Pure signal delegation with Optimistic Injection
    */
   private async handleRealtimeEvent(eventType: string, data: any) {
     try {
-      // 🔍 EVENT TRACKING: Monitor signal patterns
+      // EVENT TRACKING: Monitor signal patterns
       this.eventCounter[eventType] = (this.eventCounter[eventType] || 0) + 1;
       this.lastEventTime[eventType] = Date.now();
       
-      // � MASS INJECTION DETECTION: Detect login data flood
+      // SETTINGS EVENT: Special handling for user settings updates
+      if (eventType === 'SETTINGS_UPDATED') {
+        console.log(` [SETTINGS] Real-time settings update received, vKey: ${data.vKey}`);
+        
+        // TRIGGER SILENT SETTINGS PULL
+        try {
+          const { PullService } = await import('../services/PullService');
+          const pullService = new PullService();
+          const result = await pullService.pullUserSettings();
+          
+          if (result.success) {
+            console.log(' [SETTINGS] User settings pulled successfully via PullService');
+          } else {
+            console.error(' [SETTINGS] Failed to pull user settings:', result.error);
+          }
+        } catch (pullError) {
+          console.error(' [SETTINGS] PullService error:', pullError);
+        }
+        
+        // BROADCAST: Trigger UI refresh for settings
+        this.broadcastCallback();
+        return;
+      }
+      
+      // MASS INJECTION DETECTION: Detect login data flood
       this.detectMassInjection();
       
-      // �🚨 DELETE PRIORITY PASS: Always allow DELETE events to bypass the shield
+      // DELETE PRIORITY PASS: Always allow DELETE events to bypass the shield
       if (eventType === 'BOOK_DELETED' || eventType === 'ENTRY_DELETED') {
-        console.log(`🚨 [DELETE PRIORITY] Bypassing shield for ${eventType}:`, data.cid);
-        console.log(`🚨 [DELETE PRIORITY] Shield bypass confirmed - DELETE event processed immediately`);
+        console.log(` [DELETE PRIORITY] Bypassing shield for ${eventType}:`, data.cid);
+        console.log(` [DELETE PRIORITY] Shield bypass confirmed - DELETE event processed immediately`);
         
         // 📊 TELEMETRY: Log priority deletion
         telemetry.log({

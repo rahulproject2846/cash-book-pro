@@ -1,38 +1,39 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from 'next-themes';
 import { db } from '@/lib/offlineDB';
 import { useVaultStore } from '@/lib/vault/store/index';
-import { identityManager } from '@/lib/vault/core/IdentityManager';
 
 /**
- * 🛡️ VAULT PRO: MASTER SETTINGS ENGINE (V26.0)
+ * 🛡️ VAULT PRO: MASTER SETTINGS ENGINE (V26.0 - STABLE REL)
  * ---------------------------------------------------
- * Architecture: Atomic Store-Driven Updates.
- * Handshake: Dispatches 'local-mutation' for SyncOrchestrator.
- * Performance: Zero-Flicker DOM Injection.
+ * Logic: Simple Atomic Handshake (Zustand -> Dexie).
+ * Performance: Direct Store Selection for Zero-Lag UI.
  */
-
 export const useSettings = () => {
     const { theme, setTheme } = useTheme();
     const [isCleaning, setIsCleaning] = useState(false);
-    const [dbStats, setDbStats] = useState({ storageUsed: '0 KB', totalEntries: 0 });
+    const [dbStats, setDbStats] = useState({ storageUsed: '0.1 MB', totalEntries: 0 });
 
-    // 🚀 STORE INTEGRATION: Single Source of Truth
-    const { 
-        currentUser, 
-        setPreferences, 
-        setCategories, 
-        setCurrency 
-    } = useVaultStore();
+    // 🚀 SELECTORS: Directly from Store for instantaneous reactivity
+    const preferences = useVaultStore(state => state.preferences);
+    const categories = useVaultStore(state => state.categories);
+    const currency = useVaultStore(state => state.currency);
+    const currentUser = useVaultStore(state => state.currentUser);
+    const setPreferences = useVaultStore(state => state.setPreferences);
+    const setCategories = useVaultStore(state => state.setCategories);
+    const setCurrency = useVaultStore(state => state.setCurrency);
 
-    // 🎯 DERIVED STATES: Memoized for Performance
-    const preferences = useMemo(() => currentUser?.preferences || {}, [currentUser]);
-    const categories = useMemo(() => currentUser?.categories || [], [currentUser]);
-    const currency = useMemo(() => currentUser?.currency || 'BDT (৳)', [currentUser]);
-
-    // 🤝 THE ATOMIC HANDSHAKE: Notify Sync Engine
+    // 🤝 HANDSHAKE: Notify SyncOrchestrator of local mutations
     const dispatchHandshake = useCallback(() => {
+        const store = useVaultStore.getState();
+        
+        // 🔄 LOOP PREVENTION: Don't dispatch if this is a remote mutation
+        if (store.isRemoteMutation) {
+            console.log('🔄 [SETTINGS] Skipping vault-updated dispatch - remote mutation detected');
+            return;
+        }
+        
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('vault-updated', { 
                 detail: { source: 'useSettings', origin: 'local-mutation' } 
@@ -40,108 +41,98 @@ export const useSettings = () => {
         }
     }, []);
 
-    // 🎨 DOM SIDE-EFFECTS: Real-time Theme & Turbo Sync
+    // 🎨 DOM SYNC: Apply visual protocols directly
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser || !preferences) return;
         
         const root = document.documentElement;
         const body = document.body;
-        const prefs = currentUser.preferences || {};
 
-        // 1. Compact Mode
-        prefs.compactMode ? root.classList.add('compact-deck') : root.classList.remove('compact-deck');
+        // 1. Turbo & Midnight Classes
+        body.classList.toggle('turbo-active', !!preferences.turboMode);
+        root.classList.toggle('midnight-mode', !!preferences.isMidnight);
+        root.classList.toggle('compact-deck', !!preferences.compactMode);
 
-        // 2. Midnight OLED Logic
-        if (prefs.isMidnight) {
-            root.classList.add('midnight-mode');
-            if (theme !== 'dark') setTheme('dark');
-        } else {
-            root.classList.remove('midnight-mode');
+        // 2. Theme Enforcement
+        if (preferences.isMidnight && theme !== 'dark') {
+            setTheme('dark');
         }
+    }, [preferences?.turboMode, preferences?.isMidnight, preferences?.compactMode, preferences?.autoLock, preferences?.dailyReminder, preferences?.showTooltips, theme, setTheme]);
 
-        // 3. Turbo Mode (Class matches your Global CSS)
-        prefs.turboMode ? body.classList.add('turbo-active') : body.classList.remove('turbo-active');
-
-        // 4. Persistence Guard
-        if (prefs.language) localStorage.setItem('vault_lang', prefs.language);
-        
-    }, [currentUser, setTheme, theme]);
-
-    // 📊 DATABASE STORAGE AUDIT
+    // 📊 SYSTEM AUDIT: Physical Storage Calculation
     const calculateStorage = useCallback(async () => {
         try {
             const count = await db.entries.count();
             const estimate = await navigator.storage?.estimate();
             const used = estimate?.usage ? (estimate.usage / 1024 / 1024).toFixed(2) + ' MB' : '0.1 MB';
             setDbStats({ storageUsed: used, totalEntries: count });
-        } catch (e) { console.warn("Storage check skipped"); }
+        } catch (e) { /* Silent fail for storage estimate */ }
     }, []);
 
     useEffect(() => { calculateStorage(); }, [calculateStorage]);
 
     /**
-     * 🚀 ATOMIC UPDATE CORE
-     * এটি সরাসরি স্টোর এবং আইডেন্টিটি ম্যানেজার আপডেট করে এবং সিঙ্ক ট্রিগার করে।
+     * 🚀 ATOMIC MUTATION ENGINE
+     * Sequence: Zustand State (UI) -> Dexie Persistence (DB).
      */
     const atomicUpdate = async (patch: { preferences?: any, categories?: string[], currency?: string }) => {
-        if (!currentUser) return;
+        if (!currentUser?._id) return;
 
-        // 1. Prepare New User State
-        const updatedUser = {
-            ...currentUser,
-            preferences: { ...currentUser.preferences, ...(patch.preferences || {}) },
-            categories: patch.categories || currentUser.categories,
-            currency: patch.currency || currentUser.currency
-        };
+        // 1. Calculate Merged State
+        const updatedPrefs = { ...preferences, ...(patch.preferences || {}) };
+        const updatedCats = patch.categories || categories;
+        const updatedCurr = patch.currency || currency;
 
-        // 2. Commit to Zustand Store (UI Reaction)
-        if (patch.preferences) setPreferences(updatedUser.preferences);
-        if (patch.categories) setCategories(updatedUser.categories);
-        if (patch.currency) setCurrency(updatedUser.currency);
+        // 2. UI REACTION: Immediate Zustand Update
+        if (patch.preferences) setPreferences(updatedPrefs);
+        if (patch.categories) setCategories(updatedCats);
+        if (patch.currency) setCurrency(updatedCurr);
 
-        // 3. Sync IdentityManager (Local Persistence & Multi-tab Sync)
-        identityManager.setIdentity(updatedUser);
-
-        // 4. Trigger Sync Handshake (Background Server Sync)
-        dispatchHandshake();
+        // 3. PERSISTENCE: Save to IndexedDB
+        try {
+            await db.users.update(currentUser._id, {
+                preferences: updatedPrefs,
+                categories: updatedCats,
+                currency: updatedCurr
+            });
+            // 4. SYNC TRIGGER: Notify server via handshake
+            dispatchHandshake();
+        } catch (error) {
+            console.error('❌ [SETTINGS] DB Update Failed:', error);
+        }
     };
 
-    // 🛠️ EXPOSED ACTIONS
+    // 🛠️ PUBLIC INTERFACE
     const updatePreference = (key: string, value: any) => {
-        atomicUpdate({ preferences: { [key]: value } });
+        setPreferences({ [key]: value }); // Instant Zustand update
+        // No database. No handshake. Pure local UI.
     };
 
-    const addCategory = (tag: string) => {
+    const addCategory = async (tag: string) => {
         const trimmed = tag.trim();
         if (!trimmed || categories.includes(trimmed)) return;
-        atomicUpdate({ categories: [...categories, trimmed] });
+        await atomicUpdate({ categories: [...categories, trimmed] });
     };
 
-    const removeCategory = (tag: string) => {
-        atomicUpdate({ categories: categories.filter((c: string) => c !== tag) });
+    const removeCategory = async (tag: string) => {
+        await atomicUpdate({ categories: categories.filter((c: string) => c !== tag) });
     };
 
-    const updateCurrency = (val: string) => {
-        atomicUpdate({ currency: val });
+    const updateCurrency = async (val: string) => {
+        await atomicUpdate({ currency: val });
     };
 
     const clearLocalCache = async () => {
         if (!confirm("🚨 DANGER: Full System Wipe! All local data will be deleted. Proceed?")) return;
         setIsCleaning(true);
         try {
-            // 🛑 1. Clear In-memory State
             const { logout } = useVaultStore.getState();
             logout();
-            
-            // 🧹 2. Atomic Database Destruction
-            const { db } = await import('@/lib/offlineDB');
             await db.delete();
-            
-            // 🔄 3. Nuclear Restart
             window.location.href = '/';
         } catch (e) { 
             setIsCleaning(false);
-            console.error('Hard reset failed:', e);
+            console.error('Nuclear reset failed:', e);
         }
     };
 

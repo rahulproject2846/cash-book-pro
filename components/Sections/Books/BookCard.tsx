@@ -1,7 +1,7 @@
 "use client";
 import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { 
-    Plus, BookOpen, Loader2, Zap, Wallet, Clock, ShieldCheck, ImageIcon
+    Plus, BookOpen, Loader2, Zap, Wallet, Clock, ShieldCheck, ImageIcon, Edit3, Trash2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,8 @@ interface BookCardProps {
     book: any;
     onOpen: (book: any) => void;
     onQuickAdd: (book: any) => void;
+    onEdit?: (book: any) => void;
+    onDelete?: (book: any) => void;
     balance: number;
     currencySymbol: string;
     isDimmed?: boolean;
@@ -55,7 +57,7 @@ const useViewportSniper = (bookId: string, imageSrc: string) => {
  * Performance: Viewport Sniper & Memoized Rendering
  */
 const BookCard = React.memo<BookCardProps>(({ 
-    book, onOpen, onQuickAdd, balance, currencySymbol, 
+    book, onOpen, onQuickAdd, onEdit, onDelete, balance, currencySymbol, 
     isDimmed = false, onMouseEnter, onMouseLeave 
 }) => {
     const { t, language } = useTranslation();
@@ -87,9 +89,9 @@ const BookCard = React.memo<BookCardProps>(({
     }, [activeBook, bookId]);
 
     // 🎯 VIEWPORT SNIPER & IMAGE STATE
-    const { elementRef, isVisible } = useViewportSniper(String(bookId), reactiveBook.image || reactiveBook.mediaCid);
+    const { elementRef, isVisible } = useViewportSniper(String(bookId), (reactiveBook.image || reactiveBook.mediaCid || ''));
     // 🎯 LIVE OBSERVER: Real-time image resolution with live mediaStore observation
-    const { previewUrl, isLoading: isImageLoading } = useLocalPreview(reactiveBook.image, reactiveBook.mediaCid);
+    const { previewUrl, isLoading: isImageLoading } = useLocalPreview(reactiveBook.image || reactiveBook.mediaCid || '');
 
     const isPositive = balance >= 0;
 
@@ -103,7 +105,8 @@ const BookCard = React.memo<BookCardProps>(({
         if (scrollEl) getVaultStore().setLastScrollPosition(scrollEl.scrollTop);
 
         // 2. Full Hydration for Header Authority
-        const fullBook = await db.books.get(reactiveBook.localId) || reactiveBook;
+        const lid = reactiveBook.localId || reactiveBook._id;
+        const fullBook = await db.books.get(lid) || reactiveBook;
         getVaultStore().setActiveBook(fullBook);
         getVaultStore().prefetchBookEntries(bookId);
 
@@ -156,7 +159,7 @@ const BookCard = React.memo<BookCardProps>(({
                         ID: {toBn(String(bookId).slice(-6).toUpperCase(), language)}
                     </span>
                     <h3 className="text-[15px] md:text-xl font-black text-[var(--text-main)] truncate group-hover:text-orange-500 transition-colors mt-0.5">
-                        {reactiveBook.name}
+                        {reactiveBook.name || t('ledger_untitled') || 'Untitled Book'}
                     </h3>
                 </div>
                 
@@ -192,19 +195,46 @@ const BookCard = React.memo<BookCardProps>(({
                     <div className="flex items-center gap-1.5">
                         <Clock size={10} className="text-orange-500 opacity-60" />
                         <span className="text-[9px] md:text-[11px] font-black text-[var(--text-main)] ">
-                            {getTimeAgo(reactiveBook.updatedAt, language, t)}
+                            {getTimeAgo(reactiveBook.updatedAt || Date.now(), language, t)}
                         </span>
                     </div>
                 </div>
 
-                <Tooltip text={t('tt_quick_add')}>
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); onQuickAdd(reactiveBook); }} 
-                        className="w-9 h-9 md:w-12 md:h-12 bg-[var(--bg-app)] hover:bg-orange-500 border border-[var(--border)] hover:border-orange-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg group/btn"
-                    >
-                        <Plus size={20} strokeWidth={3.5} className="group-hover/btn:rotate-90 transition-transform" />
-                    </button>
-                </Tooltip>
+                <div className="flex items-center gap-2">
+                    {/* Edit Button */}
+                    {onEdit && (
+                        <Tooltip text={t('edit_book') || 'Edit Book'}>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onEdit(reactiveBook); }} 
+                                className="w-8 h-8 md:w-10 md:h-10 bg-[var(--bg-app)] hover:bg-blue-500 border border-[var(--border)] hover:border-blue-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg"
+                            >
+                                <Edit3 size={16} strokeWidth={2} />
+                            </button>
+                        </Tooltip>
+                    )}
+                    
+                    {/* Delete Button */}
+                    {onDelete && (
+                        <Tooltip text={t('delete_book') || 'Delete Book'}>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onDelete(reactiveBook); }} 
+                                className="w-8 h-8 md:w-10 md:h-10 bg-[var(--bg-app)] hover:bg-red-500 border border-[var(--border)] hover:border-red-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg"
+                            >
+                                <Trash2 size={16} strokeWidth={2} />
+                            </button>
+                        </Tooltip>
+                    )}
+                    
+                    {/* Quick Add Button */}
+                    <Tooltip text={t('tt_quick_add')}>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onQuickAdd(reactiveBook); }} 
+                            className="w-9 h-9 md:w-12 md:h-12 bg-[var(--bg-app)] hover:bg-orange-500 border border-[var(--border)] hover:border-orange-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg group/btn"
+                        >
+                            <Plus size={20} strokeWidth={3.5} className="group-hover/btn:rotate-90 transition-transform" />
+                        </button>
+                    </Tooltip>
+                </div>
             </div>
         </motion.div>
     );

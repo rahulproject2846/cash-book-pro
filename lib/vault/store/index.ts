@@ -35,6 +35,9 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
     isMidnight?: boolean;
     compactMode?: boolean;
     autoLock?: boolean;
+    turboMode?: boolean;
+    showTooltips?: boolean;
+    expenseLimit?: number;
   };
   
   // Cross-cutting state
@@ -46,6 +49,9 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   isGlobalAnimating: boolean;
   lastScrollPosition: number; // SCROLL MEMORY
   dynamicHeaderHeight: number;
+  
+  // 🔄 LOOP PREVENTION: Remote mutation flag
+  isRemoteMutation: boolean;
   
   // Cross-cutting actions
   refreshData: () => Promise<void>;
@@ -115,7 +121,10 @@ export const useVaultStore = create<VaultStore>()(
         highExpenseAlert: false,
         isMidnight: false,
         compactMode: false,
-        autoLock: false
+        autoLock: false,
+        turboMode: false,
+        showTooltips: true,
+        expenseLimit: 0
       },
       
       // Cross-cutting state
@@ -126,6 +135,9 @@ export const useVaultStore = create<VaultStore>()(
       nextAction: null,
       isGlobalAnimating: false,
       dynamicHeaderHeight: 80,
+      
+      // 🔄 LOOP PREVENTION: Remote mutation flag
+      isRemoteMutation: false,
 
       // CROSS-CUTTING ACTIONS
       refreshData: async () => {
@@ -274,10 +286,9 @@ export const useVaultStore = create<VaultStore>()(
         set({ currency });
       },
 
-      setPreferences: (preferences: any) => {
-        console.log('[MAIN STORE] Preferences updated:', preferences);
-        set({ preferences });
-      },
+      setPreferences: (newPrefs: any) => set((state) => ({ 
+        preferences: { ...state.preferences, ...newPrefs } 
+      })),
 
       // SESSION MANAGEMENT: Clear session cache on logout
       clearSessionCache: () => {
@@ -333,7 +344,6 @@ if (typeof window !== 'undefined') {
   // Listen for identity changes
   if (identityManager.subscribe) {
     identityManager.subscribe(async (newUserId) => {
-      console.log('[MAIN STORE] Identity changed:', newUserId);
       // ✅ CRITICAL: Update store's userId state BEFORE refreshing data
       useVaultStore.setState({ userId: newUserId || undefined });
       await useVaultStore.getState().refreshData();

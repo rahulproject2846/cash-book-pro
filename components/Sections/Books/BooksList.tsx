@@ -4,32 +4,36 @@ import { Plus, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils/helpers';
-import { useVaultState, getVaultStore } from '@/lib/vault/store/storeHelper';
-import BookCard from './BookCard'; // 🚀 আমরা এখন আলাদা ফাইল ব্যবহার করব
+import { useVaultStore } from '@/lib/vault/store';
+import BookCard from './BookCard'; // 
 
 interface BooksListProps {
     onAddClick: () => void;
     onBookClick: (book: any) => void;
     onQuickAdd: (book: any) => void;
+    onEdit?: (book: any) => void;
+    onDelete?: (book: any) => void;
     getBookBalance: (bookId: string) => number;
     currencySymbol?: string;
 }
 
-const BooksList = React.memo<BooksListProps>(({ 
+const BooksList = ({ 
     onAddClick, 
     onBookClick, 
-    onQuickAdd, 
-    currencySymbol = "৳"
-}) => {
+    onQuickAdd,
+    onEdit,
+    onDelete,
+    currencySymbol = ""
+}: BooksListProps) => {
     const { t, language } = useTranslation();
     const [hoveredId, setHoveredId] = useState<string | null>(null);
-    const { filteredBooks, activeBook } = useVaultState();
+    const { filteredBooks, activeBook, getBookBalance, searchQuery } = useVaultStore();
 
-    // 🎯 BALANCE GETTER
+    // BALANCE GETTER
     const getBalance = useCallback((book: any) => {
         const bookId = book.localId || book._id || book.cid;
-        return getVaultStore().getBookBalance(String(bookId));
-    }, []);
+        return getBookBalance(String(bookId));
+    }, [getBookBalance]);
 
     return (
         <motion.div 
@@ -41,7 +45,7 @@ const BooksList = React.memo<BooksListProps>(({
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-10 mt-2 md:mt-6 md:px-8 lg:px-10">
                 <AnimatePresence>
                     
-                    {/* ➕ START NEW LEDGER CARD */}
+                    {/* START NEW LEDGER CARD */}
                     {!activeBook && (
                         <motion.div 
                             key="dummy-add-card"
@@ -65,15 +69,17 @@ const BooksList = React.memo<BooksListProps>(({
                         </motion.div>
                     )}
 
-                    {/* 📚 THE MASTER BOOK CARDS */}
+                    {/* THE MASTER BOOK CARDS */}
                     {filteredBooks?.map((b: any, index: number) => {
                         const bookKey = b.cid ? `book-${b.cid}` : `book-local-${b.localId || index}`;
                         return (
                             <BookCard 
-                                key={bookKey}
+                                key={bookKey + (searchQuery || '')}
                                 book={b} 
                                 onOpen={onBookClick} 
                                 onQuickAdd={onQuickAdd}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
                                 balance={getBalance(b)}
                                 currencySymbol={currencySymbol} 
                                 isDimmed={hoveredId !== null && hoveredId !== bookKey}
@@ -93,7 +99,7 @@ const BooksList = React.memo<BooksListProps>(({
             </div>
         </motion.div>
     );
-});
+};
 
 BooksList.displayName = 'BooksList';
 export { BooksList };

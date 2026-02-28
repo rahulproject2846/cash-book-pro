@@ -30,6 +30,7 @@ export interface IEntry extends Document {
   conflictReason?: string;
   serverData?: any; 
   isPinned: number; 
+  mediaId?: string; 
   localId?: number; 
   conflicted: number;  
   createdAt: number;
@@ -53,8 +54,7 @@ const EntrySchema = new Schema<IEntry>({
   // ইউজার আইডি (ডাটা আইসোলেশন)
   userId: { 
     type: String, 
-    required: [true, "User ID is mandatory for protocol"],
-    index: true
+    required: [true, "User ID is mandatory for protocol"]
   },
   title: { 
     type: String, 
