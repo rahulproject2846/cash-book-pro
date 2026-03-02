@@ -49,6 +49,7 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   isGlobalAnimating: boolean;
   lastScrollPosition: number; // SCROLL MEMORY
   dynamicHeaderHeight: number;
+  isCleaning: boolean; // 🧹 Nuclear logout state
   
   // 🔄 LOOP PREVENTION: Remote mutation flag
   isRemoteMutation: boolean;
@@ -73,7 +74,7 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
   
   // USER AUTH ACTIONS
   loginSuccess: (user: any) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 // MAIN VAULT STORE - COMBINES ALL SLICES
@@ -135,6 +136,7 @@ export const useVaultStore = create<VaultStore>()(
       nextAction: null,
       isGlobalAnimating: false,
       dynamicHeaderHeight: 80,
+      isCleaning: false, // 🧹 Nuclear logout state
       
       // 🔄 LOOP PREVENTION: Remote mutation flag
       isRemoteMutation: false,
@@ -147,7 +149,7 @@ export const useVaultStore = create<VaultStore>()(
         set({ isLoading: true });
         try {
           // 🛡️ DELEGATE TO DOMAIN SLICES: Respect the Matrix Architecture
-          await get().refreshBooks();
+          await get().refreshBooks('BACKGROUND_SYNC');
           await get().refreshEntries();
           await get().refreshCounters();
         } catch (error) {
@@ -306,14 +308,56 @@ export const useVaultStore = create<VaultStore>()(
         });
       },
 
-      logout: () => {
-        console.log('[MAIN STORE] Logout triggered');
-        identityManager.clearIdentity();
-        set({ 
-          userId: '',
-          currentUser: null 
-        });
-        sessionCleanup();
+      logout: async () => {
+        console.log('[MAIN STORE] Nuclear logout initiated');
+        
+        // 🛡️ STEP A: Refresh counters to get current sync state
+        await get().refreshCounters();
+        
+        // 🛡️ STEP B: Check for unsynced/conflicted data
+        const { unsyncedCount, conflictedCount } = get();
+        
+        if (unsyncedCount > 0 || conflictedCount > 0) {
+          // 🚨 STEP C: Show data loss warning modal
+          const message = `⚠️ DATA LOSS WARNING\n\nYou have:\n• ${unsyncedCount} unsynced items\n• ${conflictedCount} conflicted items\n\nThese will be permanently deleted. Continue?`;
+          
+          if (!confirm(message)) {
+            console.log('[MAIN STORE] Logout cancelled by user');
+            return;
+          }
+        }
+        
+        // 🧹 STEP D: Execute nuclear reset
+        console.log('[MAIN STORE] Executing nuclear reset...');
+        set({ isCleaning: true });
+        
+        try {
+          // Clear identity first to prevent new operations
+          identityManager.clearIdentity();
+          
+          // Delete entire database
+          await db.delete();
+          console.log('[MAIN STORE] Database deleted successfully');
+          
+          // Clear store state
+          set({ 
+            userId: '',
+            currentUser: null,
+            isCleaning: false
+          });
+          
+          // Clear session cache
+          sessionCleanup();
+          
+          // 🔄 STEP E: Controlled redirect
+          console.log('[MAIN STORE] Redirecting to login...');
+          window.location.href = '/';
+          
+        } catch (error) {
+          console.error('[MAIN STORE] Nuclear reset failed:', error);
+          set({ isCleaning: false });
+          alert('❌ Logout failed. Please try again.');
+        }
       }
     };
   })
@@ -332,6 +376,13 @@ if (typeof window !== 'undefined') {
 
   // Load data on first mount
   setTimeout(() => {
+    // 🆕 STRICT USER GUARD: Only refresh if user is valid
+    const userId = identityManager.getUserId();
+    if (!userId) {
+      console.log('[MAIN STORE] No user available, skipping initial refresh');
+      return;
+    }
+    
     // SECURITY GUARD: Only refresh if not in lockdown
     const { isSecurityLockdown } = useVaultStore.getState();
     if (!isSecurityLockdown) {
@@ -347,6 +398,22 @@ if (typeof window !== 'undefined') {
       // ✅ CRITICAL: Update store's userId state BEFORE refreshing data
       useVaultStore.setState({ userId: newUserId || undefined });
       await useVaultStore.getState().refreshData();
+    });
+  }
+
+  // 🆕 GLOBAL LISTENER: Handle vault-updated events with source attribution
+  if (typeof window !== 'undefined') {
+    window.addEventListener('vault-updated', (event: any) => {
+      const source = event.detail?.source || 'BACKGROUND_SYNC';
+      console.log(`📡 [MAIN STORE] Vault update detected from source: ${source}`);
+      
+      // 🛡️ SECURITY GUARD: Only refresh if not in lockdown
+      const { isSecurityLockdown } = useVaultStore.getState();
+      if (!isSecurityLockdown) {
+        useVaultStore.getState().refreshBooks(source);
+      } else {
+        console.log('[MAIN STORE] Vault update blocked - App in lockdown mode');
+      }
     });
   }
 }

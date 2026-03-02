@@ -1,11 +1,13 @@
 "use client";
 
 import { db } from '@/lib/offlineDB';
-import { normalizeRecord } from '../../core/VaultUtils';
+import { normalizeRecord, validateCompleteness } from '../../core/VaultUtils';
+import { getTimestamp } from '@/lib/shared/utils';
+import { getVaultStore } from '../../store/storeHelper';
+import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../../utils/security';
 import { validateBook, validateEntry } from '../../core/schemas';
 import { Base64Migration } from '../middleware/Base64Migration';
 import type { HydrationResult } from '../engine/types';
-import { getVaultStore } from '../../store/storeHelper';
 
 /**
  * 📚 BULK SLICE - Books and Entries Bulk Hydration
@@ -32,7 +34,9 @@ export class BulkSlice {
     try {
       console.log('📚 [BULK SLICE] Fetching books from server...');
       
-      const response = await fetch(`/api/books?userId=${encodeURIComponent(this.userId)}&limit=1000`);
+      const response = await this.signedFetch(`/api/books?userId=${encodeURIComponent(this.userId)}&limit=1000`, {
+        method: 'GET'
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch books: ${response.statusText}`);
       }
@@ -121,7 +125,9 @@ export class BulkSlice {
       console.log('📝 [BULK SLICE] Fetching entries from server...');
       
       // 🚀 FORCE FULL HYDRATION: Use /api/entries/all with since=0 for complete data
-      const response = await fetch(`/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=5000&since=0`);
+      const response = await this.signedFetch(`/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=5000&since=0`, {
+        method: 'GET'
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch entries: ${response.statusText}`);
       }
@@ -190,6 +196,28 @@ export class BulkSlice {
         success: false, 
         error: String(error)
       };
+    }
+  }
+
+  /**
+   * 🔐 SECURE SIGNED FETCH - Phase 20 Implementation
+   * Uses centralized security utility for cryptographic signing
+   */
+  private async signedFetch(url: string, options: RequestInit): Promise<Response> {
+    try {
+      const timestamp = Date.now().toString();
+      const payload = preparePayload(options);
+      const signature = await generateVaultSignature(payload, timestamp);
+      const signedHeaders = prepareSignedHeaders(options, signature, timestamp);
+      
+      return fetch(url, {
+        ...options,
+        headers: signedHeaders,
+        body: payload || undefined
+      });
+    } catch (error) {
+      console.error('❌ [BULK SLICE] Signature generation failed:', error);
+      return fetch(url, options); // Fallback to standard fetch on security error
     }
   }
 }

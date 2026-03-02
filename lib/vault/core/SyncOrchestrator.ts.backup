@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * 🚀 REFACTORED SYNC ORCHESTRATOR - Clean Architecture Implementation
- * 
- * SOLID Principles Implementation:
- * - Single Responsibility: Each service has one job
- * - Open/Closed: Extensible without modification
- * - Liskov Substitution: Services are interchangeable
- * - Interface Segregation: Focused interfaces
- * - Dependency Inversion: Depends on abstractions
- */
-
 import { ModeController } from '../../system/ModeController';
 import { HydrationController } from '../hydration/HydrationController';
 import { IntegrityService } from '../services/IntegrityService';
@@ -23,10 +12,21 @@ import { PullService } from '../services/PullService';
 import { RiskManager, LicenseVault } from '../security';
 import { getVaultStore } from '../store/storeHelper';
 import { SyncGuard } from '../guards/SyncGuard';
+import { GuardResult } from '../types/SyncTypes';
 
 /**
  * 🚀 REFACTORED SYNC ORCHESTRATOR - Clean Architecture Implementation
+ * 
+ * This is the new, clean orchestrator that follows SOLID principles:
+ * - Single Responsibility: Each service has one job
+ * - Open/Closed: Extensible without modification
+ * - Liskov Substitution: Services are interchangeable
+ * - Interface Segregation: Focused interfaces
+ * - Dependency Inversion: Depends on abstractions
+ * 
+ * Replaces the 1500+ line God Object with focused services.
  */
+
 export class SyncOrchestratorRefactored {
   private pushService: PushService;
   private pullService: PullService;
@@ -39,42 +39,21 @@ export class SyncOrchestratorRefactored {
   private isInitializing = false;
   private static isInitializing = false;
   private static initializationPromise: Promise<void> | null = null;
-  private tabId = Math.random().toString(36).substr(2, 9);
-  private lastRefreshTime: number = 0;
+  private tabId = Math.random().toString(36).substr(2, 9); // 🆕 SOURCE ID GUARD
+  private lastRefreshTime: number = 0; // 🆕 Prevent refreshBooks spam
+  // 🆕 DEBOUNCE STATE: Prevent rapid-fire sync triggers
   private syncDebounceTimeout: NodeJS.Timeout | null = null;
   private pendingSyncOperations: Array<{ timestamp: number; source: string }> = [];
 
+  /**
+   * 🔄 UNIFIED SERVICE PROPAGATION
+   * Centralized userId setting for all services after successful validation
+   */
   private syncServiceIdentities(userId: string): void {
     this.pushService.setUserId(userId);
     this.pullService.setUserId(userId);
     this.hydrationController.setUserId(userId);
     this.integrityService.setUserId(userId);
-  }
-
-  private getChannel(): BroadcastChannel {
-    if (!this.channel) {
-      this.channel = new BroadcastChannel('vault_global_sync');
-      console.log('🛡️ [ORCHESTRATOR] Created new BroadcastChannel');
-
-      this.channel.onmessage = (event) => {
-        if (event.data?.sourceTabId === this.tabId) {
-          console.log('🛡️ [ORCHESTRATOR] Ignoring self-broadcast message');
-          return;
-        }
-
-        if (this.isInitializing) {
-          console.log('🛡️ [ORCHESTRATOR] Ignoring broadcast - sync already running');
-          return;
-        }
-
-        if (event.data?.type === 'FORCE_REFRESH') {
-          console.log('📡 [ORCHESTRATOR] Cross-tab refresh signal received');
-          this.notifyUI('CrossTab');
-        }
-      };
-    }
-
-    return this.channel;
   }
 
   constructor() {
@@ -84,10 +63,13 @@ export class SyncOrchestratorRefactored {
     this.integrityService = new IntegrityService();
     this.maintenanceService = new MaintenanceService();
 
+    // 🔒 SYNCHRONIZED INIT: Get userId immediately to prevent race condition
     this.userId = identityManager.getUserId() || '';
     console.log('🔄 [ORCHESTRATOR] Initialized with userId:', this.userId);
 
     this.syncServiceIdentities(this.userId);
+
+    this.init();
 
     // 🆕 REACTIVE SYNC: Listen for vault-updated events
     if (typeof window !== 'undefined') {
@@ -122,30 +104,164 @@ export class SyncOrchestratorRefactored {
             console.log(`🚀 [ORCHESTRATOR] Debounced sync triggered for ${this.pendingSyncOperations.length} operations`);
             this.pendingSyncOperations = []; // Clear queue
             this.triggerSync();
-          }, 500);
+          }, 500); // 🎯 INCREASED from 100ms to 500ms
         }
       });
     }
   }
-
   /**
-   * 🚀 GATE-BASED INITIALIZATION - Sequential Chain of Command
+   * 🛡️ GET CHANNEL - Self-healing channel getter
    */
-  private async performGateBasedInitialization(userId?: string): Promise<void> {
-    const store = getVaultStore();
-    
-    try {
-      // 🛡️ WAIT FOR IDENTITY MANAGER TO BE READY
-      if (!identityManager.ready) {
-        console.log('⏳ [ORCHESTRATOR] IdentityManager not ready, waiting...');
-        await new Promise<void>(resolve => {
-          identityManager.onReady(() => resolve());
-          // Timeout after 1 second as safety
-          setTimeout(resolve, 1000);
-        });
-      }
+  private getChannel(): BroadcastChannel {
+    if (!this.channel) {
+      this.channel = new BroadcastChannel('vault_global_sync');
+      console.log('🛡️ [ORCHESTRATOR] Created new BroadcastChannel');
+
+      // Attach: refresh listener whenever a new channel is created
+      this.channel.onmessage = (event) => {
+        // 🛡️ SELF-LOOP GUARD: Ignore messages from this tab
+        if (event.data?.sourceTabId === this.tabId) {
+          console.log('🛡️ [ORCHESTRATOR] Ignoring self-broadcast message');
+          return;
+        }
+
+        // 🛡️ SYNC GUARD: Ignore broadcast if sync is already running
+        if (this.isInitializing) {
+          console.log('🛡️ [ORCHESTRATOR] Ignoring broadcast - sync already running');
+          return;
+        }
+
+        if (event.data?.type === 'FORCE_REFRESH') {
+          console.log('📡 [ORCHESTRATOR] Cross-tab refresh signal received');
+          this.notifyUI('CrossTab');
+        }
+      };
+    }
+
+    return this.channel;
+  }
+  /**
+
+   * INITIALIZATION
+
+   */
+
+  private async init(): Promise<void> {
+
+    if (typeof window !== 'undefined') {
+
+      // �️ FORCE FRESH START: Reset bootStatus to ensure skeleton appears
+
+      const store = getVaultStore();
+
+      store.setBootStatus('IDLE');
+
       
-      // 🆕 SYNC GUARD: Centralized validation
+
+      // �🕵️‍♂️ SECURITY CHECK: Time Tampering
+
+      const isTampered = RiskManager.checkTimeTampering();
+
+      if (isTampered) {
+
+          console.error('🚨 [SECURITY] Critical: Time tampering detected!');
+
+          // Future: We can ban the user here. For now, just log.
+
+      }
+
+
+
+      // SELF-HEALING BROADCAST CHANNEL
+
+      this.getChannel();
+
+      
+
+      // Identity management
+
+      identityManager.subscribe(async (uid) => {
+
+        console.log('[REFACTORED ORCHESTRATOR] Identity changed, initializing sequence');
+
+        
+
+        if (!uid) {
+
+          this.userId = '';
+
+          console.log('🔐 [REFACTORED ORCHESTRATOR] User logged out, stopping services');
+
+          this.cleanup();
+
+          return;
+
+        }
+
+        
+
+        this.userId = uid;
+
+        
+
+        // �️ GLOBAL LOCK: Prevent multiple initialization sequences
+
+        if (SyncOrchestratorRefactored.isInitializing) {
+
+          console.log('� [ORCHESTRATOR] Already initializing, waiting...');
+
+          return SyncOrchestratorRefactored.initializationPromise;
+
+        }
+
+
+
+        // �️ SET GLOBAL LOCK
+
+        SyncOrchestratorRefactored.isInitializing = true;
+
+        SyncOrchestratorRefactored.initializationPromise = this.performGateBasedInitialization(uid);
+
+        
+
+        try {
+
+          await SyncOrchestratorRefactored.initializationPromise;
+
+        } finally {
+
+          // 🛡️ RELEASE GLOBAL LOCK
+
+          SyncOrchestratorRefactored.isInitializing = false;
+
+          SyncOrchestratorRefactored.initializationPromise = null;
+
+        }
+
+      });
+
+    }
+
+
+    
+
+    try {
+
+      // 🛡️ DOUBLE-PULL PROTECTION: Check if pull is already in progress
+
+      const pullStatus = this.pullService.getPullStatus();
+
+      if (pullStatus.isPulling) {
+
+        console.log('�️ [ORCHESTRATOR] Pull already in progress, skipping...');
+
+        return;
+
+      }
+
+      
+
+      // 🆕 SYNC GUARD: Centralized validation (VERBATIM replacement)
       const guardResult = await SyncGuard.validateSyncAccess({
         serviceName: 'SyncOrchestrator',
         onError: async (msg, details) => {
@@ -160,7 +276,7 @@ export class SyncOrchestratorRefactored {
           }
           getVaultStore().setSecurityLockdown(true);
         },
-        returnError: () => undefined
+        returnError: () => undefined // Orchestrator returns void
       });
       if (!guardResult.valid) {
         console.warn('🔒 [ORCHESTRATOR] Initialization blocked by security validation');
@@ -168,13 +284,14 @@ export class SyncOrchestratorRefactored {
       }
       
       // 🆕 GET VALIDATED USER ID FROM SYNC GUARD
-      userId = guardResult.userId || userId || identityManager.getUserId() || '';
+      const userId = guardResult.userId || identityManager.getUserId();
       this.userId = userId || '';
       
       // 🔄 UNIFIED SERVICE PROPAGATION: Set userId for all services
       this.syncServiceIdentities(this.userId);
       
-      // 🆕 GATE 1: Wait for Identity
+      // 🆕 GATE 1: Wait for Identity - ROBUST ID RECOVERY
+      const store = getVaultStore();
       store.setBootStatus('IDENTITY_WAIT');
       console.log('🔄 [ORCHESTRATOR] Gate 1: Waiting for identity...');
       
@@ -182,108 +299,202 @@ export class SyncOrchestratorRefactored {
       console.log('✅ [ORCHESTRATOR] Gate 1: Identity ready:', identityUserId);
 
       // 🛡️ GATE 2: Profile Sync + Lazy Fix
+
       store.setBootStatus('PROFILE_SYNC');
+
       console.log('🔄 [ORCHESTRATOR] Gate 2: Checking user profile...');
+
       
-      // 🧠 MODE CONTROLLER: Start network monitoring IMMEDIATELY for profile hydration
-      ModeController.start();
-      console.log('🧠 [ORCHESTRATOR] ModeController started - Network monitoring active');
-      
-      const user = await db.users.get(this.userId || '');
+
+      const user = await db.users.get(userId);
+
       if (!user || user.plan === undefined) {
+
         console.log('🔧 [ORCHESTRATOR] User profile missing or incomplete, hydrating...');
+
         try {
-          await this.hydrationController.hydrateUser(this.userId || '');
+
+          await this.hydrationController.hydrateUser(userId || '');
+
           
+
           // Apply Lazy Fix for legacy schema
-          await db.users.update(this.userId || '', {
+
+          await db.users.update(userId || '', {
+
             plan: 'free',
+
             offlineExpiry: 0,
+
             riskScore: 0,
+
             receiptId: null
+
           });
+
           console.log('✅ [ORCHESTRATOR] Gate 2: Profile hydrated and lazy fix applied');
+
+        
+
+        // 🧠 MODE CONTROLLER: Start network monitoring BEFORE Gate 3
+
+        ModeController.start();
+
+        console.log('🧠 [ORCHESTRATOR] ModeController started - Network monitoring active');
+
         } catch (error) {
+
           // 🧠 SMART ERROR CLASSIFICATION: Distinguish recoverable from critical errors
+
           const errorStr = String(error);
+
           const is404Error = errorStr.includes('404') || 
+
                          errorStr.includes('Profile not found') ||
+
                          errorStr.includes('Failed to fetch user profile');
+
           const isNetworkError = errorStr.includes('fetch') || 
+
                                errorStr.includes('ECONNREFUSED') ||
+
                                errorStr.includes('NetworkError') ||
+
                                errorStr.includes('timeout');
+
           const isServerError = errorStr.includes('500') || 
+
                               errorStr.includes('Internal Server Error');
+
           
+
           if (is404Error) {
+
             // 🛡️ SOFT FAILURE: Allow Self-Healing without lockdown
+
             console.warn('⚠️ [ORCHESTRATOR] 404 detected, allowing Self-Healing without lockdown.');
-            return;
+
+            // Don't set lockdown, let default profile creation handle it
+
+            return; // Continue to Gate 3
+
           }
+
           
+
           if (isNetworkError) {
+
             // 🌐 NETWORK FAILURE: Temporary issue, no lockdown needed
+
             console.warn('⚠️ [ORCHESTRATOR] Network error detected, will retry later.');
-            return;
+
+            return; // Continue to Gate 3, system will retry
+
           }
+
           
+
           // 🛡️ CRITICAL ERROR: Only lockdown for server errors or security issues
-          store.setBootStatus('IDLE');
-          store.setEmergencyHydrationStatus('failed');
+
+          const store = getVaultStore();
+
           store.setSecurityLockdown(true);
+
+          store.setBootStatus('IDLE');
+
+          store.setEmergencyHydrationStatus('failed');
+
           store.setSecurityErrorMessage('Critical error: Server error. Lockdown activated.');
-          throw error;
+
+          throw error; // Re-throw to trigger main catch block
+
         }
+
       }
+
+
 
       // 🛡️ GATE 3: Data Hydration
+
       store.setBootStatus('DATA_HYDRATION');
+
       console.log('🔄 [ORCHESTRATOR] Gate 3: Starting sequential hydration...');
+
       
+
       // 🌁 BRIDGE THE IDENTITY GAP
-      if (this.userId) {
-        this.pushService.setUserId(this.userId);
-        this.pullService.setUserId(this.userId);
-        this.hydrationController.setUserId(this.userId);
-        this.integrityService.setUserId(this.userId);
-      }
-      getVaultStore().setSecurityLockdown(false);
+
+      this.hydrationController.setUserId(userId); 
+
+      getVaultStore().setSecurityLockdown(false); // Force clear old alarms
+
       
+
       const hydrationResult = await this.hydrationController.fullHydration(true);
+
       if (!hydrationResult.success) {
+
         console.warn('⚠️ [ORCHESTRATOR] Hydration failed, continuing boot with degraded functionality:', hydrationResult.error);
+
+        // Don't crash - continue to next gate with degraded functionality
+
       } else {
+
         console.log('✅ [ORCHESTRATOR] Gate 3: Data hydration complete');
+
       }
 
-      // 🔄 RAM SYNCHRONIZATION: Pull all books and entries from Dexie into Zustand store
+
+
+      // � RAM SYNCHRONIZATION: Pull all books and entries from Dexie into Zustand store
+
       console.log('🔄 [ORCHESTRATOR] Synchronizing RAM from Dexie...');
+
       await store.refreshData();
+
       console.log('✅ [ORCHESTRATOR] RAM synchronization complete');
 
-      // 🔄 BACKGROUND PULL: Trigger data pull after Gate 3 hydration is complete
+
+
+      // �🔄 BACKGROUND PULL: Trigger data pull after Gate 3 hydration is complete
+
       if (process.env.NODE_ENV === 'development') {
+
         console.log('🔄 [ORCHESTRATOR] Triggering background data pull...');
+
       }
+
       
-      // 🛡️ SERVICE SETUP: Set user IDs BEFORE triggering pull
-      if (this.userId) {
-        this.pushService.setUserId(this.userId);
-        this.pullService.setUserId(this.userId);
-        this.integrityService.setUserId(this.userId);
-      }
+
+      // 🛡️ SERVICE SETUP: Set user IDs BEFORE triggering pull (Critical Fix)
+
+      this.pushService.setUserId(userId || '');
+
+      this.pullService.setUserId(userId || '');
+
+      this.integrityService.setUserId(userId || '');
+
       
+
       try {
+
         // 🛡️ DOUBLE-PULL PROTECTION: Check if pull is already in progress
+
         const pullStatus = this.pullService.getPullStatus();
+
         if (pullStatus.isPulling) {
+
           console.log('🛡️ [ORCHESTRATOR] Pull already in progress, skipping...');
+
           return;
+
         }
+
         
+
         // 🚀 FLASH-PASS: Local data check for instant boot
         const localCount = await db.books.count();
+        
         if (localCount > 0) {
           // ⚡ RETURNING USER: Skip blocking pull, sync in background
           console.log('⚡ [ORCHESTRATOR] Flash-Pass: Local data found, sync moved to background.');
@@ -303,111 +514,415 @@ export class SyncOrchestratorRefactored {
         } else {
           // ⏳ FIRST-TIME USER: Wait for server pull
           console.log('⏳ [ORCHESTRATOR] Cold-Start: No local data, waiting for server pull.');
+          
           const pullResult = await this.pullService.pullPendingData();
+
           if (pullResult && pullResult.success) {
+
             console.log('✅ [ORCHESTRATOR] Background pull completed successfully');
+
           } else {
+
             console.warn('⚠️ [ORCHESTRATOR] Background pull blocked/failed:', pullResult?.errors || 'Unknown security block');
+
           }
         }
+
       } catch (error) {
+
         console.warn('⚠️ [ORCHESTRATOR] Background pull failed, continuing boot:', error);
+
+        // Don't fail boot if pull fails, just continue
+
       }
+
+
 
       // 🛡️ GATE 4: Ready State
+
       console.log('🔄 [ORCHESTRATOR] Final check: Waiting for books to hydrate...');
-      await store.refreshBooks('INITIAL_BOOT');
-      store.setBootStatus('READY');
+
+      await store.refreshBooks('INITIAL_BOOT'); // ✅ AWAIT THE DATA
+
+      store.setBootStatus('READY'); // ✅ ONLY THEN SET READY
+
       
+
       // 🔄 INDEXEDDB SETTLE: Allow small delay for DB to settle
-      await new Promise(resolve => setTimeout(resolve, 50));
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      
+
       await store.refreshCounters();
+
       if (process.env.NODE_ENV === 'development') {
+
         console.log('🔄 [ORCHESTRATOR] UI counters refreshed after hydration');
+
         console.log('✅ [ORCHESTRATOR] Gate 4: Boot sequence complete - System READY');
+
       }
+
+
 
       // 🛡️ LOCKDOWN RESET: Ensure any old lockdown is cleared
+
       store.setSecurityLockdown(false);
+
       console.log('🔓 [ORCHESTRATOR] Lockdown cleared - System fully operational');
+
       
+
       // 🚀 BRUTE-FORCE INTERACTION RESET: Clear any stuck overlays
+
       store.clearOverlays();
+
       document.body.style.pointerEvents = 'auto';
+
       console.log('🔓 [ORCHESTRATOR] Interaction reset - All overlays cleared');
-      console.log('🔄 [ORCHESTRATOR] Boot sequence complete - UI should be responsive');
+
+      
+
+      // FORCE SPINNER KILL: Ensure UI is unlocked
+
+      // Note: setIsLoading doesn't exist in store, but the UI spinner is controlled by bootStatus
+
+      console.log(' [ORCHESTRATOR] Boot sequence complete - UI should be responsive');
+
+
+
+      // SERVICE INTERLOCK: Only start services after boot is complete
+
+      if (process.env.NODE_ENV === 'development') {
+
+        console.log(' [ORCHESTRATOR] Starting background services...');
+
+      }
+
+      
 
       // 🚀 PARALLEL SERVICE STARTUP: Initialize all background services concurrently
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔄 [ORCHESTRATOR] Starting background services...');
-      }
-      
+
       const serviceResults = await Promise.allSettled([
+
         this.integrityService.performIntegrityCheck(),
+
         this.checkAndResumeInterruptedSyncs(),
-        this.maintenanceService.performGlobalCleanup(this.userId || '')
+
+        this.maintenanceService.performGlobalCleanup(userId || '')
+
       ]);
+
       
+
       // Check for any service failures
+
       const failedServices = serviceResults.filter(result => result.status === 'rejected');
+
       if (failedServices.length > 0) {
+
         console.warn('⚠️ [ORCHESTRATOR] Some background services failed:', failedServices);
+
       }
+
       
+
       // Schedule integrity checks after initial check
+
       this.integrityService.scheduleIntegrityChecks();
+
+      
+
       console.log('🏁 [ORCHESTRATOR] All systems ready - Chain of Command complete');
+
+      
+
+    } catch (error) {
+
+      console.error('❌ [ORCHESTRATOR] Gate-based initialization failed:', error);
+
+      const store = getVaultStore();
+
+      store.setBootStatus('IDLE');
+
+      store.setEmergencyHydrationStatus('failed');
+
+      store.setSecurityLockdown(true);
+
+      store.setSecurityErrorMessage('Boot sequence failed. Please refresh the page.');
+
+    }
+
+  }
+  /**
+
+   * 👤 INITIALIZE FOR USER
+
+   */
+
+  async initializeForUser(userId: string): Promise<void> {
+
+    // 🛡️ STATIC LOCK: Prevent multiple initialization sequences globally
+
+    if (SyncOrchestratorRefactored.isInitializing) {
+
+      console.log(`[LOCK] Already initializing for user: ${userId}, returning existing promise.`);
+
+      return SyncOrchestratorRefactored.initializationPromise!;
+
+    }
+
+    // 🛡️ INITIALIZATION GUARD
+
+    if (this.isInitialized || this.isInitializing) {
+
+      console.log('🏁 [ORCHESTRATOR] Already initialized or initializing, skipping...');
+
+      return;
+
+    }
+
+  
+    // 🛡️ SET STATIC LOCK
+
+    SyncOrchestratorRefactored.isInitializing = true;
+
+    SyncOrchestratorRefactored.initializationPromise = this.performInitializeForUser(userId);
+
+    try {
+
+      await SyncOrchestratorRefactored.initializationPromise;
+
+    } finally {
+
+      // 🛡️ RELEASE STATIC LOCK
+
+      SyncOrchestratorRefactored.isInitializing = false;
+
+      SyncOrchestratorRefactored.initializationPromise = null;
+
+    }
+
+  }
+  private async performInitializeForUser(userId: string): Promise<void> {
+
+    try {
+
+      console.log('🏁 [REFACTORED ORCHESTRATOR] Initializing for user:', userId);
+
+      
+
+      // Set user ID for all services
+
+      this.pushService.setUserId(userId);
+
+      this.hydrationController.setUserId(userId);
+
+      this.integrityService.setUserId(userId);
+
+      // 🛡️ STEP 1: Data Integrity Repair
+
+      console.log('🏁 [REFACTORED ORCHESTRATOR] Step 1: Data integrity repair');
+
+      await this.integrityService.performIntegrityCheck();
+
+      // �️ STEP 2: Initial Hydration
+
+      console.log('🏁 [REFACTORED ORCHESTRATOR] Step 2: Initial hydration');
+
+      // 🛡️ FINAL SECURITY CHECK: Abort if lockdown is active
+
+      const { isSecurityLockdown } = getVaultStore();
+
+      if (isSecurityLockdown) {
+
+        console.log('🛡️ [SECURITY] Hydration blocked - App in lockdown mode');
+
+        return; // ⛔ STOP ALL INITIALIZATION
+
+      }
+      const hydrationResult = await this.hydrationController.fullHydration(true);
+
+      
+
+      if (!hydrationResult.success) {
+
+        console.error('❌ [REFACTORED ORCHESTRATOR] Initial hydration failed:', hydrationResult.error);
+
+        telemetry.log({
+
+          type: 'ERROR',
+
+          level: 'ERROR',
+
+          message: 'Initial hydration failed',
+
+          data: { error: hydrationResult.error, userId }
+
+        });
+
+        // 🛡️ CRITICAL FIX: Immediate abort on hydration failure
+
+        const store = getVaultStore();
+
+        store.setSecurityLockdown(true);
+
+        store.setBootStatus('IDLE');
+
+        store.setSecurityErrorMessage('Hydration failed. Security lockdown activated.');
+
+        return; // ⛔ STOP ALL INITIALIZATION
+
+      }
+
+      // 🔍 STEP 3: Integrity Audit
+
+      console.log('🏁 [REFACTORED ORCHESTRATOR] Step 3: Integrity audit');
+
+      await this.integrityService.performIntegrityCheck();
+
+      // 🔄 STEP 4: Start Background Services
+
+      console.log('🏁 [REFACTORED ORCHESTRATOR] Step 4: Starting background services');
+
+      this.integrityService.scheduleIntegrityChecks();
+
+      // 🔄 AUTO-RESUME: Check for interrupted syncs
+
+      console.log('🔄 [REFACTORED ORCHESTRATOR] Step 5: Auto-resume check');
+
+      await this.checkAndResumeInterruptedSyncs();
+
+      
+
+      // 🧹 STEP 6: Global maintenance cleanup
+
+      console.log('🧹 [REFACTORED ORCHESTRATOR] Step 6: Global maintenance cleanup');
+
+      await this.maintenanceService.performGlobalCleanup(userId);
+
+      
+
+      this.isInitialized = true;
+
+      console.log('🏁 [REFACTORED ORCHESTRATOR] Initialization complete - All systems ready');
+      // Notify UI
+
+      this.notifyUI('SyncOrchestrator');
+
+    } catch (error) {
+      console.error('❌ [REFACTORED ORCHESTRATOR] Initialization failed:', error);
+      telemetry.log({
+        type: 'ERROR',
+        level: 'ERROR',
+        message: 'Orchestrator initialization failed',
+        data: { error: String(error), userId }
+      });
+    } finally {
+      this.isInitializing = false;
+    }
+  }
+  /**
+
+   * 🔄 AUTO-RESUME: Check for interrupted syncs and resume them
+
+   */
+
+  private async checkAndResumeInterruptedSyncs(): Promise<void> {
+    try {
+      console.log('🔄 [REFACTORED ORCHESTRATOR] Checking for interrupted syncs...');
+
+      // Check for unsynced books
+
+      const unsyncedBooks = await db.books.where('synced').equals(0).toArray();
+      const unsyncedEntries = await db.entries.where('synced').equals(0).toArray();
+      const totalUnsynced = unsyncedBooks.length + unsyncedEntries.length;
+
+      if (totalUnsynced > 0) {
+        console.log(`🔄 [REFACTORED ORCHESTRATOR] Found ${totalUnsynced} unsynced items, resuming sync...`);
+        console.log(`📚 Books: ${unsyncedBooks.length}, 📝 Entries: ${unsyncedEntries.length}`);
+        // Trigger automatic sync to resume interrupted operations
+
+        const result = await this.pushService.pushPendingData();
+
+        if (result.success) {
+          console.log('✅ [REFACTORED ORCHESTRATOR] Auto-resume sync completed successfully');
+        } else {
+          console.error('❌ [REFACTORED ORCHESTRATOR] Auto-resume sync failed:', result.errors);
+        }
+      } else {
+        console.log('✅ [REFACTORED ORCHESTRATOR] No interrupted syncs found');
+      }
       
     } catch (error) {
-      console.error('❌ [ORCHESTRATOR] Gate-based initialization failed:', error);
-      const store = getVaultStore();
-      store.setBootStatus('IDLE');
-      store.setEmergencyHydrationStatus('failed');
-      store.setSecurityLockdown(true);
-      store.setSecurityErrorMessage('Boot sequence failed. Please refresh page.');
+      console.error('❌ [REFACTORED ORCHESTRATOR] Auto-resume check failed:', error);
     }
   }
 
+
+  public async getSystemRiskStatus(): Promise<{
+    systemHealth: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+    highRiskCount: number;
+
+  }> {
+    // Mocking logic or real integrity check
+    return { systemHealth: 'HEALTHY' as const, highRiskCount: 0 };
+  }
   /**
-   * 🚀 INITIALIZATION
+
+   * � GET SYSTEM RISK STATUS (V6.4)
+
+   * Provides admin dashboard with real-time risk analytics
+
    */
-  private async init(): Promise<void> {
-    if (typeof window !== 'undefined') {
-      // 🔄 FORCE FRESH START: Reset bootStatus to ensure skeleton appears
-      const store = getVaultStore();
-      store.setBootStatus('IDLE');
-      
-      // 🕵️‍♂️ SECURITY CHECK: Time Tampering
-      const isTampered = RiskManager.checkTimeTampering();
-      if (isTampered) {
-        console.error('🚨 [SECURITY] Critical: Time tampering detected!');
-      }
-      
-      // SELF-HEALING BROADCAST CHANNEL
-      this.getChannel();
-      
-      // Identity management
-      identityManager.subscribe(async (userId) => {
-        if (!userId) {
-          this.userId = '';
-          this.cleanup();
-          return;
-        }
-        
-        this.userId = userId;
-        await this.performGateBasedInitialization(userId);
+
+  static async getSystemRiskStatus(): Promise<{
+    highRiskCount: number;
+    riskDistribution: { low: number; medium: number; high: number; critical: number };
+    systemHealth: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  }> {
+    try {
+      const [highRiskCount, riskDistribution] = await Promise.all([
+        RiskManager.getHighRiskUserCount(),
+        RiskManager.getRiskDistribution()
+      ]);
+      const systemHealth = highRiskCount > 100 ? 'CRITICAL' : 
+                       highRiskCount > 50 ? 'WARNING' : 'HEALTHY';
+      console.log('📊 [ADMIN] System risk status calculated:', {
+        highRiskCount,
+        riskDistribution,
+        systemHealth
       });
+
+      return {
+        highRiskCount,
+        riskDistribution,
+        systemHealth
+      };     
+    } catch (error) {
+      console.error('🔒 [ADMIN] Failed to get system risk status:', error);
+      return {
+        highRiskCount: 0,
+        riskDistribution: { low: 0, medium: 0, high: 0, critical: 0 },
+        systemHealth: 'CRITICAL'
+      };
     }
   }
 
+
   /**
+
    * 🚀 TRIGGER SYNC - Main sync orchestration method
+
    */
+
   async triggerSync(): Promise<void> {
     try {
       console.log('🚀 [ORCHESTRATOR] Triggering sync sequence...');
-      
-      // 🆕 SYNC GUARD: Centralized validation
+
+      // 🆕 SYNC GUARD: Centralized validation (VERBATIM replacement)
+
       const guardResult = await SyncGuard.validateSyncAccess({
         serviceName: 'SyncOrchestrator',
         onError: async (msg, details) => {
@@ -422,14 +937,39 @@ export class SyncOrchestratorRefactored {
           }
           getVaultStore().setSecurityLockdown(true);
         },
-        returnError: () => undefined
+        returnError: () => undefined // Orchestrator returns void
       });
-      if (!guardResult.valid) {
-        console.warn('🔒 [ORCHESTRATOR] Initialization blocked by security validation');
-        return;
-      }
-      
+      if (!guardResult.valid) return;
+
       // 🔄 STEP 3: Trigger fresh sync
+
+      await this.handleManualSyncFlow();     
+    } catch (error) {
+      console.error('❌ [REFACTORED ORCHESTRATOR] Manual sync failed:', error);
+      telemetry.log({
+        type: 'ERROR',
+        level: 'ERROR',
+        message: 'Manual sync failed',
+        data: { error: String(error), userId: this.userId }
+      });
+    }
+  }
+
+  /*** 🔄 HANDLE MANUAL SYNC FLOW - Sequential sync enforcement */
+
+  private async handleManualSyncFlow(): Promise<void> {
+
+    try {
+
+      console.log('🔄 [ORCHESTRATOR] Starting sequential sync flow...');
+
+      // Trigger manual sync from store
+
+      const { triggerManualSync } = getVaultStore();
+
+      await triggerManualSync();
+      
+      // 🔄 SEQUENTIAL SYNC ENFORCEMENT: Pull -> Check Conflicts -> Push
       console.log('📥 [ORCHESTRATOR] Step 1: Pull pending data...');
       const pullResult = await this.pullService.pullPendingData();
       
@@ -455,15 +995,15 @@ export class SyncOrchestratorRefactored {
       
       console.log('✅ [ORCHESTRATOR] Sequential sync completed successfully');
       
-      // Notify UI
-      this.notifyUI('SyncOrchestrator');
+      // Notify UI of completion
+      this.notifyUI('HydrationService');
       
     } catch (error) {
-      console.error('❌ [ORCHESTRATOR] Manual sync failed:', error);
+      console.error('❌ [ORCHESTRATOR] Sequential sync flow failed:', error);
       telemetry.log({
         type: 'ERROR',
         level: 'ERROR',
-        message: 'Manual sync failed',
+        message: 'Sequential sync flow failed',
         data: { error: String(error), userId: this.userId }
       });
     }
@@ -479,7 +1019,7 @@ export class SyncOrchestratorRefactored {
         detail: { 
           source: origin || 'SyncOrchestrator',
           origin: origin || 'SyncOrchestrator',
-          tabId: this.tabId
+          tabId: this.tabId // CRITICAL: Identify the sender
         } 
       }));
       
@@ -489,9 +1029,33 @@ export class SyncOrchestratorRefactored {
           type: 'FORCE_REFRESH',
           source: 'SyncOrchestrator',
           origin: origin || 'SyncOrchestrator',
-          sourceTabId: this.tabId
+          sourceTabId: this.tabId // ✅ SOURCE ID GUARD
         });
       }
+    }
+  }
+
+  /**
+   * 🎯 HYDRATE SINGLE ITEM - Image sniper system support
+   */
+  async hydrateSingleItem(type: 'BOOK' | 'ENTRY', id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log(`🎯 [ORCHESTRATOR] Hydrating single ${type} for ID: ${id}`);
+      
+      // Delegate to hydration controller
+      const result = await this.hydrationController.hydrateSingleItem(type, id);
+      
+      if (result.success) {
+        console.log(`✅ [ORCHESTRATOR] Successfully hydrated ${type} ${id}`);
+        // Notify UI of the update
+        this.notifyUI('HydrationService');
+      }
+      
+      return result;
+      
+    } catch (error) {
+      console.error(`❌ [ORCHESTRATOR] Hydrate single item failed for ${type} ${id}:`, error);
+      return { success: false, error: String(error) };
     }
   }
 
@@ -518,7 +1082,7 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
-   * 🔐 LOGOUT: Clean up on user logout
+   * 🔐 LOGOUT - Clean up on user logout
    */
   logout(): void {
     console.log('🔐 [REFACTORED ORCHESTRATOR] User logout, cleaning up...');
@@ -532,77 +1096,9 @@ export class SyncOrchestratorRefactored {
     });
   }
 
-  /**
-   * 👤 INITIALIZE FOR USER - Public method for external calls
-   */
-  async initializeForUser(userId: string): Promise<void> {
-    await this.performGateBasedInitialization(userId);
-  }
-
-  /**
-   * 📊 GET SYSTEM RISK STATUS - Admin dashboard analytics
-   */
-  public async getSystemRiskStatus(): Promise<{
-    systemHealth: 'HEALTHY' | 'WARNING' | 'CRITICAL';
-    highRiskCount: number;
-  }> {
-    try {
-      const [highRiskCount, riskDistribution] = await Promise.all([
-        RiskManager.getHighRiskUserCount(),
-        RiskManager.getRiskDistribution()
-      ]);
-      const systemHealth = highRiskCount > 100 ? 'CRITICAL' : 
-                       highRiskCount > 50 ? 'WARNING' : 'HEALTHY';
-
-      return {
-        systemHealth,
-        highRiskCount
-      };
-    } catch (error) {
-      console.error('🔒 [ADMIN] Failed to get system risk status:', error);
-      return {
-        systemHealth: 'CRITICAL',
-        highRiskCount: 0
-      };
-    }
-  }
-
-  /**
-   * �� AUTO-RESUME: Check for interrupted syncs and resume them
-   */
-  private async checkAndResumeInterruptedSyncs(): Promise<void> {
-    try {
-      console.log('🔄 [REFACTORED ORCHESTRATOR] Checking for interrupted syncs...');
-      
-      // Check for unsynced books
-      const unsyncedBooks = await db.books.where('synced').equals(0).toArray();
-      const unsyncedEntries = await db.entries.where('synced').equals(0).toArray();
-      const totalUnsynced = unsyncedBooks.length + unsyncedEntries.length;
-      
-      if (totalUnsynced > 0) {
-        console.log(`🔄 [REFACTORED ORCHESTRATOR] Found ${totalUnsynced} unsynced items, resuming sync...`);
-        console.log(`📚 Books: ${unsyncedBooks.length}, 📝 Entries: ${unsyncedEntries.length}`);
-        
-        // Trigger automatic sync to resume interrupted operations
-        const result = await this.pushService.pushPendingData();
-        if (result.success) {
-          console.log('✅ [REFACTORED ORCHESTRATOR] Auto-resume sync completed successfully');
-        } else {
-          console.error('❌ [REFACTORED ORCHESTRATOR] Auto-resume sync failed:', result.errors);
-        }
-      } else {
-        console.log('✅ [REFACTORED ORCHESTRATOR] No interrupted syncs found');
-      }
-      
-    } catch (error) {
-      console.error('❌ [REFACTORED ORCHESTRATOR] Auto-resume check failed:', error);
-    }
-  }
-
-  /**
-   * 🚀 EXPORT SINGLETON INSTANCE
-   */
 }
 
 // 🚀 EXPORT SINGLETON INSTANCE
+
 export const orchestrator = new SyncOrchestratorRefactored();
+

@@ -95,6 +95,15 @@ const BookCard = React.memo<BookCardProps>(({
 
     const isPositive = balance >= 0;
 
+    // 🚀 PREDICTIVE LOADING: Trigger entry prefetch on hover
+    const handleMouseEnter = useCallback(() => {
+      // Trigger prefetch for instant book details
+      getVaultStore().prefetchBookEntries(bookId);
+      
+      // Call original onMouseEnter if provided
+      if (onMouseEnter) onMouseEnter();
+    }, [bookId, onMouseEnter]);
+
     // 🚀 ATOMIC OPEN HANDLER
     const handleOpen = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();

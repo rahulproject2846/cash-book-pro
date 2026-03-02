@@ -12,7 +12,6 @@ import { useVaultStore } from '@/lib/vault/store/index';
  */
 export const useSettings = () => {
     const { theme, setTheme } = useTheme();
-    const [isCleaning, setIsCleaning] = useState(false);
     const [dbStats, setDbStats] = useState({ storageUsed: '0.1 MB', totalEntries: 0 });
 
     // 🚀 SELECTORS: Directly from Store for instantaneous reactivity
@@ -20,6 +19,7 @@ export const useSettings = () => {
     const categories = useVaultStore(state => state.categories);
     const currency = useVaultStore(state => state.currency);
     const currentUser = useVaultStore(state => state.currentUser);
+    const isCleaning = useVaultStore(state => state.isCleaning); // 🧹 Use global cleaning state
     const setPreferences = useVaultStore(state => state.setPreferences);
     const setCategories = useVaultStore(state => state.setCategories);
     const setCurrency = useVaultStore(state => state.setCurrency);
@@ -123,17 +123,9 @@ export const useSettings = () => {
     };
 
     const clearLocalCache = async () => {
-        if (!confirm("🚨 DANGER: Full System Wipe! All local data will be deleted. Proceed?")) return;
-        setIsCleaning(true);
-        try {
-            const { logout } = useVaultStore.getState();
-            logout();
-            await db.delete();
-            window.location.href = '/';
-        } catch (e) { 
-            setIsCleaning(false);
-            console.error('Nuclear reset failed:', e);
-        }
+        // 🧹 UNIFIED NUCLEAR RESET: Use the same logic as logout
+        const { logout } = useVaultStore.getState();
+        await logout();
     };
 
     return {

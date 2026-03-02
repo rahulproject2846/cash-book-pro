@@ -8,6 +8,7 @@ import { validateBook, validateEntry } from '../core/schemas';
 import { getVaultStore } from '../store/storeHelper';
 import { LicenseVault, RiskManager } from '../security';
 import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../utils/security';
+import { SyncGuard } from '../guards/SyncGuard';
 
 // 🛡️ API PATH MAPPING - Prevent pluralization typos
 const API_PATH_MAP: Record<string, string> = {
@@ -259,42 +260,14 @@ export class PullService {
       return { success: false, itemsProcessed: 0, errors: [telemetryResult.error || 'Security verification failed'] };
     }
     
-    // LOCKDOWN GUARD: Check security state
-    const { networkMode, isSecurityLockdown } = getVaultStore();
-    if (networkMode === 'RESTRICTED' || isSecurityLockdown) {
-      console.log('🔒 [PULL SERVICE] Business data pull blocked - RESTRICTED mode');
-      return { success: false, itemsProcessed: 0, errors: ['App in restricted mode'] };
-    }
-    
-    // TRAFFIC POLICE: Check network state before proceeding
-    if (networkMode === 'OFFLINE' || networkMode === 'DEGRADED') {
-      console.warn('🛑 [PULL SERVICE] Pull blocked. Network is:', networkMode);
-      return { success: false, itemsProcessed: 0, errors: [] };
-    }
-    
-    // FINAL SECURITY GUARD: Last line of defense
-    const user = await db.users.where('userId').equals(this.userId).first();
-    if (!user) {
-      console.error('🔒 [PULL SERVICE] User profile missing - Pull blocked');
-      return { success: false, itemsProcessed: 0, errors: ['User profile missing'] };
-    }
-
-    const licenseAccess = LicenseVault.validateAccess(user);
-    if (!licenseAccess.access) {
-      console.error('🔒 [PULL SERVICE] License invalid - Pull blocked');
-      return { success: false, itemsProcessed: 0, errors: ['License access denied'] };
-    }
-
-    const lockdownStatus = RiskManager.isLockdown(user);
-    if (lockdownStatus) {
-      console.error('🔒 [PULL SERVICE] User in lockdown - Pull blocked');
-      return { success: false, itemsProcessed: 0, errors: ['User in lockdown'] };
-    }
-
-    const signatureValid = await LicenseVault.verifySignature(user);
-    if (!signatureValid) {
-      console.error('🔒 [PULL SERVICE] License signature invalid - Pull blocked');
-      return { success: false, itemsProcessed: 0, errors: ['License signature invalid'] };
+    // 🆕 SYNC GUARD: Centralized validation (VERBATIM replacement)
+    const guardResult = await SyncGuard.validateSyncAccess({
+      serviceName: 'PullService',
+      onError: (msg) => console.error(`🔒 [PULL SERVICE] ${msg}`),
+      returnError: (msg) => ({ success: false, itemsProcessed: 0, errors: [msg] })
+    });
+    if (!guardResult.valid) {
+      return guardResult.returnValue as { success: boolean; itemsProcessed: number; errors: string[] };
     }
 
     if (this.isPulling) {
@@ -359,7 +332,9 @@ export class PullService {
     try {
       console.log('🧑 [PULL SERVICE] Fetching user settings from server...');
       
-      const response = await fetch(`/api/user/profile?userId=${encodeURIComponent(this.userId)}`);
+      const response = await this.signedFetch(`/api/user/profile?userId=${encodeURIComponent(this.userId)}`, {
+        method: 'GET'
+      });
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -439,13 +414,15 @@ export class PullService {
       console.log('🚀 [BATCH PULL SERVICE] Starting books pull from offset:', offset);
       
       let hasMore = true;
-      const totalBatches = Math.ceil(5000 / 20); // Estimate total batches
-      this._progressTracker.start(totalBatches * 20); // Estimate total items
-      
       // 🔄 BATCH PROCESSING WITH ADAPTIVE THROTTLING
       let batchIndex = 0;
       let consecutiveEmptyBatches = 0;
+      let consecutiveInvalidBatches = 0;
       const maxLoopCount = 500;
+      
+      // 🎯 DYNAMIC TOTAL DETECTION: Get actual total from first batch
+      let totalItems = 0;
+      let isFirstBatch = true;
       
       while (hasMore && batchIndex < maxLoopCount) {
         batchIndex++;
@@ -456,8 +433,9 @@ export class PullService {
         
         try {
           // 🎯 BATCHED NETWORK REQUEST (not local batching)
-          const response = await fetch(
-            `/api/books?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}`
+          const response = await this.signedFetch(
+            `/api/books?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}`,
+            { method: 'GET' }
           );
           
           if (!response.ok) {
@@ -467,13 +445,27 @@ export class PullService {
           const batch = await response.json();
           const books = batch.data || batch.books || [];
           
+          // DYNAMIC TOTAL UPDATE: Extract from server response if available
+          if (isFirstBatch && batch.total) {
+            totalItems = batch.total;
+            this._progressTracker.start(totalItems);
+            console.log(` [PULL SERVICE] Server reports ${totalItems} total books`);
+            isFirstBatch = false;
+          } else if (isFirstBatch) {
+            // Fallback: Estimate from first batch if no total provided
+            totalItems = books.length < 20 ? books.length : 1000; // Safer estimate
+            this._progressTracker.start(totalItems);
+            console.log(` [PULL SERVICE] No total field, estimating ${totalItems} books`);
+            isFirstBatch = false;
+          }
+          
           if (books.length === 0) {
             consecutiveEmptyBatches++;
-            console.warn(`⚠️ [PULL SERVICE] Empty batch ${batchIndex} - consecutive empties: ${consecutiveEmptyBatches}`);
+            console.warn(` [PULL SERVICE] Empty batch ${batchIndex} - consecutive empties: ${consecutiveEmptyBatches}`);
             
-            // 🛡️ MAX-TRY GUARD: Stop after 3 consecutive empty batches
+            // MAX-TRY GUARD: Stop after 3 consecutive empty batches
             if (consecutiveEmptyBatches >= 3) {
-              console.error('🚨 [PULL SERVICE] Max consecutive empty batches reached, stopping pull to prevent infinite loop');
+              console.error(' [PULL SERVICE] Max consecutive empty batches reached, stopping pull to prevent infinite loop');
               // Log critical telemetry event
               await db.audits.add({
                 userId: this.userId,
@@ -494,18 +486,41 @@ export class PullService {
             consecutiveEmptyBatches = 0; // Reset counter on successful batch
           }
           
-          // 🛡️ SEQUENCE NUMBER VERIFICATION
+          // SEQUENCE NUMBER VERIFICATION
           const validBooks = books.filter((book: any) => 
             book.sequenceNumber > lastSequence
           );
           
-          console.log(`🚀 [BATCH PULL SERVICE] Retrieved ${books.length} books, ${validBooks.length} valid after sequence check`);
+          console.log(` [BATCH PULL SERVICE] Retrieved ${books.length} books, ${validBooks.length} valid after sequence check`);
           
-          // 🔄 COMMIT BATCH - ATOMIC TRANSACTION WITH QUOTA SAFETY
+          // INVALID BATCH GUARD: Stop if we get valid=0 but books>0 for 3 consecutive batches
+          if (validBooks.length === 0 && books.length > 0) {
+            consecutiveInvalidBatches++;
+            console.warn(` [PULL SERVICE] Invalid batch ${batchIndex} - consecutive invalid: ${consecutiveInvalidBatches}`);
+            
+            if (consecutiveInvalidBatches >= 3) {
+              console.error(' [PULL SERVICE] Max consecutive invalid batches reached, assuming caught up - stopping pull');
+              await db.audits.add({
+                userId: this.userId,
+                type: 'SECURITY',
+                event: 'CAUGHT_UP_DETECTED',
+                details: `Stopped after ${batchIndex} batches with ${consecutiveInvalidBatches} consecutive invalid batches`,
+                timestamp: Date.now(),
+                severity: 'INFO'
+              });
+              hasMore = false;
+              break;
+            }
+          } else {
+            consecutiveInvalidBatches = 0; // Reset counter on valid batch
+          }
+          
+          // COMMIT BATCH - ATOMIC TRANSACTION WITH QUOTA SAFETY
           try {
             await db.transaction('rw', db.books, db.syncPoints, async () => {
               for (const book of validBooks) {
                 try {
+                  // SAFETY GUARD: Validate completeness before storing
                   // � [AUDIT] Log server payload to see what we're getting
                   console.log('📡 [PULL PAYLOAD]', { id: book._id, image: book.image, mediaCid: book.mediaCid, localId: book.localId });
                   
@@ -576,11 +591,18 @@ export class PullService {
             await new Promise(resolve => setTimeout(resolve, delay));
           }
           
-          // 🔄 UPDATE OFFSET
-          offset += books.length;
+          // 🔄 UPDATE OFFSET: Only increment if we have valid data or need more
+          if (validBooks.length > 0) {
+            offset += validBooks.length; // Use valid count, not total response count
+          } else {
+            offset += books.length; // Fallback to response count if no valid books
+          }
           
-          // 🔍 CHECK COMPLETION
-          hasMore = books.length === 20 && !batch.isComplete;
+          // 🔍 CHECK COMPLETION: Multiple termination conditions
+          if (books.length < 20 || batch.isComplete || validBooks.length === 0) {
+            hasMore = false;
+            console.log(`🏁 [PULL SERVICE] Books pull complete - less than full batch (${books.length}) or completion flag set`);
+          }
           
           this._progressTracker.updateBatch(batchIndex, validBooks.length);
           
@@ -625,7 +647,12 @@ export class PullService {
       // 🔄 BATCH PROCESSING WITH ADAPTIVE THROTTLING
       let batchIndex = 0;
       let consecutiveEmptyBatches = 0;
+      let consecutiveInvalidBatches = 0;
       const maxLoopCount = 500;
+      
+      // 🎯 DYNAMIC TOTAL DETECTION: Get actual total from first batch
+      let totalItems = 0;
+      let isFirstBatch = true;
       
       while (hasMore && batchIndex < maxLoopCount) {
         batchIndex++;
@@ -637,8 +664,9 @@ export class PullService {
         try {
           // 🎯 BATCHED NETWORK REQUEST (not local batching)
           // 🚨 FORCE FULL SYNC: Hardcode since parameter to '0' to get all entries
-          const response = await fetch(
-            `/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}&since=0`
+          const response = await this.signedFetch(
+            `/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}&since=0`,
+            { method: 'GET' }
           );
           
           if (!response.ok) {
@@ -647,6 +675,20 @@ export class PullService {
           
           const batch = await response.json();
           const entries = batch.data || batch.entries || [];
+          
+          // DYNAMIC TOTAL UPDATE: Extract from server response if available
+          if (isFirstBatch && batch.total) {
+            totalItems = batch.total;
+            this._progressTracker.start(totalItems);
+            console.log(` [PULL SERVICE] Server reports ${totalItems} total entries`);
+            isFirstBatch = false;
+          } else if (isFirstBatch) {
+            // Fallback: Estimate from first batch if no total provided
+            totalItems = entries.length < 20 ? entries.length : 1000; // Safer estimate
+            this._progressTracker.start(totalItems);
+            console.log(` [PULL SERVICE] No total field, estimating ${totalItems} entries`);
+            isFirstBatch = false;
+          }
           
           if (entries.length === 0) {
             consecutiveEmptyBatches++;
@@ -681,6 +723,28 @@ export class PullService {
           );
           
           console.log(`🚀 [BATCH PULL SERVICE] Retrieved ${entries.length} entries, ${validEntries.length} valid after sequence check`);
+          
+          // INVALID BATCH GUARD: Stop if we get valid=0 but entries>0 for 3 consecutive batches
+          if (validEntries.length === 0 && entries.length > 0) {
+            consecutiveInvalidBatches++;
+            console.warn(` [PULL SERVICE] Invalid batch ${batchIndex} - consecutive invalid: ${consecutiveInvalidBatches}`);
+            
+            if (consecutiveInvalidBatches >= 3) {
+              console.error(' [PULL SERVICE] Max consecutive invalid batches reached, assuming caught up - stopping pull');
+              await db.audits.add({
+                userId: this.userId,
+                type: 'SECURITY',
+                event: 'CAUGHT_UP_DETECTED',
+                details: `Stopped after ${batchIndex} batches with ${consecutiveInvalidBatches} consecutive invalid batches`,
+                timestamp: Date.now(),
+                severity: 'INFO'
+              });
+              hasMore = false;
+              break;
+            }
+          } else {
+            consecutiveInvalidBatches = 0; // Reset counter on valid batch
+          }
           
           // 🔄 COMMIT BATCH - ATOMIC TRANSACTION WITH QUOTA SAFETY
           try {
@@ -739,11 +803,18 @@ export class PullService {
             await new Promise(resolve => setTimeout(resolve, delay));
           }
           
-          // 🔄 UPDATE OFFSET
-          offset += entries.length;
+          // 🔄 UPDATE OFFSET: Only increment if we have valid data or need more
+          if (validEntries.length > 0) {
+            offset += validEntries.length; // Use valid count, not total response count
+          } else {
+            offset += entries.length; // Fallback to response count if no valid entries
+          }
           
-          // 🔍 CHECK COMPLETION
-          hasMore = entries.length === 20 && !batch.isComplete;
+          // 🔍 CHECK COMPLETION: Multiple termination conditions
+          if (entries.length < 20 || batch.isComplete || validEntries.length === 0) {
+            hasMore = false;
+            console.log(`🏁 [PULL SERVICE] Entries pull complete - less than full batch (${entries.length}) or completion flag set`);
+          }
           
           this._progressTracker.updateBatch(batchIndex, validEntries.length);
           
@@ -941,7 +1012,9 @@ export class PullService {
 
       // 🌐 FETCH BLOB: Download image from Cloudinary
       console.log(`🌐 [MEDIA DOWNLOADER] Downloading media for book ${bookId} from ${imageUrl}`);
-      const response = await fetch(imageUrl);
+      const response = await this.signedFetch(imageUrl, {
+        method: 'GET'
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
@@ -993,7 +1066,9 @@ export class PullService {
       console.log(`🔄 [PULL SERVICE] Full dataset pull for ${type}`);
       
       const endpoint = type === 'BOOKS' ? '/api/books' : '/api/entries';
-      const response = await fetch(`${endpoint}?userId=${encodeURIComponent(this.userId)}&limit=10000`, { method: 'GET' });
+      const response = await this.signedFetch(`${endpoint}?userId=${encodeURIComponent(this.userId)}&limit=10000`, { 
+        method: 'GET' 
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch ${type}: ${response.statusText}`);
@@ -1018,7 +1093,9 @@ export class PullService {
     try {
       console.log(`🎯 [PULL SERVICE] Single item pull for ${type} ${id}`);
       
-      const response = await fetch(`/api/${API_PATH_MAP[type]}/${id}`, { method: 'GET' });
+      const response = await this.signedFetch(`/api/${API_PATH_MAP[type]}/${id}`, { 
+        method: 'GET' 
+      });
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -1049,7 +1126,29 @@ export class PullService {
 
 
   /**
-   * 🔄 GET PULL STATUS
+   * � SECURE SIGNED FETCH - Phase 20 Implementation
+   * Uses centralized security utility for cryptographic signing
+   */
+  private async signedFetch(url: string, options: RequestInit): Promise<Response> {
+    try {
+      const timestamp = Date.now().toString();
+      const payload = preparePayload(options);
+      const signature = await generateVaultSignature(payload, timestamp);
+      const signedHeaders = prepareSignedHeaders(options, signature, timestamp);
+      
+      return fetch(url, {
+        ...options,
+        headers: signedHeaders,
+        body: payload || undefined
+      });
+    } catch (error) {
+      console.error('❌ [PULL SERVICE] Signature generation failed:', error);
+      return fetch(url, options); // Fallback to standard fetch on security error
+    }
+  }
+
+  /**
+   * �🔄 GET PULL STATUS
    */
   getPullStatus(): { isPulling: boolean; userId: string } {
     return {

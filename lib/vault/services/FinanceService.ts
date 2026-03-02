@@ -198,7 +198,7 @@ export class FinanceService {
       
       normalized.checksum = checksum;
       
-      // 🎯 STEP A: CONSTRUCT BOOK SIGNAL PAYLOAD
+      // � STEP A: CONSTRUCT BOOK SIGNAL PAYLOAD
       let bookSignalPayload: { _id: string; cid: string; name: string; userId: string; synced: number; isDeleted: number; vKey: number; updatedAt: number } | null = null;
       
       const { HydrationController } = await import('../hydration/HydrationController');
@@ -253,7 +253,7 @@ export class FinanceService {
       // 🆕 OPTIMISTIC RE-SORT: Apply filters and sort immediately
       get().processEntries();
       
-      // � ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
+      // 🎯 ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
       if (bookSignalPayload && activeBook) {
         // Fetch fresh parent book and update timestamp
         const parentBook = await db.books.get(String(activeBook._id || activeBook.localId));
@@ -270,31 +270,19 @@ export class FinanceService {
             vKey: updatedBook.vKey
           });
           
-          // 🛡️ ACTIVITY PULSE: Trigger dashboard re-sort instantly
+          // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
           const { getVaultStore } = await import('../store/storeHelper');
           const vaultStore = getVaultStore();
-          if (vaultStore.applyFiltersAndSort) {
-            vaultStore.applyFiltersAndSort();
-          }
           
-          // 🆕 MATRIX SYNC: Update matrix to keep Activity sort alive
-          get().syncMatrixItem(String(activeBook._id || activeBook.localId));
+          // 1. Update memory matrix (Activity sort)
+          await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
           
-          // 🆕 REFRESH ALL DATA: Update allEntries and books after book update
-          await vaultStore.refreshData();
+          // 🎯 LIGHTWEIGHT REFRESH: Skip full refresh for activity updates
+          // await vaultStore.refreshBooks('DATA_CHANGE'); // ❌ REMOVED: Prevents heavy book sync
           
-          // Update store's books array with fresh timestamp
-          if (vaultStore.books) {
-            const updatedBooks = vaultStore.books.map((book: any) => 
-              (book._id === updatedBook._id || book.localId === updatedBook.localId) 
-                ? { ...book, updatedAt: updatedBook.updatedAt, vKey: updatedBook.vKey }
-                : book
-            );
-            // Trigger vault update event to refresh books array
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new Event('vault-updated'));
-            }
-          }
+          // 3. 🛡️ ATOMIC CACHE BUSTING: Clear entry cache to show updated balance
+          const { useVaultStore } = await import('../store/index');
+          useVaultStore.setState({ prefetchedEntriesCache: new Map() });
         }
       }
       
@@ -464,17 +452,19 @@ export class FinanceService {
               vKey: updatedBook.vKey
             });
             
-            // 🛡️ ACTIVITY PULSE: Trigger dashboard re-sort instantly
+            // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
             const { getVaultStore } = await import('../store/storeHelper');
             const vaultStore = getVaultStore();
-            if (vaultStore.applyFiltersAndSort) {
-              vaultStore.applyFiltersAndSort();
-            }
             
-            // Trigger vault update event to refresh books array
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new Event('vault-updated'));
-            }
+            // 1. Update memory matrix (Activity sort)
+            await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
+            
+            // 🎯 LIGHTWEIGHT REFRESH: Skip full refresh for activity updates
+            // await vaultStore.refreshBooks('DATA_CHANGE'); // ❌ REMOVED: Prevents heavy book sync
+            
+            // 3. 🛡️ ATOMIC CACHE BUSTING: Clear entry cache to show updated balance
+            const { useVaultStore } = await import('../store/index');
+            useVaultStore.setState({ prefetchedEntriesCache: new Map() });
           }
         }
       }

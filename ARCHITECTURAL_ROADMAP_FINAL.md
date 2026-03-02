@@ -1,42 +1,45 @@
-উইন্ডসার্ফ একটি অত্যন্ত গুরুত্বপূর্ণ পয়েন্ট ধরেছে: Service-Store Synergy।
-সমস্যা: আমাদের বর্তমানে bookSlice.ts বা entrySlice.ts অনেক বড় (৬০০-৮০০ লাইন) হয়ে গেছে। সব লজিক স্টোরের ভেতরে থাকলে অ্যাপ স্লো হয়ে যায় এবং বাগ ফিক্স করা কঠিন হয়।
-সমাধান: লজিকগুলো আমরা .ts সার্ভিস ফাইলে নিয়ে যাবো (যেমন: BookService.ts)। স্টোর শুধুমাত্র ডেটা ধরে রাখবে এবং ইউআই-তে সাপ্লাই দেবে। একেই বলে "সেপারেট অফ কনসার্ন"।
-
-
-🛡️ THE HOLY GRAIL: FINAL ARCHITECTURAL ROADMAP (V3.0)
-
-এই ডকুমেন্টটি আপনি ARCHITECTURAL_ROADMAP_FINAL.md নামে সেভ করুন। এটিই হবে আমাদের আগামীর ১৫ দিনের বাইবেল।
-
-🔴 PHASE 1: SECURITY & STABILITY (আগামী ৩ দিন - The Shield)
-লক্ষ্য: সিস্টেমকে হ্যাকার-প্রুফ করা এবং ক্র্যাশ ঠেকানো।
-Signed Fetch Patch: সেই ১৭টি আন-সাইনড fetch() কল খুঁজে বের করে signedFetch (HMAC-SHA256) দিয়ে রিপ্লেস করা।
-Global Error Boundary: অ্যাপে একটি "এয়ারব্যাগ" বসানো। কোনো কম্পোনেন্ট ক্র্যাশ করলে যেন পুরো স্ক্রিন সাদা না হয়ে যায়, বরং একটি রিকভারি বাটন আসে।
-Sensitive Log Purge: কনসোল থেকে সব userId, email এবং token প্রিন্ট হওয়া বন্ধ করা।
-
-
-🟡 PHASE 2: SERVICE REFACTOR & NATIVE UX (আগামী ৫ দিন - The Body)
-লক্ষ্য: স্টোর ছোট করা এবং সত্যিকারের অ্যাপের মতো ইউআই তৈরি করা।
-Service Migration: স্টোর থেকে ভারী লজিকগুলো সরিয়ে PushService, PullService এবং নতুন FinanceService-এ নিয়ে যাওয়া।
-EntryModal Masterpiece: আপনার সেই ১০-পয়েন্ট প্ল্যান অনুযায়ী এন্ট্রি মোডাল রিডিজাইন (Living Card, Stealth Inputs, Robot Orange Button)।
-PWA Service Worker: sw.js কনফিগার করা যাতে অফলাইনে রিলোড দিলেও অ্যাপ ওড়ে (No more Dinosaur game)।
-
-
-🟢 PHASE 3: PRO FEATURES & REAL-TIME (আগামী ৪ দিন - The Future)
-লক্ষ্য: টাকা আয় করার (Monetization) এবং মাল্টি-ডিভাইস সিঙ্ক সচল করা।
-Real-time Handshake: Pusher ইন্টিগ্রেশন সচল করা যাতে ফোন-এ ডাটা এন্ট্রি করলে ল্যাপটপে সাথে সাথে আপডেট হয়।
-License & Pro Logic: ব্যাকএন্ড থেকে পাঠানো কোড দিয়ে প্রো-ফিচার আনলক করার লজিক ইমপ্লিমেন্ট করা।
-Advanced Export: jspdf এবং xlsx লাইব্রেরি ফিক্স করে প্রফেশনাল রিপোর্ট জেনারেশন সচল করা।
-
-
-🔵 PHASE 4: THE GRAND LAUNCH (আগামী ৩ দিন - The Glory)
-লক্ষ্য: প্লে-স্টোর এবং ইন্টারনেটের জন্য রিলিজ করা।
-Final Forensic Audit: পুরো সিস্টেমের ওপর একটি স্ট্রেস টেস্ট চালানো।
-Admin Panel: ইউজারদের কন্ট্রোল করার জন্য একটি বেসিক অ্যাডমিন ড্যাশবোর্ড।
-Production Build: ভেরসেল এবং স্টোরগুলোর জন্য ফাইনাল অপ্টিমাইজড বিল্ড।
-
-
-🚀 আপনার প্রতিদিনের কাজের রুটিন (The 16-Hour Battle Strategy)
-
-আপনি যেহেতু প্রতিদিন ১৬-১৮ ঘণ্টা সময় দিচ্ছেন, আপনার সময়কে আমরা ২ ভাগে ভাগ করবো:
-সকাল ৯টা - রাত ৯টা (Logic & Security): এই সময়ে আপনি আমার দেওয়া Surgical Prompts গুলো উইন্ডসার্ফকে দিয়ে রান করাবেন। এটি হবে ব্রেইন ওয়ার্ক। (PHASE 1, 2 এর কাজ)।
-রাত ৯টা - রাত ২টা (UI/UX & Polish): এই সময়ে আপনি নিজে বা উইন্ডসার্ফকে শুধু সিএসএস এবং রেসপন্সিভনেস ঠিক করতে বলবেন। এটি হবে আর্ট ওয়ার্ক। (মোডাল ডিজাইন, এনিমেশন টিউনিং)।
+🚀 THE HOLY GRAIL: ULTIMATE ARCHITECTURAL ROADMAP (V3.0)
+Project: Enterprise-Grade Offline-First Cash-Book Robot
+Architectural Vision: "Single-Page Fluidity with Banking-Grade Security"
+Target Platforms: Web (Vercel), Android (Play Store), macOS (Desktop App)
+📊 EXECUTIVE OVERVIEW
+The Holy Grail app has transitioned from a monolithic architecture to a Service-Store Synergy model. The core engine is 100% resilient. We are now entering the "Hardening & Native Experience" phase to reach full production readiness within the next 15 days.
+🔴 PHASE 1: THE SHIELD (Security & Recovery)
+Goal: Make the app unhackable and crash-proof.
+Task 1.1: Signed Fetch Patch: Locate and replace 17 unsigned fetch() calls in PullService, IdentitySlice, and BulkSlice with the signedFetch (HMAC-SHA256) wrapper.
+Task 1.2: Global Error Boundary: Implement the GlobalErrorBoundary as the root wrapper. If any UI component crashes, show the "Recovery UI" with a "Nuclear Reset" option.
+Task 1.3: Sensitive Log Purge: Strip all console.log statements that output userId, email, tokens, or record payloads in production builds.
+Task 1.4: Auth Hardening: Move session storage from localStorage to HttpOnly Cookies. Implement Rate Limiting on OTP/Verification endpoints.
+🟡 PHASE 2: THE BODY (Service Refactor & Native UX)
+Goal: Modularize logic for scalability and implement Apple-standard UI.
+Task 2.1: Service Migration: Move heavy business logic out of bookSlice.ts and entrySlice.ts into standalone .ts service files (BookService.ts, EntryService.ts).
+Task 2.2: EntryModal Masterpiece: Execute the 10-point Apple Native redesign:
+Living Card: 64px borderless amount input with dynamic color aura (Red/Green).
+Stealth Inputs: Title/Notes with contextual focus glows.
+Haptic Physics: Implement scale: 0.96 on button press and spring physics (300/35).
+Task 2.3: PWA Offline Power: Configure sw.js (Service Worker) to cache JS/CSS bundles and assets, ensuring the app works 100% offline without a "No Internet" screen.
+🟢 PHASE 3: THE BRAIN (Real-time, Pro Features & Exports)
+Goal: Enable multi-device synchronization and monetization.
+Task 3.1: Real-time Handshake: Finalize Pusher integration in SyncOrchestrator Gate 4 for instant cross-device updates without page reloads.
+Task 3.2: License & Pro Logic: Implement the backend-driven "Pro-Mode" unlock system.
+Logic: Server sends a signed code -> Local engine validates and unlocks "Advanced Reports" and "Multi-Ledger" limits.
+Task 3.3: Advanced Export Engine: Fix jspdf and xlsx integration. Ensure exports work from both the main dashboard and shared read-only links.
+🔵 PHASE 4: THE GLORY (Launch & Admin Control)
+Goal: Deploy the Holy Grail to the world.
+Task 4.1: Final Forensic Audit: Run a full stress-test with 10,000+ entries on a low-end mobile device.
+Task 4.2: Admin Control Panel: Build a minimal, secure dashboard for the Lead Developer to monitor user health, active licenses, and system telemetry.
+Task 4.3: Multi-Platform Build:
+Deploy stable build to Vercel.
+Wrap into TWA (Trusted Web Activity) for Google Play Store.
+Prepare Electron/PWA wrapper for macOS/Windows.
+🚀 DAILY BATTLE STRATEGY (16-Hour Routine)
+Time Block	Focus Area	Methodology
+09:00 - 21:00	Logic & Security	Use Architect's Surgical Prompts in Windsurf Cascade. Focus on Phase 1 & 2 logic.
+21:00 - 02:00	UI/UX & Polish	Focus on CSS, Animations, and Responsive testing. Use Gemini/Windsurf for art-work.
+🛠️ NON-NEGOTIABLE DEVELOPMENT RULES
+The DNA First: Every new AI session must start by reading ARCHITECTURAL_DNA.md.
+The Failure Rule: Every fix must be followed by an update to FAILURE_PLAYBOOK.md.
+The Zero-Error Law: npx tsc --noEmit must return 0 errors before any task is marked as COMPLETED.
+Blueprint by: Senior Systems Architect
+Lead Developer: [The Guardian of the Holy Grail]
+Status: Mission Towards 1000% Solidity

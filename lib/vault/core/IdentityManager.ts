@@ -318,8 +318,8 @@ onReady(callback: () => void): () => void {
       
       // Set timeout for safety
       const timeout = setTimeout(() => {
-        reject(new Error('Identity timeout after 10 seconds'));
-      }, 10000);
+        reject(new Error('Identity timeout after 1 second'));
+      }, 1000);
       
       // Wait for ready state
       const checkReady = () => {

@@ -7,6 +7,7 @@ import {
     Plus, History, LayoutGrid, Fingerprint, ShieldCheck
 } from 'lucide-react';
 import { DynamicHeader } from './DynamicHeader';
+import { useVaultStore } from '@/lib/vault/store';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { useGuidance } from '@/hooks/useGuidance';
@@ -196,9 +197,9 @@ export const DashboardLayout = (props: any) => {
         return t('fab_add_book'); // Default to "Add Book"
     };
 
-    const handleLogout = () => {
-        const { orchestrator } = require('@/lib/vault/core/SyncOrchestrator');
-        orchestrator.logout();
+    const handleLogout = async () => {
+        const { logout } = useVaultStore.getState();
+        await logout();
     };
 
     const handleBack = () => {

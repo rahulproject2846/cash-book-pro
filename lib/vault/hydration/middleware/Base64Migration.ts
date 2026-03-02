@@ -1,14 +1,6 @@
 "use client";
+import { db, generateCID } from '@/lib/offlineDB';
 
-import { db } from '@/lib/offlineDB';
-import { generateCID } from '@/lib/offlineDB';
-
-/**
- * 🧠 BASE64 MIGRATION MIDDLEWARE
- * 
- * Converts Base64 images to MediaStore CID references
- * Preserves data integrity during migration
- */
 export class Base64Migration {
   private userId: string = '';
 
@@ -16,36 +8,18 @@ export class Base64Migration {
     this.userId = userId;
   }
 
-  /**
-   * 🔍 DETECT BASE64 STRING
-   * Checks if a string is likely a Base64 image (not CID or URL)
-   */
-  private isBase64Image(image: string | undefined | null): boolean {
+  private isBase64Image(image: any): boolean {
     if (!image || typeof image !== 'string') return false;
-    
-    // Skip CID references and URLs
-    if (image.startsWith('cid_') || image.startsWith('http')) return false;
-    
-    // Check for Base64 patterns (data:image/ or long strings)
-    return image.startsWith('data:image/') || image.length > 1000;
+    return image.startsWith('data:image/') || (image.length > 1000 && !image.startsWith('http'));
   }
 
-  /**
-   * 🧠 MIGRATE BASE64 TO MEDIASTORE
-   * Converts Base64 image to MediaStore CID reference
-   */
   async migrateBase64ToMediaStore(image: string, bookId: string): Promise<string> {
     try {
-      console.log(`🧠 [BASE64 MIGRATION] Migrating Base64 to MediaStore for book ${bookId}`);
-      
-      // 1. Generate CID
       const mediaCid = generateCID();
-      
-      // 2. Convert Base64 to Blob
       const response = await fetch(image);
+      if (!response.ok) throw new Error('Fetch failed');
       const blob = await response.blob();
       
-      // 3. Save to MediaStore
       await db.mediaStore.add({
         cid: mediaCid,
         parentType: 'book',
@@ -59,35 +33,21 @@ export class Base64Migration {
         userId: this.userId
       });
       
-      console.log(`✅ [BASE64 MIGRATION] Migrated Base64 to MediaStore: ${bookId} -> ${mediaCid}`);
       return mediaCid;
-      
     } catch (error) {
-      console.error(`❌ [BASE64 MIGRATION] Failed to migrate Base64 for book ${bookId}:`, error);
-      throw error;
+      console.error(`⚠️ [MIGRATION ERROR] Skipping corrupted image for ${bookId}`);
+      return ''; // Return empty to prevent loop
     }
   }
 
-  /**
-   * 🔄 PROCESS IMAGE WITH MIGRATION
-   * Handles image preservation and Base64 migration
-   */
-  async processImage(image: string | undefined | null, existingImage: string | undefined, bookId: string): Promise<string | undefined> {
-    // Preserve local image if server data is missing it
-    const isServerImageEmpty = image === null || image === undefined || image === "";
+  async processImage(image: any, existingImage: any, bookId: string): Promise<string | undefined> {
+    const isServerImageEmpty = !image || image === "";
     let imageToPreserve = (isServerImageEmpty && existingImage) ? existingImage : image;
     
-    // Never overwrite valid local data with empty server data
-    if (isServerImageEmpty && existingImage && existingImage !== "") {
-      console.log(`🛡️ [BASE64 MIGRATION] Preserving local image for book ${bookId}: ${existingImage}`);
-      imageToPreserve = existingImage;
-    }
-    
-    // Migrate Base64 to MediaStore
     if (imageToPreserve && this.isBase64Image(imageToPreserve)) {
-      console.log(`🧠 [BASE64 MIGRATION] Detected Base64 image for book ${bookId}, migrating to MediaStore`);
-      const resolvedBookId = bookId || 'temp';
-      imageToPreserve = await this.migrateBase64ToMediaStore(imageToPreserve, resolvedBookId);
+      const resolvedId = bookId || 'temp';
+      const newCid = await this.migrateBase64ToMediaStore(imageToPreserve, resolvedId);
+      return newCid || undefined;
     }
 
     return imageToPreserve || undefined;

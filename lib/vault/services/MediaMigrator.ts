@@ -97,6 +97,13 @@ export class MediaMigrator {
    * Main entry point for background migration
    */
   async migrateLegacyImages(): Promise<{ migrated: number; errors: number }> {
+    // 🛡️ USER GUARD: Only run if user is authenticated
+    const userId = identityManager.getUserId();
+    if (!userId) {
+      console.log('[MIGRATION] No user available, skipping migration');
+      return { migrated: 0, errors: 0 };
+    }
+    
     // Started background cleanup...
     
     try {

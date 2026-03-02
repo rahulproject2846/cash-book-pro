@@ -1,0 +1,232 @@
+/**
+   * 🚀 GATE-BASED INITIALIZATION - Sequential Chain of Command
+   */
+  private async performGateBasedInitialization(userId?: string): Promise<void> {
+    const store = getVaultStore();
+    
+    try {
+      // 🛡️ WAIT FOR IDENTITY MANAGER TO BE READY
+      if (!identityManager.ready) {
+        console.log('⏳ [ORCHESTRATOR] IdentityManager not ready, waiting...');
+        await new Promise<void>(resolve => {
+          identityManager.onReady(() => resolve());
+          // Timeout after 2 seconds as safety
+          setTimeout(resolve, 2000);
+        });
+      }
+      
+      // 🆕 SYNC GUARD: Centralized validation (VERBATIM replacement)
+      const guardResult = await SyncGuard.validateSyncAccess({
+        serviceName: 'SyncOrchestrator',
+        onError: async (msg, details) => {
+          console.warn(`🔒 [SECURITY] Sync Blocked: ${msg}`);
+          if (details && details.licenseAccess) {
+            await telemetry.log({
+              type: 'SECURITY',
+              level: 'CRITICAL',
+              message: `Lockdown triggered: INVALID_LICENSE - ${details.licenseAccess.reason}`,
+              data: { reason: details.licenseAccess.reason, plan: details.licenseAccess.plan }
+            });
+          }
+          getVaultStore().setSecurityLockdown(true);
+        },
+        returnError: () => undefined // Orchestrator returns void
+      });
+      if (!guardResult.valid) {
+        console.warn('🔒 [ORCHESTRATOR] Initialization blocked by security validation');
+        return;
+      }
+      
+      // 🆕 GET VALIDATED USER ID FROM SYNC GUARD
+      userId = guardResult.userId || userId || identityManager.getUserId();
+      this.userId = userId || '';
+      
+      // 🔄 UNIFIED SERVICE PROPAGATION: Set userId for all services
+      this.syncServiceIdentities(this.userId);
+      
+      // 🆕 GATE 1: Wait for Identity - ROBUST ID RECOVERY
+      store.setBootStatus('IDENTITY_WAIT');
+      console.log('🔄 [ORCHESTRATOR] Gate 1: Waiting for identity...');
+      
+      const identityUserId = await identityManager.waitForIdentity();
+      console.log('✅ [ORCHESTRATOR] Gate 1: Identity ready:', identityUserId);
+
+      // 🛡️ GATE 2: Profile Sync + Lazy Fix
+      store.setBootStatus('PROFILE_SYNC');
+      console.log('🔄 [ORCHESTRATOR] Gate 2: Checking user profile...');
+      
+      const user = await db.users.get(userId);
+      if (!user || user.plan === undefined) {
+        console.log('🔧 [ORCHESTRATOR] User profile missing or incomplete, hydrating...');
+        try {
+          await this.hydrationController.hydrateUser(userId || '');
+          // Apply Lazy Fix for legacy schema
+          await db.users.update(userId || '', {
+            plan: 'free',
+            offlineExpiry: 0,
+            riskScore: 0,
+            receiptId: null
+          });
+          console.log('✅ [ORCHESTRATOR] Gate 2: Profile hydrated and lazy fix applied');
+          // 🧠 MODE CONTROLLER: Start network monitoring BEFORE Gate 3
+          ModeController.start();
+          console.log('🧠 [ORCHESTRATOR] ModeController started - Network monitoring active');
+        } catch (error) {
+          // 🧠 SMART ERROR CLASSIFICATION: Distinguish recoverable from critical errors
+          const errorStr = String(error);
+          const is404Error = errorStr.includes('404') || 
+                         errorStr.includes('Profile not found') ||
+                         errorStr.includes('Failed to fetch user profile');
+          const isNetworkError = errorStr.includes('fetch') || 
+                               errorStr.includes('ECONNREFUSED') ||
+                               errorStr.includes('NetworkError') ||
+                               errorStr.includes('timeout');
+          const isServerError = errorStr.includes('500') || 
+                              errorStr.includes('Internal Server Error');
+          
+          if (is404Error) {
+            // 🛡️ SOFT FAILURE: Allow Self-Healing without lockdown
+            console.warn('⚠️ [ORCHESTRATOR] 404 detected, allowing Self-Healing without lockdown.');
+            return; // Continue to Gate 3
+          }
+          
+          if (isNetworkError) {
+            // 🌐 NETWORK FAILURE: Temporary issue, no lockdown needed
+            console.warn('⚠️ [ORCHESTRATOR] Network error detected, will retry later.');
+            return; // Continue to Gate 3, system will retry
+          }
+          
+          // 🛡️ CRITICAL ERROR: Only lockdown for server errors or security issues
+          store.setSecurityLockdown(true);
+          store.setBootStatus('IDLE');
+          store.setEmergencyHydrationStatus('failed');
+          store.setSecurityErrorMessage('Critical error: Server error. Lockdown activated.');
+          throw error; // Re-throw to trigger main catch block
+        }
+      }
+
+      // 🛡️ GATE 3: Data Hydration
+      store.setBootStatus('DATA_HYDRATION');
+      console.log('🔄 [ORCHESTRATOR] Gate 3: Starting sequential hydration...');
+      
+      // 🌁 BRIDGE THE IDENTITY GAP
+      this.hydrationController.setUserId(userId || '');
+      getVaultStore().setSecurityLockdown(false); // Force clear old alarms
+      
+      const hydrationResult = await this.hydrationController.fullHydration(true);
+      if (!hydrationResult.success) {
+        console.warn('⚠️ [ORCHESTRATOR] Hydration failed, continuing boot with degraded functionality:', hydrationResult.error);
+      } else {
+        console.log('✅ [ORCHESTRATOR] Gate 3: Data hydration complete');
+      }
+
+      // RAM SYNCHRONIZATION: Pull all books and entries from Dexie into Zustand store
+      console.log('🔄 [ORCHESTRATOR] Synchronizing RAM from Dexie...');
+      await store.refreshData();
+      console.log('✅ [ORCHESTRATOR] RAM synchronization complete');
+
+      // 🔄 BACKGROUND PULL: Trigger data pull after Gate 3 hydration is complete
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔄 [ORCHESTRATOR] Triggering background data pull...');
+      }
+      
+      // 🛡️ SERVICE SETUP: Set user IDs BEFORE triggering pull (Critical Fix)
+      this.pushService.setUserId(userId || '');
+      this.pullService.setUserId(userId || '');
+      this.integrityService.setUserId(userId || '');
+      
+      try {
+        // 🛡️ DOUBLE-PULL PROTECTION: Check if pull is already in progress
+        const pullStatus = this.pullService.getPullStatus();
+        if (pullStatus.isPulling) {
+          console.log('🛡️ [ORCHESTRATOR] Pull already in progress, skipping...');
+          return;
+        }
+        
+        // 🚀 FLASH-PASS: Local data check for instant boot
+        const localCount = await db.books.count();
+        if (localCount > 0) {
+          // ⚡ RETURNING USER: Skip blocking pull, sync in background
+          console.log('⚡ [ORCHESTRATOR] Flash-Pass: Local data found, sync moved to background.');
+          // Fire pull without await - non-blocking
+          this.pullService.pullPendingData().then(pullResult => {
+            if (pullResult && pullResult.success) {
+              console.log('✅ [ORCHESTRATOR] Background pull completed successfully');
+              // 🔄 BACKGROUND UI REFRESH: Update UI silently after background sync
+              store.refreshBooks('BACKGROUND_SYNC');
+            } else {
+              console.warn('⚠️ [ORCHESTRATOR] Background pull blocked/failed:', pullResult?.errors || 'Unknown security block');
+            }
+          }).catch(error => {
+            console.warn('⚠️ [ORCHESTRATOR] Background pull failed, continuing boot:', error);
+          });
+        } else {
+          // ⏳ FIRST-TIME USER: Wait for server pull
+          console.log('⏳ [ORCHESTRATOR] Cold-Start: No local data, waiting for server pull.');
+          const pullResult = await this.pullService.pullPendingData();
+          if (pullResult && pullResult.success) {
+            console.log('✅ [ORCHESTRATOR] Background pull completed successfully');
+          } else {
+            console.warn('⚠️ [ORCHESTRATOR] Background pull blocked/failed:', pullResult?.errors || 'Unknown security block');
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ [ORCHESTRATOR] Background pull failed, continuing boot:', error);
+      }
+
+      // 🛡️ GATE 4: Ready State
+      console.log('🔄 [ORCHESTRATOR] Final check: Waiting for books to hydrate...');
+      await store.refreshBooks('INITIAL_BOOT'); // ✅ AWAIT THE DATA
+      store.setBootStatus('READY'); // ✅ ONLY THEN SET READY
+      
+      // 🔄 INDEXEDDB SETTLE: Allow small delay for DB to settle
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await store.refreshCounters();
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔄 [ORCHESTRATOR] UI counters refreshed after hydration');
+        console.log('✅ [ORCHESTRATOR] Gate 4: Boot sequence complete - System READY');
+      }
+
+      // 🛡️ LOCKDOWN RESET: Ensure any old lockdown is cleared
+      store.setSecurityLockdown(false);
+      console.log('🔓 [ORCHESTRATOR] Lockdown cleared - System fully operational');
+      
+      // 🚀 BRUTE-FORCE INTERACTION RESET: Clear any stuck overlays
+      store.clearOverlays();
+      document.body.style.pointerEvents = 'auto';
+      console.log('🔓 [ORCHESTRATOR] Interaction reset - All overlays cleared');
+      
+      // FORCE SPINNER KILL: Ensure UI is unlocked
+      console.log(' [ORCHESTRATOR] Boot sequence complete - UI should be responsive');
+
+      // SERVICE INTERLOCK: Only start services after boot is complete
+      if (process.env.NODE_ENV === 'development') {
+        console.log(' [ORCHESTRATOR] Starting background services...');
+      }
+      
+      // 🚀 PARALLEL SERVICE STARTUP: Initialize all background services concurrently
+      const serviceResults = await Promise.allSettled([
+        this.integrityService.performIntegrityCheck(),
+        this.checkAndResumeInterruptedSyncs(),
+        this.maintenanceService.performGlobalCleanup(userId || '')
+      ]);
+      
+      // Check for any service failures
+      const failedServices = serviceResults.filter(result => result.status === 'rejected');
+      if (failedServices.length > 0) {
+        console.warn('⚠️ [ORCHESTRATOR] Some background services failed:', failedServices);
+      }
+      
+      // Schedule integrity checks after initial check
+      this.integrityService.scheduleIntegrityChecks();
+      console.log('🏁 [ORCHESTRATOR] All systems ready - Chain of Command complete');
+      
+    } catch (error) {
+      console.error('❌ [ORCHESTRATOR] Gate-based initialization failed:', error);
+      const store = getVaultStore();
+      store.setBootStatus('IDLE');
+      store.setEmergencyHydrationStatus('failed');
+      store.setSecurityLockdown(true);
+      store.setSecurityErrorMessage('Boot sequence failed. Please refresh the page.');
+    }
+  }

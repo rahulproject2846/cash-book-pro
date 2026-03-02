@@ -4,6 +4,7 @@ import { db } from '@/lib/offlineDB';
 import { normalizeUser, normalizeRecord } from '../../core/VaultUtils';
 import type { HydrationResult } from '../engine/types';
 import { getVaultStore } from '../../store/storeHelper';
+import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../../utils/security';
 
 /**
  * IDENTITY SLICE - User Profile Hydration
@@ -27,7 +28,9 @@ export class IdentitySlice {
     try {
       console.log('🧑 [IDENTITY SLICE] Fetching user profile from server...');
       
-      const response = await fetch(`/api/user/profile?userId=${encodeURIComponent(this.userId)}`);
+      const response = await this.signedFetch(`/api/user/profile?userId=${encodeURIComponent(this.userId)}`, {
+        method: 'GET'
+      });
       if (!response.ok) {
         // 🛡️ Handle 404/401 gracefully - create default profile
         if (response.status === 404 || response.status === 401) {
@@ -67,7 +70,7 @@ export class IdentitySlice {
           
           // 🛡️ REGISTER USER ON SERVER: Stop 404 loop
           try {
-            const pushResponse = await fetch('/api/user/profile', {
+            const pushResponse = await this.signedFetch('/api/user/profile', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -135,6 +138,28 @@ export class IdentitySlice {
         success: false, 
         error: String(error)
       };
+    }
+  }
+
+  /**
+   * 🔐 SECURE SIGNED FETCH - Phase 20 Implementation
+   * Uses centralized security utility for cryptographic signing
+   */
+  private async signedFetch(url: string, options: RequestInit): Promise<Response> {
+    try {
+      const timestamp = Date.now().toString();
+      const payload = preparePayload(options);
+      const signature = await generateVaultSignature(payload, timestamp);
+      const signedHeaders = prepareSignedHeaders(options, signature, timestamp);
+      
+      return fetch(url, {
+        ...options,
+        headers: signedHeaders,
+        body: payload || undefined
+      });
+    } catch (error) {
+      console.error('❌ [IDENTITY SLICE] Signature generation failed:', error);
+      return fetch(url, options); // Fallback to standard fetch on security error
     }
   }
 }

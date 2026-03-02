@@ -40,7 +40,7 @@ export interface EntryActions {
   setMobileFilterOpen: (open: boolean) => void;
   processEntries: () => void;
   setEntryPage: (page: number) => void;
-  applyFiltersAndSort: () => void;
+  applyEntryFilters: () => Promise<void>;
 }
 
 // 📝 COMBINED ENTRY STORE TYPE
@@ -188,7 +188,7 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
     get().refreshEntries();
   },
 
-  applyFiltersAndSort: () => {
+  applyEntryFilters: async () => {
     get().processEntries();
   }
 });
