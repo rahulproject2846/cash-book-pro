@@ -15,6 +15,10 @@ import type { LocalEntry, LocalBook } from '@/lib/offlineDB';
  * - Idempotency Shield: Duplicate prevention
  * - Industrial Error Handling: Comprehensive telemetry
  */
+import { financeService } from '../services/FinanceService';
+import { getVaultStore } from '../store/storeHelper';
+import { useVaultStore } from '../store';
+
 export class RealtimeEngine {
   private userId: string;
   private hydrateCallback: (userId: string, forceFullSync?: boolean) => Promise<void>;
@@ -22,6 +26,8 @@ export class RealtimeEngine {
   private injectCallback: (data: any, eventType: string) => Promise<void>;
   private securityGate: any;
   private broadcastCallback: () => void;
+  private pusher: any; // Store pusher instance for disconnect
+  private channel: any; // Store channel for unbinding
   
   // 🔍 EVENT COUNTER: Track all received events for monitoring
   private eventCounter: { [key: string]: number } = {};
@@ -68,7 +74,13 @@ export class RealtimeEngine {
       // 📡 PUSHER DEBUG: Log channel subscription attempt
       console.log(`📡 [PUSHER ATTEMPT] Subscribing to: vault-channel-${this.userId} (Type: ${typeof this.userId})`);
       
+      // Store pusher instance for disconnection
+      this.pusher = pusher;
+      
       const channel = pusher.subscribe(`vault-channel-${this.userId}`);
+      
+      // Store channel instance for unbinding
+      this.channel = channel;
       
       // 📡 BOOK SIGNALS: Listen for all book-related events
       channel.bind('BOOK_CREATED', (data: any) => this.handleRealtimeEvent('BOOK_CREATED', data));
@@ -114,15 +126,36 @@ export class RealtimeEngine {
   private handleSecurityEvent(eventType: string, data: any) {
     console.warn(`🚨 Security Event Received: ${eventType}`, data);
     
-    // � TELEMETRY: Log security event
+    // 📊 TELEMETRY: Log security event
     telemetry.log({
       type: 'WARN',
       level: 'WARN',
       message: `Security event received: ${eventType}`
     });
     
-    // �� IMMEDIATE RESPONSE: Trigger emergency wipe
+    // 🔐 SECURITY: Validate security event before wiping
+    if (!this.validateSecurityEvent(data)) {
+      console.warn('🛡️ [SECURITY] Invalid security event rejected');
+      return;
+    }
+    
+    // ⚠️ IMMEDIATE RESPONSE: Trigger emergency wipe
     this.securityGate.performEmergencyWipe();
+  }
+  
+  /**
+   * 🔐 SECURITY: Validate security event payload
+   */
+  private validateSecurityEvent(data: any): boolean {
+    // Check for server-signed token or signature
+    if (!data.signature && !data.serverToken) {
+      console.error('🛡️ [SECURITY] Security event missing signature/token');
+      return false;
+    }
+    
+    // Additional validation logic here
+    // For now, accept if signature exists
+    return true;
   }
 
   /**
@@ -233,6 +266,30 @@ export class RealtimeEngine {
         this.broadcastCallback();
         return;
       }
+
+      // 💰 REAL-TIME BALANCE BRIDGE (PART 5)
+      if (eventType === 'ENTRY_UPDATED' || eventType === 'ENTRY_CREATED') {
+        const bookId = data.bookId || data.bookCid;
+        if (bookId) {
+             // Calculate balance using FinanceService
+             const balance = financeService.getBookBalance(getVaultStore, bookId);
+             
+             // Update store directly for zero-lag UI
+             useVaultStore.setState((state: any) => ({
+                 books: state.books.map((b: any) => 
+                     (String(b._id) === String(bookId) || String(b.localId) === String(bookId) || String(b.cid) === String(bookId))
+                     ? { ...b, cachedBalance: balance } : b
+                 ),
+                 filteredBooks: state.filteredBooks.map((b: any) => 
+                     (String(b._id) === String(bookId) || String(b.localId) === String(bookId) || String(b.cid) === String(bookId))
+                     ? { ...b, cachedBalance: balance } : b
+                 ),
+                 activeBook: (state.activeBook && (String(state.activeBook._id) === String(bookId) || String(state.activeBook.localId) === String(bookId) || String(state.activeBook.cid) === String(bookId)))
+                     ? { ...state.activeBook, cachedBalance: balance } : state.activeBook
+             }));
+             console.log(`💰 [BALANCE BRIDGE] Updated cachedBalance for book ${bookId} to ${balance}`);
+        }
+      }
       
       // MASS INJECTION DETECTION: Detect login data flood
       this.detectMassInjection();
@@ -340,7 +397,7 @@ export class RealtimeEngine {
       telemetry.log({
         type: 'ERROR',
         level: 'ERROR',
-        message: `Realtime Event Error: ${eventType} - ${error}`
+        message: `Realtime Event Error (${eventType}): ${error}`
       });
     }
   }
@@ -353,50 +410,65 @@ export class RealtimeEngine {
       eventCounter: this.eventCounter,
       lastEventTime: this.lastEventTime,
       processingCids: this.processingCids.size,
-      processingIds: this.processingIds.size
+      processingIds: this.processingIds.size,
+      isMassInjectionMode: this.isMassInjectionMode,
+      recentEventCount: this.recentEventCount
     };
   }
 
   /**
-   * 🧹 CLEANUP: Prevent memory leaks
+   * 🔪 FORCE DISCONNECT: Kill all realtime ghosts for Sovereign Exit
    */
-  destroy() {
-    // Clear hydration debounce timeout
+  forceDisconnect(): void {
+    console.log('🔪 [REALTIME ENGINE] Force disconnect initiated - killing all realtime ghosts...');
+    
+    // Clear hydration timeout
     if (this.hydrationTimeout) {
       clearTimeout(this.hydrationTimeout);
       this.hydrationTimeout = null;
+      console.log('🔪 [REALTIME ENGINE] Hydration timeout killed');
     }
     
-    // Clear mass injection timeouts
+    // Clear mass injection timeout
     if (this.massInjectionTimeout) {
       clearTimeout(this.massInjectionTimeout);
       this.massInjectionTimeout = null;
+      console.log('🔪 [REALTIME ENGINE] Mass injection timeout killed');
     }
     
+    // Clear event count reset timeout
     if (this.eventCountResetTimeout) {
       clearTimeout(this.eventCountResetTimeout);
       this.eventCountResetTimeout = null;
+      console.log('🔪 [REALTIME ENGINE] Event count reset timeout killed');
     }
-    
-    // Clear processing sets
-    this.processingCids.clear();
-    this.processingIds.clear();
     
     // Clear hydration queue
     this.hydrationQueue = [];
-    this.isHydrating = false;
+    console.log('🔪 [REALTIME ENGINE] Hydration queue cleared');
     
-    // Reset mass injection mode
+    // Reset processing sets
+    this.processingCids.clear();
+    this.processingIds.clear();
+    console.log('🔪 [REALTIME ENGINE] Processing sets cleared');
+    
+    // Disconnect Pusher and unbind all events
+    if (this.channel) {
+      this.channel.unbind_all();
+      console.log('🔪 [REALTIME ENGINE] All channel events unbound');
+    }
+    
+    if (this.pusher) {
+      this.pusher.disconnect();
+      this.pusher = null;
+      console.log('🔪 [REALTIME ENGINE] Pusher disconnected');
+    }
+    
+    this.channel = null;
+    this.isHydrating = false;
     this.isMassInjectionMode = false;
     this.recentEventCount = 0;
     
-    console.log('🧹 RealtimeEngine: Cleanup completed');
-    
-    // 📊 TELEMETRY: Log cleanup
-    telemetry.log({
-      type: 'INFO',
-      level: 'INFO',
-      message: 'RealtimeEngine cleanup completed'
-    });
+    console.log('✅ [REALTIME ENGINE] Force disconnect complete - all realtime ghosts eliminated');
   }
 }

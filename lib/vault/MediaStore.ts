@@ -126,25 +126,28 @@ export const useMediaStore = create<MediaStoreState>()(
                             synced: 0 // Ensure it's marked for pushing to server
                         });
                         
-                        // 🚀 FORCE UI REFRESH: Trigger vault update event
+                        // FORCE UI REFRESH: Trigger vault update event
                         if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new Event('vault-updated'));
+                            window.dispatchEvent(new CustomEvent('vault-updated', { 
+                                detail: { source: 'MediaStore', origin: 'media-upload' } 
+                            }));
                         }
                         
-                        // 🆕 CRITICAL: Check if book has server _id before sync
+                        // CRITICAL: Check if book has server _id before sync
                         if (!existingBook._id) {
-                            console.log(`⚠️ [MEDIA SYNC] Book ${existingBook.cid} missing server _id, waiting for initial sync...`);
+                            console.log(`[MEDIA SYNC] Book ${existingBook.cid} missing server _id, waiting for initial sync...`);
                         }
                         
-                        // 🆕 EXPLICIT SYNC: Trigger immediate background sync
-                        const { orchestrator } = await import('./core/SyncOrchestrator');
-                        orchestrator.triggerSync();
+                        // EXPLICIT SYNC: Trigger immediate background sync
+                        const { getOrchestrator } = await import('./core/SyncOrchestrator');
+                        getOrchestrator().triggerSync();
                         
-                        // 🆕 MANUAL SYNC: Force vault store sync for immediate propagation
+                        // MANUAL SYNC: Force vault store sync for immediate propagation
                         if (typeof window !== 'undefined' && (window as any).getVaultStore) {
                             const vaultStore = (window as any).getVaultStore();
                             if (vaultStore.triggerManualSync) {
                                 vaultStore.triggerManualSync();
+                                console.log(`[MEDIA SYNC] Manual vault sync triggered for book ${existingBook.cid}`);
                                 console.log(`🚀 [MEDIA SYNC] Manual vault sync triggered for book ${existingBook.cid}`);
                             }
                         }

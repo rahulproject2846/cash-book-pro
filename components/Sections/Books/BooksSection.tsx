@@ -20,7 +20,7 @@ import { useRouter } from 'next/navigation';
 
 import { useVaultStore } from '@/lib/vault/store';
 
-import { identityManager } from '@/lib/vault/core/IdentityManager';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -43,6 +43,8 @@ import { BookCardSkeleton } from './BookCardSkeleton';
 import ConflictManagementList from '@/components/UI/ConflictManagementList';
 
 import { Tooltip } from '@/components/UI/Tooltip';
+
+import { Pagination } from '@/components/UI/Pagination';
 
 
 

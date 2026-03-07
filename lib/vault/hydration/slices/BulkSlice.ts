@@ -4,10 +4,11 @@ import { db } from '@/lib/offlineDB';
 import { normalizeRecord, validateCompleteness } from '../../core/VaultUtils';
 import { getTimestamp } from '@/lib/shared/utils';
 import { getVaultStore } from '../../store/storeHelper';
-import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../../utils/security';
+import { SecureApiClient } from '../../utils/SecureApiClient';
 import { validateBook, validateEntry } from '../../core/schemas';
 import { Base64Migration } from '../middleware/Base64Migration';
 import type { HydrationResult } from '../engine/types';
+import { PushService } from '../../services/PushService';
 
 /**
  * 📚 BULK SLICE - Books and Entries Bulk Hydration
@@ -34,15 +35,21 @@ export class BulkSlice {
     try {
       console.log('📚 [BULK SLICE] Fetching books from server...');
       
-      const response = await this.signedFetch(`/api/books?userId=${encodeURIComponent(this.userId)}&limit=1000`, {
-        method: 'GET'
-      });
+      const response = await SecureApiClient.signedFetch(`/api/books?userId=${encodeURIComponent(this.userId)}&limit=1000&offset=0`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }, 'BulkSlice');
+      
       if (!response.ok) {
-        throw new Error(`Failed to fetch books: ${response.statusText}`);
+        throw new Error(`Server response: ${response.status}`);
       }
       
-      const result = await response.json();
-      const books = result.data || result.books || [];
+      const booksResult = await response.json();
+      const books = booksResult.data || booksResult.books || [];
+      
+      if (!Array.isArray(books)) {
+        throw new Error('Invalid server response format: books not found');
+      }
       
       // 🔄 BATCH PROCESSING
       const allProcessedRecords: any[] = [];
@@ -54,14 +61,30 @@ export class BulkSlice {
         
         for (const book of batch) {
           try {
-            // 🔍 CHECK-BEFORE-PUT: Check if local record exists to preserve data
+            // 🔍 TRIPLE-LINK PROTOCOL: Check if local record exists to preserve data
             const existing = await db.books.where('cid').equals(book.cid).first();
+            
+            // 🛡️ TRIPLE-LINK ID PROTOCOL: Match ANY of 3 IDs for existing records
+            let existingRecord = existing;
+            if (!existingRecord) {
+              // Try to find by _id (server ID)
+              const byServerId = book._id ? await db.books.where('_id').equals(book._id).first() : null;
+              if (byServerId) {
+                existingRecord = byServerId;
+              } else {
+                // Try to find by localId
+                const byLocalId = book.localId ? await db.books.where('localId').equals(book.localId).first() : null;
+                if (byLocalId) {
+                  existingRecord = byLocalId;
+                }
+              }
+            }
             
             // 🔄 IMAGE PROCESSING: Handle Base64 migration via middleware
             const imageToPreserve = await this.base64Migration.processImage(
               book.image, 
-              existing?.image, 
-              existing?.localId || book.localId || 'temp'
+              existingRecord?.image, 
+              existingRecord?.localId || book.localId || 'temp'
             );
             
             // 3. Normalize with processed image (now CID or null)
@@ -69,7 +92,6 @@ export class BulkSlice {
               ...book,
               image: imageToPreserve, // ✅ NOW STORES CID, NOT BASE64
               userId: String(this.userId),
-              synced: 1,
               isDeleted: book.isDeleted || 0
             }, this.userId);
             
@@ -81,8 +103,8 @@ export class BulkSlice {
             }
             
             // Preserve localId if it exists to ensure bulkPut updates the correct record
-            if (existing?.localId) {
-              normalized.localId = existing.localId;
+            if (existingRecord?.localId) {
+              normalized.localId = existingRecord.localId;
             }
 
             batchRecords.push(normalized);
@@ -124,16 +146,21 @@ export class BulkSlice {
     try {
       console.log('📝 [BULK SLICE] Fetching entries from server...');
       
-      // 🚀 FORCE FULL HYDRATION: Use /api/entries/all with since=0 for complete data
-      const response = await this.signedFetch(`/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=5000&since=0`, {
-        method: 'GET'
-      });
+      const response = await SecureApiClient.signedFetch(`/api/entries?userId=${encodeURIComponent(this.userId)}&limit=5000&offset=0`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }, 'BulkSlice');
+      
       if (!response.ok) {
-        throw new Error(`Failed to fetch entries: ${response.statusText}`);
+        throw new Error(`Server response: ${response.status}`);
       }
       
-      const result = await response.json();
-      const entries = result.data || result.entries || [];
+      const entriesResult = await response.json();
+      const entries = entriesResult.data || entriesResult.entries || [];
+      
+      if (!Array.isArray(entries)) {
+        throw new Error('Invalid server response format: entries not found');
+      }
       
       // BATCH PROCESSING
       const allProcessedRecords: any[] = [];
@@ -145,8 +172,24 @@ export class BulkSlice {
         
         for (const entry of batch) {
           try {
-            //  CHECK-BEFORE-PUT: Check if local record exists to preserve data
+            // 🔍 TRIPLE-LINK PROTOCOL: Check if local record exists to preserve data
             const existing = await db.entries.where('cid').equals(entry.cid).first();
+            
+            // 🛡️ TRIPLE-LINK ID PROTOCOL: Match ANY of 3 IDs for existing records
+            let existingRecord = existing;
+            if (!existingRecord) {
+              // Try to find by _id (server ID)
+              const byServerId = entry._id ? await db.entries.where('_id').equals(entry._id).first() : null;
+              if (byServerId) {
+                existingRecord = byServerId;
+              } else {
+                // Try to find by localId
+                const byLocalId = entry.localId ? await db.entries.where('localId').equals(entry.localId).first() : null;
+                if (byLocalId) {
+                  existingRecord = byLocalId;
+                }
+              }
+            }
             
             // Normalize and store
             const normalized = normalizeRecord({
@@ -164,8 +207,8 @@ export class BulkSlice {
             }
             
             // Preserve localId if it exists to ensure bulkPut updates correct record
-            if (existing?.localId) {
-              normalized.localId = existing.localId;
+            if (existingRecord?.localId) {
+              normalized.localId = existingRecord.localId;
             }
 
             batchRecords.push(normalized);
@@ -199,25 +242,4 @@ export class BulkSlice {
     }
   }
 
-  /**
-   * 🔐 SECURE SIGNED FETCH - Phase 20 Implementation
-   * Uses centralized security utility for cryptographic signing
-   */
-  private async signedFetch(url: string, options: RequestInit): Promise<Response> {
-    try {
-      const timestamp = Date.now().toString();
-      const payload = preparePayload(options);
-      const signature = await generateVaultSignature(payload, timestamp);
-      const signedHeaders = prepareSignedHeaders(options, signature, timestamp);
-      
-      return fetch(url, {
-        ...options,
-        headers: signedHeaders,
-        body: payload || undefined
-      });
-    } catch (error) {
-      console.error('❌ [BULK SLICE] Signature generation failed:', error);
-      return fetch(url, options); // Fallback to standard fetch on security error
-    }
-  }
 }

@@ -8,7 +8,7 @@ import { SocialAuth } from './SocialAuth';
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
-import { identityManager } from '@/lib/vault/core/IdentityManager';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 
 // --- 🛠️ INTERNAL ELITE INPUT (Refined for Red Glow) ---
 const EliteInput = ({ icon: Icon, type, placeholder, value, name, id, autoComplete, onChange, hasError }: any) => (
@@ -44,8 +44,11 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
 
     // 🔐 IDENTITY WAKE-UP: Handle login success with immediate identity update
     const handleLoginSuccess = (user: any) => {
-        // 🚨 WAKE UP CALL: Immediately update IdentityManager
-        identityManager.setUserId(user._id);
+        // ✅ INSTANT UPDATE: Update memory cache immediately (no async)
+        UserManager.getInstance().updateIdentity(user);
+        
+        // 🔄 BACKGROUND: Persist to Dexie and localStorage (async, non-blocking)
+        UserManager.getInstance().setIdentity(user).catch(console.error);
         
         // Then call parent callback (async to avoid blocking navigation)
         setTimeout(() => {
@@ -155,13 +158,13 @@ export const LoginView = ({ onSuccess, onGoogleAuth, onSwitch, onForgot }: any) 
                     </button>
                 </div>
 
-                <Tooltip text={t('tt_auth_unseal')}>
+                <Tooltip text={t('tt_auth_unseal')}className="w-full">
                     <motion.button 
                         disabled={isLoading}
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.98 }}
                         type="submit" 
-                        className="vault-btn-elite bg-white text-black shadow-xl hover:bg-[var(--accent)] hover:text-white"
+                        className="vault-btn-elite bg-white text-black shadow-xl hover:bg-[var(--accent)] hover:text-white w-full h-[58px] border rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 shadow-sm"
                     >
                         {isLoading ? (
                             <span className="w-5 h-5 border-3 border-black border-t-transparent rounded-full animate-spin" />

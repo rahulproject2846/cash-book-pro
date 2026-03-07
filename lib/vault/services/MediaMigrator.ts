@@ -1,7 +1,7 @@
 "use client";
 
 import { db } from '@/lib/offlineDB';
-import { identityManager } from '../core/IdentityManager';
+import { UserManager } from '../core/user/UserManager';
 import { generateCID } from '@/lib/offlineDB';
 
 // Type definitions for book records
@@ -27,7 +27,7 @@ export class MediaMigrator {
   private userId: string = '';
 
   constructor() {
-    this.userId = identityManager.getUserId() || '';
+    this.userId = UserManager.getInstance().getUserId() || '';
   }
 
   /**
@@ -98,7 +98,7 @@ export class MediaMigrator {
    */
   async migrateLegacyImages(): Promise<{ migrated: number; errors: number }> {
     // 🛡️ USER GUARD: Only run if user is authenticated
-    const userId = identityManager.getUserId();
+    const userId = UserManager.getInstance().getUserId();
     if (!userId) {
       console.log('[MIGRATION] No user available, skipping migration');
       return { migrated: 0, errors: 0 };
@@ -155,7 +155,9 @@ export class MediaMigrator {
       // 5. Trigger UI refresh if migration occurred
       if (migrated > 0) {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('vault-updated'));
+          window.dispatchEvent(new CustomEvent('vault-updated', { 
+            detail: { source: 'MediaMigrator', origin: 'migration-complete' } 
+          }));
         }
         // Triggered UI refresh for ${migrated} migrated books
       }

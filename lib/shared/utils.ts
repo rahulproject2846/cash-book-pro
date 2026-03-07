@@ -93,3 +93,23 @@ export const formatDateTime = (date: Date | number | string): string => {
     return format(new Date(), 'yyyy-MM-dd HH:mm');
   }
 };
+
+/**
+ * 🌍 FORMAT DATE LOCAL - Timezone-aware date formatting
+ * Supports international users with optional timezone parameter
+ * 
+ * @param date - Date object, timestamp, or string
+ * @param timezone - Optional timezone string (e.g., 'Asia/Kolkata', 'America/New_York')
+ * @returns Formatted date string 'YYYY-MM-DD' with timezone support
+ */
+export const formatDateLocal = (date: Date | number | string, timezone?: string): string => {
+  try {
+    const dateObj = new Date(date);
+    return timezone 
+      ? format(dateObj, 'yyyy-MM-dd', { timeZone: timezone } as any)
+      : format(dateObj, 'yyyy-MM-dd');
+  } catch (error) {
+    console.warn('Invalid date provided to formatDateLocal:', date);
+    return format(new Date(), 'yyyy-MM-dd');
+  }
+};

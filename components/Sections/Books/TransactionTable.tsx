@@ -5,6 +5,7 @@ import {
     Edit2, Trash2, Zap, Clock, ShieldCheck, GitCommit, Copy, 
     MoreHorizontal, ArrowUpRight, ArrowDownLeft, Tag
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
@@ -81,6 +82,12 @@ export const TransactionTable = ({ items, onEdit, onDelete, onToggleStatus, curr
     const { deleteEntry, userId } = useVaultStore();
     
     const deferredEntries = useDeferredValue(items);
+    
+    // 🛡️ CONFLICT GUARD: Hide conflicted entries
+    const visibleEntries = useMemo(() => {
+        return deferredEntries.filter((e: any) => e.conflicted !== 1);
+    }, [deferredEntries]);
+
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry: any } | null>(null);
 
     const formatDate = useCallback((dateStr: any) => {
@@ -117,6 +124,10 @@ export const TransactionTable = ({ items, onEdit, onDelete, onToggleStatus, curr
                             <span className="text-[11px] font-black    ">{t('edit_entry')}</span>
                         </button>
                         <button onClick={() => { 
+                            if (contextMenu.entry.conflicted === 1) {
+                                toast.error("Please resolve conflict before deleting");
+                                return;
+                            }
                             openModal('deleteConfirm', { targetName: contextMenu.entry.title, onConfirm: () => deleteEntry(contextMenu.entry) }); 
                             closeContextMenu(); 
                         }} className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-red-500/10 transition-colors border-t border-[var(--border)]/50">
@@ -129,7 +140,7 @@ export const TransactionTable = ({ items, onEdit, onDelete, onToggleStatus, curr
 
             {/* 📱 MOBILE VIEW (Visible on Small Screens) */}
             <div className="xl:hidden grid grid-cols-1 gap-4 p-4">
-                {deferredEntries.map((e: any, idx: number) => (
+                {visibleEntries.map((e: any, idx: number) => (
                     <TransactionCard 
                         key={e.cid || e.localId || idx}
                         e={e} idx={idx} onEdit={onEdit} onDelete={onDelete} 
@@ -158,7 +169,7 @@ export const TransactionTable = ({ items, onEdit, onDelete, onToggleStatus, curr
                 </div>
 
                 <div className="divide-y divide-[var(--border)]/10">
-                    {deferredEntries.map((e: any, idx: number) => {
+                    {visibleEntries.map((e: any, idx: number) => {
                         const rowKey = String(e.localId || e._id || e.cid || `idx-${idx}`);
                         return (
                             <motion.div
@@ -186,7 +197,13 @@ export const TransactionTable = ({ items, onEdit, onDelete, onToggleStatus, curr
                                 </div>
                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                     <button onMouseDown={(ev) => { ev.preventDefault(); onEdit(e); }} className="w-8 h-8 rounded-lg bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-orange-500"><Edit2 size={14} /></button>
-                                    <button onClick={() => openModal('deleteConfirm', { targetName: e.title, onConfirm: () => deleteEntry(e) })} className="w-8 h-8 rounded-lg bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500"><Trash2 size={14} /></button>
+                                    <button onClick={() => {
+                                        if (e.conflicted === 1) {
+                                            toast.error("Please resolve conflict before deleting");
+                                            return;
+                                        }
+                                        openModal('deleteConfirm', { targetName: e.title, onConfirm: () => deleteEntry(e) });
+                                    }} className="w-8 h-8 rounded-lg bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-red-500"><Trash2 size={14} /></button>
                                 </div>
                             </motion.div>
                         );

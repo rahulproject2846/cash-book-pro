@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { db } from '@/lib/offlineDB';
 import { processMedia } from '@/lib/utils/mediaProcessor';
 import { useMediaStore } from '@/lib/vault/MediaStore';
-import { identityManager } from '@/lib/vault/core/IdentityManager';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 import { generateCID } from '@/lib/offlineDB';
 import { useVaultStore } from '@/lib/vault/store/index';
 
@@ -54,7 +54,7 @@ export const useProfile = () => {
         try {
             const { blob } = await processMedia(file);
             const mediaCid = generateCID();
-            const userId = identityManager.getUserId();
+            const userId = UserManager.getInstance().getUserId();
             
             if (!userId) return toast.error('Identity Node Offline');
             

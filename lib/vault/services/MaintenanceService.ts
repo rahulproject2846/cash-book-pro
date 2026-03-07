@@ -1,11 +1,13 @@
 "use client";
 
 import { db } from '@/lib/offlineDB';
-import { identityManager } from '../core/IdentityManager';
+import { UserManager } from '../core/user/UserManager';
 import { validateCompleteness } from '../core/VaultUtils';
 import { getTimestamp } from '@/lib/shared/utils';
 import { telemetry } from '../Telemetry';
 import { mediaGarbageCollector } from './MediaStoreUtils';
+import { PushService } from './PushService';
+import { SyncGuard } from '../guards/SyncGuard';
 
 /**
  * 🧹 MAINTENANCE SERVICE - Housekeeper for Dexie and MongoDB cleanup
@@ -23,7 +25,6 @@ interface CleanupResult {
   metadataCleaned: number;
   incompleteRecordsFlagged: number;
   serverCleanupTriggered: boolean;
-  orphanedEntriesCleaned: number;
   errors: string[];
   duration: number;
 }
@@ -48,9 +49,13 @@ export class MaintenanceService {
   private readonly AUDIT_LOG_RETENTION_DAYS = 60;
   private readonly INCOMPLETE_RECORD_RETENTION_DAYS = 7;
   private readonly METADATA_CLEANUP_BATCH_SIZE = 100;
+  private readonly COMPLETENESS_CHUNK_SIZE = 50;
+  private pushService: PushService;
 
   constructor() {
-    this.userId = identityManager.getUserId() || '';
+    // Remove top-level userId initialization to prevent circular dependency
+    // userId will be retrieved lazily when methods are called
+    this.pushService = PushService.getInstance();
   }
 
   /**
@@ -64,47 +69,40 @@ export class MaintenanceService {
       metadataCleaned: 0,
       incompleteRecordsFlagged: 0,
       serverCleanupTriggered: false,
-      orphanedEntriesCleaned: 0,
       errors: [],
       duration: 0
     };
 
     try {
-      console.log('🧹 [MAINTENANCE SERVICE] Starting global cleanup for user:', userId);
+      // 🧹 [MAINTENANCE SERVICE] Starting global cleanup - Silenced for production
+      // console.log('🧹 [MAINTENANCE SERVICE] Starting global cleanup for user:', userId);
       this.userId = userId;
 
-      // STEP 1: Clean old audit logs
-      console.log('🧹 [MAINTENANCE SERVICE] Step 1: Cleaning audit logs...');
+      // STEP 1: Clean old audit logs - Silenced for production
       result.auditLogsCleaned = await this.cleanupAuditLogs(userId);
 
-      // 🧹 STEP 2: Clean metadata for synced records
-      console.log('🧹 [MAINTENANCE SERVICE] Step 2: Cleaning metadata...');
+      // STEP 2: Clean metadata for synced records - Silenced for production
       result.metadataCleaned = await this.cleanupMetadata(userId);
 
-      // 🛡️ STEP 3: Validate completeness and flag incomplete records
-      console.log('🛡️ [MAINTENANCE SERVICE] Step 3: Validating record completeness...');
+      // STEP 3: Validate completeness and flag incomplete records - Silenced for production
       const completenessReport = await this.validateRecordCompleteness(userId);
       result.incompleteRecordsFlagged = completenessReport.flaggedForDeletion;
 
-      // 📡 STEP 4: Signal server for remote cleanup
-      console.log('📡 [MAINTENANCE SERVICE] Step 4: Signaling server cleanup...');
+      // STEP 4: Signal server for remote cleanup - Silenced for production
       result.serverCleanupTriggered = await this.signalServerCleanup(userId);
 
-      // 🧹 STEP 5: Media garbage collection
-      console.log('🧹 [MAINTENANCE SERVICE] Step 5: Running media garbage collection...');
+      // STEP 5: Media garbage collection - Silenced for production
       const mediaCleanupResult = await mediaGarbageCollector.runFullCleanup();
-      console.log(`🧹 [MAINTENANCE SERVICE] Media cleanup: ${mediaCleanupResult.totalCleaned} blobs freed, ${(mediaCleanupResult.totalFreedSpace / 1024 / 1024).toFixed(2)}MB recovered`);
-
-      // 🆕 STEP 6: Clean up orphaned entries
-      console.log('🧹 [MAINTENANCE SERVICE] Step 6: Cleaning orphaned entries...');
-      result.orphanedEntriesCleaned = await this.cleanupOrphanedEntries(userId);
-
+      // [MAINTENANCE SERVICE] Media cleanup - Silenced for production
+      // console.log(`[MAINTENANCE SERVICE] Media cleanup: ${mediaCleanupResult.totalCleaned} blobs freed, ${(mediaCleanupResult.totalFreedSpace / 1024 / 1024).toFixed(2)}MB recovered`);
+      
       result.success = true;
       result.duration = Date.now() - startTime;
+      
+      // [MAINTENANCE SERVICE] Global cleanup complete - Silenced for production
+      // console.log('[MAINTENANCE SERVICE] Global cleanup complete:', result);
 
-      console.log('✅ [MAINTENANCE SERVICE] Global cleanup complete:', result);
-
-      // 📊 LOG CLEANUP STATISTICS
+      // LOG CLEANUP STATISTICS
       telemetry.log({
         type: 'OPERATION',
         level: 'INFO',
@@ -147,7 +145,6 @@ export class MaintenanceService {
       
       // Check if auditLogs table exists
       if (!db.auditLogs) {
-        console.log('[MAINTENANCE SERVICE] auditLogs table not found, skipping...');
         return 0;
       }
 
@@ -159,7 +156,6 @@ export class MaintenanceService {
         .count();
 
       if (logsToDelete === 0) {
-        console.log('[MAINTENANCE SERVICE] No old audit logs to delete');
         return 0;
       }
 
@@ -202,13 +198,9 @@ export class MaintenanceService {
           }
           
           if (orphanedMedia.length > 0) {
-            console.log(`🧹 [MAINTENANCE SERVICE] Found ${orphanedMedia.length} orphaned media blobs to cleanup`);
-            
             // Delete orphaned media blobs first
             await db.mediaStore.bulkDelete(orphanedMedia.map((media: any) => media.localId!));
             orphanedMediaDeleted = orphanedMedia.length;
-            
-            console.log(`🧹 [MAINTENANCE SERVICE] Deleted ${orphanedMediaDeleted} orphaned media blobs`);
           }
         } catch (mediaError) {
           console.warn('⚠️ [MAINTENANCE SERVICE] Media cleanup failed:', mediaError);
@@ -223,12 +215,8 @@ export class MaintenanceService {
           await db.auditLogs.bulkDelete(batch.map((log: any) => log.localId!));
         });
         deletedCount += batch.length;
-        
-        console.log(`[MAINTENANCE SERVICE] Deleted audit log batch ${Math.floor(i / this.METADATA_CLEANUP_BATCH_SIZE) + 1}, total: ${deletedCount}`);
       }
 
-      console.log(`[MAINTENANCE SERVICE] Cleaned ${deletedCount} old audit logs`);
-      console.log(`🧹 [MAINTENANCE SERVICE] Cleaned ${deletedCount} old audit logs and ${orphanedMediaDeleted} orphaned media blobs`);
       return deletedCount;
 
     } catch (error) {
@@ -259,7 +247,6 @@ export class MaintenanceService {
           })));
         });
         cleanedCount += syncedBooks.length;
-        console.log(`[MAINTENANCE SERVICE] Cleaned metadata for ${syncedBooks.length} synced books`);
       }
 
       // Clean entries metadata - ATOMIC TRANSACTION
@@ -277,10 +264,8 @@ export class MaintenanceService {
           })));
         });
         cleanedCount += syncedEntries.length;
-        console.log(`[MAINTENANCE SERVICE] Cleaned metadata for ${syncedEntries.length} synced entries`);
       }
 
-      console.log(`🧹 [MAINTENANCE SERVICE] Cleaned metadata for ${cleanedCount} total records`);
       return cleanedCount;
 
     } catch (error) {
@@ -304,64 +289,84 @@ export class MaintenanceService {
 
       const sevenDaysAgo = Date.now() - (this.INCOMPLETE_RECORD_RETENTION_DAYS * 24 * 60 * 60 * 1000);
 
-      // Validate books
+      // Validate books with chunked processing
       const books = await db.books.where('userId').equals(userId).toArray();
       report.totalRecords += books.length;
 
-      for (const book of books) {
-        const validation = validateCompleteness(book, 'book');
-        const completenessScore = validation.isValid ? 100 : (50 - validation.missingFields.length * 10);
-        const age = Date.now() - (book.createdAt || book.updatedAt || Date.now());
-        const shouldFlag = !validation.isValid && age > (sevenDaysAgo);
+      // 🚀 CHUNKED PROCESSING: Process 50 books at a time to prevent UI blocking
+      for (let i = 0; i < books.length; i += this.COMPLETENESS_CHUNK_SIZE) {
+        const bookChunk = books.slice(i, i + this.COMPLETENESS_CHUNK_SIZE);
+        
+        for (const book of bookChunk) {
+          const validation = validateCompleteness(book, 'book');
+          const completenessScore = validation.isValid ? 100 : (50 - validation.missingFields.length * 10);
+          const age = Date.now() - (book.createdAt || book.updatedAt || Date.now());
+          const shouldFlag = !validation.isValid && age > (sevenDaysAgo);
 
-        if (shouldFlag) {
-          report.flaggedForDeletion++;
+          if (shouldFlag) {
+            report.flaggedForDeletion++;
+          }
+
+          if (!validation.isValid) {
+            report.incompleteRecords++;
+          } else {
+            report.completeRecords++;
+          }
+
+          report.details.push({
+            cid: book.cid,
+            type: 'book',
+            completenessScore,
+            missingFields: validation.missingFields,
+            age,
+            flagged: shouldFlag
+          });
         }
-
-        if (!validation.isValid) {
-          report.incompleteRecords++;
-        } else {
-          report.completeRecords++;
+        
+        // 🚀 YIELD TO UI: Allow UI thread to process between chunks
+        if (i + this.COMPLETENESS_CHUNK_SIZE < books.length) {
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
-
-        report.details.push({
-          cid: book.cid,
-          type: 'book',
-          completenessScore,
-          missingFields: validation.missingFields,
-          age,
-          flagged: shouldFlag
-        });
       }
 
-      // Validate entries
+      // Validate entries with chunked processing
       const entries = await db.entries.where('userId').equals(userId).toArray();
       report.totalRecords += entries.length;
 
-      for (const entry of entries) {
-        const validation = validateCompleteness(entry, 'entry');
-        const completenessScore = validation.isValid ? 100 : (50 - validation.missingFields.length * 10);
-        const age = Date.now() - (entry.createdAt || entry.updatedAt || Date.now());
-        const shouldFlag = !validation.isValid && age > (sevenDaysAgo);
+      // 🚀 CHUNKED PROCESSING: Process 50 entries at a time to prevent UI blocking
+      for (let i = 0; i < entries.length; i += this.COMPLETENESS_CHUNK_SIZE) {
+        const entryChunk = entries.slice(i, i + this.COMPLETENESS_CHUNK_SIZE);
+        
+        for (const entry of entryChunk) {
+          const validation = validateCompleteness(entry, 'entry');
+          const completenessScore = validation.isValid ? 100 : (50 - validation.missingFields.length * 10);
+          const age = Date.now() - (entry.createdAt || entry.updatedAt || Date.now());
+          const shouldFlag = !validation.isValid && age > (sevenDaysAgo);
 
-        if (shouldFlag) {
-          report.flaggedForDeletion++;
+          if (shouldFlag) {
+            report.flaggedForDeletion++;
+          }
+
+          if (!validation.isValid) {
+            report.incompleteRecords++;
+          } else {
+            report.completeRecords++;
+          }
+
+          report.details.push({
+            cid: entry.cid,
+            type: 'entry',
+            completenessScore,
+            missingFields: validation.missingFields,
+            age,
+            flagged: shouldFlag
+          });
         }
-
-        if (!validation.isValid) {
-          report.incompleteRecords++;
-        } else {
-          report.completeRecords++;
+        
+        // 🚀 YIELD TO UI: Allow UI thread to process between chunks
+        if (i + this.COMPLETENESS_CHUNK_SIZE < entries.length) {
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
-
-        report.details.push({
-          cid: entry.cid,
-          type: 'entry',
-          completenessScore,
-          missingFields: validation.missingFields,
-          age,
-          flagged: shouldFlag
-        });
       }
 
       // Flag incomplete records for deletion or review
@@ -393,12 +398,22 @@ export class MaintenanceService {
     try {
       console.log('📡 [MAINTENANCE SERVICE] Signaling server for cleanup...');
 
-      // NOTE: This is a hypothetical endpoint - implement when server API is ready
-      const response = await fetch('/api/vault/maintenance', {
+      // 🔐 SECURITY GUARD: Validate sync access before server call
+      const guardResult = await SyncGuard.validateSyncAccess({
+        serviceName: 'SyncOrchestrator', // Use allowed service name
+        onError: (msg) => console.warn(`🔒 [MAINTENANCE] ${msg}`),
+        returnError: (msg) => ({ success: false, errors: [msg] })
+      });
+      if (!guardResult.valid) {
+        console.warn('🔒 [MAINTENANCE] Server cleanup blocked by security guard');
+        return false;
+      }
+
+      // 🔐 SECURE FETCH: Use PushService signed fetch instead of raw fetch
+      const response = await this.pushService.secureFetch('/api/vault/maintenance', {
         method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': userId
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           userId,
@@ -433,57 +448,6 @@ export class MaintenanceService {
    */
   setUserId(userId: string): void {
     this.userId = String(userId);
-  }
-
-  /**
-   * 🧹 CLEAN UP ORPHANED ENTRIES - Remove entries with deleted parent books
-   */
-  private async cleanupOrphanedEntries(userId: string): Promise<number> {
-    try {
-      console.log('🧹 [MAINTENANCE SERVICE] Cleaning orphaned entries...');
-      
-      // Get all active entries for this user
-      const activeEntries = await db.entries
-        .where('userId')
-        .equals(userId)
-        .and((entry: any) => entry.isDeleted === 0)
-        .toArray();
-      
-      // Get all active books for this user
-      const activeBooks = await db.books
-        .where('userId')
-        .equals(userId)
-        .and((book: any) => book.isDeleted === 0)
-        .toArray();
-      
-      // Create set of valid book IDs
-      const validBookIds = new Set(
-        activeBooks.map((book: any) => String(book._id || book.localId))
-      );
-      
-      // Find orphaned entries (entries whose bookId is not in active books)
-      const orphanedEntries = activeEntries.filter((entry: any) => 
-        !validBookIds.has(String(entry.bookId))
-      );
-      
-      console.log(`🧹 [MAINTENANCE SERVICE] Found ${orphanedEntries.length} orphaned entries to clean`);
-      
-      // Mark orphaned entries as deleted and unsynced
-      for (const orphanedEntry of orphanedEntries) {
-        await db.entries.update(orphanedEntry.localId!, {
-          isDeleted: 1,
-          synced: 0,
-          updatedAt: getTimestamp()
-        });
-      }
-      
-      console.log(`✅ [MAINTENANCE SERVICE] Cleaned ${orphanedEntries.length} orphaned entries`);
-      return orphanedEntries.length;
-      
-    } catch (error) {
-      console.error('❌ [MAINTENANCE SERVICE] Failed to cleanup orphaned entries:', error);
-      return 0;
-    }
   }
 
   /**

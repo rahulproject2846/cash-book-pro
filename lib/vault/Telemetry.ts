@@ -29,6 +29,7 @@ export class VaultTelemetry {
   private static instance: VaultTelemetry;
   private sessionId: string;
   private maxLocalEvents = 1000; // Keep last 1000 events locally
+  private logCount = 0; // Track logs for batch cleanup
   
   private constructor() {
     this.sessionId = `session_${getTimestamp()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -56,8 +57,13 @@ export class VaultTelemetry {
       // Store in IndexedDB for audit trail
       await db.audits.add(telemetryEvent);
       
-      // Cleanup old events to prevent storage bloat
-      await this.cleanupOldEvents();
+      // Increment log counter for batch cleanup
+      this.logCount++;
+      
+      // Cleanup old events every 50 logs to save I/O cycles
+      if (this.logCount % 50 === 0) {
+        await this.cleanupOldEvents();
+      }
       
       // Still log to console for development (can be disabled in production)
       if (process.env.NODE_ENV === 'development') {

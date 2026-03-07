@@ -54,7 +54,8 @@ export interface GuardResult<T = any> {
  * Context-aware error handling for different services
  */
 export interface GuardContext {
-  serviceName: 'PushService' | 'PullService' | 'SyncOrchestrator';
+  serviceName: 'PushService' | 'PullService' | 'SyncOrchestrator' | 'HydrationController';
+  operation?: string;
   onError: (message: string, details?: any) => void | Promise<void>;
   returnError: (message: string) => SyncResult | void;
 }

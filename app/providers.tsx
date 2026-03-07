@@ -56,7 +56,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     
     // 🚀 CORRECT GLOBAL EXPOSURE: Expose store instances, not hooks
     if (typeof window !== 'undefined') {
-      (window as any).orchestrator = require('@/lib/vault/core/SyncOrchestrator').orchestrator;
+      (window as any).getOrchestrator = require('@/lib/vault/core/SyncOrchestrator').getOrchestrator;
       (window as any).mediaStore = useMediaStore; // Keeping hook reference is okay if used carefully, but getState is better
     }
     
@@ -116,7 +116,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                   }}
                 />
 
-                <div style={{ opacity: mounted ? 1 : 0 }} className="transition-opacity duration-300">
+                <div style={{ visibility: mounted ? 'visible' : 'hidden', opacity: mounted ? 1 : 0 }}>
                     {children}
                 </div>
                 

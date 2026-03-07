@@ -20,6 +20,11 @@ export const generateServerChecksum = (data: {
     type?: string;
     status?: string;
 }): string => {
+    // 🔐 SECURITY: Validate required environment variable
+    if (!process.env.VAULT_SECRET_KEY) {
+        throw new Error('CRITICAL_SECURITY_ERROR: VAULT_SECRET_KEY environment variable is not set on server');
+    }
+    
     // ১. ডাটা নরমালাইজেশন (Trim ONLY - respect user's case)
     const title = data.title?.trim() || "";
     const note = data.note?.trim() || "";
@@ -42,15 +47,8 @@ export const generateServerChecksum = (data: {
         // ৫. সিকিউরিটি প্রিফিক্স সহ রিটার্ন (ভার্সন কন্ট্রোলড)
         return `sha256_${hash}`;
     } catch (error) {
-        // Fallback to simple hash if crypto not available
-        console.warn('SHA-256 not available, falling back to simple hash:', error);
-        let hash = 0;
-        for (let i = 0; i < payload.length; i++) {
-            const char = payload.charCodeAt(i);
-            hash = (hash << 5) - hash + char;
-            hash |= 0;
-        }
-        return `v1_${Math.abs(hash)}`;
+        // 🔒 SECURITY: No fallback for cryptographic failures
+        throw new Error(`CRITICAL_CRYPTOGRAPHIC_ERROR: SHA-256 generation failed: ${error}`);
     }
 };
 

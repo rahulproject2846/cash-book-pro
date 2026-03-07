@@ -32,6 +32,9 @@ export const HubHeader = ({
     const { t } = useTranslation();
     const [isScrolled, setIsScrolled] = useState(false);
     const [searchHasFocus, setSearchHasFocus] = useState(false);
+    
+    // 🚀 PATHOR V3.0: Add local state for instant typing feedback
+    const [localSearch, setLocalSearch] = useState(searchQuery || '');
 
     const { isSearchOpen, toggleSearch, dynamicHeaderHeight } = useVaultStore();
 

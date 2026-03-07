@@ -153,7 +153,8 @@ const EntrySchema = new Schema<IEntry>({
     required: true
   }
 }, { 
-  versionKey: false
+  versionKey: false,
+  timestamps: false // 🛡️ DNA FIX: Prevent Mongoose auto-timestamp injection
 });
 
 /**

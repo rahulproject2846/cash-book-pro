@@ -67,6 +67,8 @@ export async function POST(req: Request) {
         categories: user.categories,
         currency: user.currency,
         isVerified: user.isVerified, // ভেরিফিকেশন স্ট্যাটাস
+        plan: user.plan || 'free', // ✅ ADDED: Include plan field
+        preferences: user.preferences || {}, // ✅ ADDED: Include preferences
         createdAt: user.createdAt
       }
     }, { status: 200 });

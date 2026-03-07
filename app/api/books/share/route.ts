@@ -45,7 +45,12 @@ export async function POST(req: Request) {
         { new: true }
     );
     
-    // ৩. রেসপন্স পাঠানো
+    // ৩. নাল গার্ড চেক
+    if (!updatedBook) {
+        return NextResponse.json({ message: "Book not found" }, { status: 404 });
+    }
+    
+    // ৪. রেসপন্স পাঠানো
     return NextResponse.json({ 
         success: true,
         message: enable ? "Public access enabled" : "Public access disabled",

@@ -10,7 +10,7 @@ import { LoginView } from './views/LoginView';
 import { RegisterView } from './views/RegisterView';
 import { OtpView } from './views/OtpView';
 import { ForgotPassView } from './views/ForgotPassView';
-import { identityManager } from '@/lib/vault/core/IdentityManager';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: any) => void;
@@ -28,7 +28,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   // 🔐 IDENTITY WAKE-UP: Handle login success with immediate identity update
   const handleLoginSuccess = (user: any) => {
     // 🚨 WAKE UP CALL: Immediately update IdentityManager with full user object
-    identityManager.setIdentity(user);
+    UserManager.getInstance().setIdentity(user);
     
     // Then call parent callback (async to avoid blocking navigation)
     setTimeout(() => {
@@ -82,7 +82,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             <div className="flex justify-between items-center mb-8 px-5">
                 <div className="flex items-center gap-2.5">
                     <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(249,115,22,0.5)]" />
-                    <span className="text-[10px] font-black      text-[var(--text-muted)]">{t('auth_security_portal')}</span>
+                    <span className="text-[10px] font-black text-[var(--text-muted)]">{t('auth_security_portal')}</span>
                 </div>
                 {isVerifying && (
                     <div className="flex items-center gap-2 text-orange-500">
@@ -92,8 +92,8 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                 )}
             </div>
 
-            <div className="app-card relative overflow-hidden shadow-[0_32px_120px_-20px_rgba(0,0,0,0.5)] backdrop-blur-3xl border border-white/10 bg-white/[0.02] min-h-[520px] flex flex-col transition-all duration-700">
-                <div className="p-[var(--card-padding,2.5rem)] flex-1 flex flex-col">
+            <div className="app-card relative overflow-hidden rounded-[40px] shadow-[0_32px_120px_-20px_rgba(0,0,0,0.5)] backdrop-blur-3xl border border-white/10 bg-white/[0.02] min-h-[520px] flex flex-col transition-all duration-700">
+                <div className="p-[var(--card-padding,2.5rem)] flex-1 flex flex-col items-stretch">
                     <AnimatePresence mode="wait" custom={direction} initial={false}>
                         <motion.div
                             key={view}

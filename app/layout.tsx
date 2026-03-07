@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { CleaningVaultOverlay } from "@/components/UI/CleaningVaultOverlay";
 
 const geist = Geist({ 
   subsets: ["latin"],
@@ -102,6 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
             {children}
         </Providers>
+        <CleaningVaultOverlay />
       </body>
     </html>
   );

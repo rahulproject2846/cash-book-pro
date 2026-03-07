@@ -377,6 +377,73 @@ await (async () => {
     alert("Data backup generated in console. Copy it before resetting.");
   }
 })();
+
+
+16. IDENTITY PERSISTENCE & THE "U" NAME BUG (The Skeleton Trap)
+Scenario
+User logs in, the correct name appears for 1 second, then disappears and turns into "U". Alternatively, on a hard reload, the app kicks the user back to the /login page despite a valid session existing.
+Root Cause (The 3-Headed Snake)
+The Promise Leak: identityManager.getUserId() was made async, causing it to return a Promise object to the UI/Services instead of a synchronous string. Dexie received the Promise and crashed with Invalid userId format.
+The Constructor Race: The Orchestrator's constructor captured this.userId before IdentityManager finished loading from Dexie. The Orchestrator kept using a stale "" (empty string), failing to find the user in DB.
+The Skeleton Trap: Gate 1 created an empty user profile (Skeleton) without a username. Gate 2 saw the Skeleton, thought the user was valid, and bypassed server hydration, updating the store with a missing name -> UI falls back to "U".
+Immediate Action (The Pathor Protocol)
+Synchronous Anchor: getUserId() MUST be strictly synchronous. It must return the memory-cached this.userId.
+Delete Stale IDs: Never store this.userId in class properties inside SyncOrchestrator. Always call identityManager.getUserId() dynamically.
+The Name Guard: In Gate 2, if updatedUser?.username is falsy, HALT the store update and force hydrateUser.
+
+
+17. THE DISAPPEARING BOOKS (Matrix Engine Overwrite)
+Scenario
+The Dashboard shows 80+ books. The user adds a new entry. Suddenly, the Dashboard flickers, and only 1 book (or exactly 15 books) remains. The rest vanish into thin air.
+Root Cause (Destructive State Hydration)
+Paginator's Greed: fetchPageChunk was designed for 15-item pagination. But it was blindly calling set({ books: sortedBooks }), destructively overwriting the entire 80+ books array with just the 15 current items.
+Background Nuke: PushService updated a single book during sync, and then destructively updated the store with ONLY that 1 synced book, wiping out the other 82.
+Immediate Action (The Pathor Protocol)
+Non-Destructive Merging: When source === 'ENTRY_ADDED', NEVER overwrite the array. Use .map() to patch only the specific book's updatedAt and cachedBalance.
+Action Guard: Remove applyFiltersAndSort from saveBook and syncMatrixItem to stop accidental trigger-chains.
+
+
+18. THE INFINITE PULL LOOP (Offset Stagnation)
+Scenario
+Initial data sync runs forever. The console logs show Batch 45... Retrieved 20 books, 20 valid infinitely. The progress bar gets stuck, and the network tab is spammed.
+Root Cause (The Logic Paradox)
+The loop termination condition was if (batchSize < 20) break;. Because the server ALWAYS returned exactly 20 books, the condition was never met. Furthermore, lastSequence was not persisting to db.syncPoints, making the engine fetch the exact same batch endlessly.
+Immediate Action (The Pathor Protocol)
+Strict Limits: Change loop termination to if (books.length < LIMIT || offset >= totalItems) hasMore = false;
+Offset Advancement: Always do offset += books.length regardless of validity.
+Checkpoint Persistence: After every batch, await db.syncPoints.put({ ... }) MUST run to ensure the database pointer moves forward.
+
+
+19. MEDIA DOWNLOAD CRASH & THE CID PARADOX
+Scenario
+Sync completely halts. Console throws DexieError: NotFoundError: The specified object store was not found. Alternatively, the downloader logs Skipped - not HTTP URL for valid media.
+Root Cause (Transaction Scope & Bad Normalization)
+Transaction Crash: PullService initiated an atomic transaction for [db.books, db.entries]. But inside the loop, it called hydrateMissingMedia which tried to write to db.mediaStore. Dexie instantly aborted because mediaStore wasn't declared in the transaction header.
+The CID Ghost: The normalizer moved cid_123 to mediaCid, but forgot to clear the image field. The downloader saw a non-HTTP string in image and panicked, blocking the download.
+Immediate Action (The Pathor Protocol)
+Transaction Inclusion: Always declare all affected tables: db.transaction('rw',[db.books, db.entries, db.mediaStore, db.syncPoints], ...)
+Clean Normalization: When shifting a CID, you MUST explicitly set normalized.image = ''; to satisfy strict typing and downstream logic.
+
+
+20. THE API STORM (N+1 Pagination Inefficiency)
+Scenario
+Pulling 1,000 records takes 30+ seconds. The Network tab reveals 50 individual API calls fetching 20 items each, generating 50 separate Dexie transactions.
+Root Cause (Legacy Scaling)
+PullService was mimicking the UI's pagination (limit=20) for background data hauling. This "drip-feed" approach crushed network efficiency and blocked the main thread with micro-transactions.
+Immediate Action (The Pathor Protocol)
+Industrial Bulk-Pull: Change limit in background fetchers from 20 to 1000.
+Atomic Commit: Wrap the entire for loop of 1000 records inside ONE massive Dexie transaction. It reduces DB locks from 1000 to exactly 1.
+
+
+21. DB RACE CONDITIONS & GHOST QUERIES
+Scenario
+A new record is successfully added to the database via API pull, but a subsequent function immediately fails saying localId: undefined.
+Root Cause (Asynchronous Blindness)
+Immediately after calling commitSingleBook, the code fired a db.books.where('cid').first() query. Because IndexedDB transactions operate in micro-tasks, the read query executed before the write transaction had fully finalized.
+Immediate Action (The Pathor Protocol)
+Never Double-Query: Instead of saving and then re-querying the DB to find the ID, modify the commit function to return { success: true, localId: newId }. Pass this localId directly in memory to the next function.
+
+
 Manual by: Senior Systems Architect
 Project: The Holy Grail (Unbreakable Ledger)
 

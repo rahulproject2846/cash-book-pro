@@ -80,11 +80,11 @@ export async function DELETE(req: Request) {
             { 
               userId, 
               isDeleted: 1, // Use isDeleted instead of isActive
-              updatedAt: { $lt: cutoffDate }
+              updatedAt: { $lt: Number(cutoffDate) }
             },
             { 
               $set: { 
-                updatedAt: new Date() // Mark as recently processed
+                updatedAt: Number(new Date()) // Mark as recently processed (Number type for schema)
               }
             }
           );

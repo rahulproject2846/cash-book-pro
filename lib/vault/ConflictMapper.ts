@@ -5,6 +5,40 @@
  * Ensures consistent conflict type handling across the system
  */
 
+// 🎯 FIELD DIFF INTERFACE
+export interface FieldDiff {
+    field: string;
+    oldValue: any;
+    newValue: any;
+}
+
+// 🎯 FIELD DIFFING LOGIC: Calculate exact changes between records
+export const calculateFieldDiff = (local: any, server: any): FieldDiff[] => {
+    const changes: FieldDiff[] = [];
+    const allKeys = new Set([...Object.keys(local || {}), ...Object.keys(server || {})]);
+    
+    for (const key of allKeys) {
+        const localValue = local?.[key];
+        const serverValue = server?.[key];
+        
+        // Skip system fields that don't represent user changes
+        if (key === 'localId' || key === '_id' || key === 'updatedAt' || key === 'synced') {
+            continue;
+        }
+        
+        // Check for actual value differences
+        if (JSON.stringify(localValue) !== JSON.stringify(serverValue)) {
+            changes.push({
+                field: key,
+                oldValue: localValue,
+                newValue: serverValue
+            });
+        }
+    }
+    
+    return changes;
+};
+
 // 🚨 CONFLICT TYPE MAPPING
 export const mapConflictType = (reason: string): 'version' | 'parent_deleted' => {
     switch (reason) {

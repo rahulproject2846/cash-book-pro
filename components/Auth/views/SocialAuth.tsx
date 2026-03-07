@@ -28,7 +28,7 @@ export const SocialAuth = ({ onGoogleAuth }: any) => {
 
     return (
         <div className="relative w-full">
-            <Tooltip text={t('tt_auth_google')}>
+            <Tooltip text={t('tt_auth_google')} className="w-full">
                 <motion.button 
                     type="button"
                     disabled={isVerifying}

@@ -1,12 +1,14 @@
 "use client";
 
 import { getTimestamp } from '@/lib/shared/utils';
-import { identityManager } from '../core/IdentityManager';
 import { db } from '@/lib/offlineDB';
-import Dexie from 'dexie';
 import { LocalEntry } from '@/lib/offlineDB';
 import { HydrationController } from '../hydration/HydrationController';
 import { financeService } from './FinanceService';
+import { SyncGuard } from '../guards/SyncGuard';
+import { getSovereignId } from '@/lib/utils/identityProvider';
+import { generateCID } from '@/lib/offlineDB';
+import { normalizeRecord } from '../core/VaultUtils';
 
 // 📚 LIGHTWEIGHT MATRIX INTERFACE
 interface BookMatrixItem {
@@ -34,6 +36,30 @@ interface BookMatrixItem {
 export class BookService {
   private static instance: BookService | null = null;
 
+  /**
+   * 🛡️ CENTRALIZED MATRIX TRANSFORMATION (V4.5)
+   * Strict type casting for all 9 Matrix fields - DRY Principle
+   */
+  private mapToBookMatrix(rawBooks: any[]): BookMatrixItem[] {
+    return rawBooks
+      .filter((book: any) => {
+        const localId = String(book.localId || book._id || book.cid);
+        return !!localId; // 🛡️ GUARD: Filter out invalid IDs
+      })
+      .map((book: any) => ({
+        localId: typeof book.localId === 'number' ? book.localId : Number(book.localId), // 🛡️ NUMBER GUARD: Always Number
+        userId: String(book.userId), // Ensure userId is captured in lightweight matrix
+        _id: String(book._id || book.cid), // 🆕 PRIORITY: Use server ID or CID for display
+        cid: String(book.cid), // 🆕 PRESERVE: Keep CID for reference
+        name: String(book.name || ''), // ✅ STRING GUARD
+        image: String(book.image || ''),      // ✅ RESTORED
+        mediaCid: String(book.mediaCid || ''), // ✅ RESTORED
+        isPinned: Number(book.isPinned || 0),
+        updatedAt: Number(book.updatedAt || 0),
+        cachedBalance: Number(book.cachedBalance || 0) // Will be calculated later
+      } as BookMatrixItem));
+  }
+
   private constructor() {}
 
   /**
@@ -50,18 +76,11 @@ export class BookService {
    * 🔄 REFRESH BOOKS WITH LIGHTWEIGHT MATRIX
    */
   async refreshBooks(get: any, set: any, source?: string): Promise<boolean> {
-    // 🛡️ IDENTITY SYNC: Get userId directly from identityManager
-    const userId = identityManager.getUserId();
+    // 🛡️ IDENTITY SYNC: Get userId directly from UserManager
+    const userId = await getSovereignId();
     if (!userId) {
       // 🆕 SELF-HEALING RETRY: Wait for identity to load instead of giving up
-      console.log("🔐 [IDENTITY RETRY] No userId found, retrying in 500ms...");
       setTimeout(() => get().refreshBooks('RETRY'), 500);
-      return false;
-    }
-    
-    // 🆕 COMPOUND QUERY VALIDATION: Only execute if userId is valid string
-    if (typeof userId !== 'string' || userId.length === 0) {
-      console.error("🔐 [IDENTITY ERROR] Invalid userId format:", userId);
       return false;
     }
     
@@ -72,60 +91,33 @@ export class BookService {
     }
     
     try {
-      // 🆕 DATA PROOF: Check real DB count before query
-      const realCount = await db.books.count();
-      console.log("📊 [DATA PROOF] Dexie count:", realCount, "userId:", userId);
-      
-      // 🆕 STEP A: Load lightweight matrix with TRIPLE COMPOUND INDEX
-      const lowerBound = [String(userId), 0, -Infinity];
-      const upperBound = [String(userId), 0, Infinity];
-      
-      // 🆕 DEBUG TRACE: Log query parameters
-      console.log("REFRESH QUERY PARAMS:", lowerBound, upperBound);
-      
+      // 🆕 STEP A: Load lightweight matrix with USER INDEX ONLY (V4.5 Simplified)
       let bookMatrix = await db.books
-        .where('[userId+isDeleted+updatedAt]')
-        .between(lowerBound, upperBound)
-        .reverse() // 🚀 Get newest records first at DB level
-        .toArray((books: any[]) => books.map((book: any) => {
-          const localId = String(book.localId || book._id || book.cid);
-          if (!localId) return null; // 🛡️ GUARD: Filter out invalid IDs
-          return {
-            localId: typeof book.localId === 'number' ? book.localId : Number(book.localId), // 🛡️ NUMBER GUARD: Always Number
-            userId: String(book.userId), // Ensure userId is captured in lightweight matrix
-            _id: String(book._id || book.cid), // 🆕 PRIORITY: Use server ID or CID for display
-            cid: String(book.cid), // 🆕 PRESERVE: Keep CID for reference
-            name: String(book.name || ''), // ✅ STRING GUARD
-            image: String(book.image || ''),      // ✅ RESTORED
-            mediaCid: String(book.mediaCid || ''), // ✅ RESTORED
-            isPinned: Number(book.isPinned || 0),
-            updatedAt: Number(book.updatedAt || 0),
-            cachedBalance: Number(book.cachedBalance || 0) // Will be calculated later
-          } as BookMatrixItem;
-        }).filter(Boolean))
-        .catch(async () => {
-          console.warn("🛡️ [RESCUE] Compound index corrupt, using fallback.");
-          return await db.books.where('userId').equals(String(userId)).and((b: any) => b.isDeleted === 0).toArray();
-        });
+        .where('userId')
+        .equals(String(userId))
+        .and((b: any) => b.isDeleted === 0)
+        .toArray((books: any[]) => this.mapToBookMatrix(books));
+
+      // 🆕 ACTIVITY SORT: Sort by updatedAt DESC to show most recent activity first
+      bookMatrix.sort((a: BookMatrixItem, b: BookMatrixItem) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
 
       // 🆕 RESILIENT FALLBACK: If compound index failed, try userId index
-      if (bookMatrix.length === 0 && realCount > 0) {
+      if (bookMatrix.length === 0) {
         const totalInDb = await db.books.where('userId').equals(String(userId)).count();
         if (totalInDb > 0) {
-          console.warn("⚠️ [RESCUE] Compound index failed. Falling back to userId index.");
+          console.warn("⚠️ [RESCUE] Primary query failed, using direct fallback.");
           bookMatrix = await db.books.where('userId').equals(String(userId)).and((b: any) => b.isDeleted === 0).reverse().sortBy('updatedAt');
           
-          // 🚨 THE MISSING LINK: Update the store so applyFiltersAndSort sees the data!
+          // �️ CENTRALIZED TRANSFORMATION: Apply matrix transformation to second fallback
+          bookMatrix = this.mapToBookMatrix(bookMatrix);
+          
+          // � THE MISSING LINK: Update the store so applyFiltersAndSort sees the data!
           set({ allBookIds: bookMatrix, totalBookCount: bookMatrix.length });
-          console.log("✅ [RESCUE SUCCESS] Matrix updated with fallback data:", bookMatrix.length);
+          // 🆕 RESCUE SUCCESS: Matrix updated with fallback data
         }
       }
 
-      // 🆕 DATA PROOF: Log matrix count and check for mismatch
-      console.log("📊 [DATA PROOF] Matrix count:", bookMatrix.length);
-      if (realCount > 0 && bookMatrix.length === 0) {
-        console.error("🚨 [CRITICAL] Index mismatch detected. Matrix is empty but DB has data!");
-      }
+      // 🆕 DATA PROOF: Check for index mismatch
 
       // ✅ RESTORE ENTRIES FOR BALANCE: Fetch fresh entries data
       const allEntries = await db.entries
@@ -137,14 +129,17 @@ export class BookService {
       
       set({ allEntries }); // ✅ RESTORE ENTRIES FOR BALANCE
 
-      // Store lightweight matrix in state
+      // ✅ MAIN STATE UPDATE: Always update store regardless of fallback path
       set({ 
         allBookIds: bookMatrix,
-        totalBookCount: bookMatrix.length // 🆕 Update total count for pagination UI
+        books: bookMatrix,          // ✅ Update source of truth
+        filteredBooks: bookMatrix,   // ✅ Update filter results
+        totalBookCount: bookMatrix.length
       });
 
-      // 🆕 RE-APPLY EXISTING FILTER: Pass bookMatrix directly to prevent state lag
-      get().applyFiltersAndSort();
+      // 🔄 After setting, immediately re-run sort to ensure 'Activity' order is preserved
+      // BUT DON'T call fetchPageChunk - it will destructively overwrite the books array
+      // get().applyFiltersAndSort(); // ❌ REMOVED: Prevents destructive overwrite
       
       return true;
     } catch (error) {
@@ -175,20 +170,13 @@ export class BookService {
       overrideMatrix : 
       (filteredBookMatrix.length > 0 ? filteredBookMatrix : allBookIds);
     
-    // 🆕 DISCOVERY LOGS
-    console.log("MATRIX STATUS:", { 
-      all: allBookIds.length, 
-      filtered: filteredBookMatrix.length, 
-      using: matrixToUse.length,
-      page,
-      source
-    });
+    // 🆕 MATRIX STATUS: Summary log for production
     
     // 🛡️ ATOMIC CACHE BUSTING: Only use cache for BACKGROUND_SYNC and INITIAL_BOOT
-    if (source !== 'SEARCH' && source !== 'DATA_CHANGE' && get().prefetchedChunks.has(page)) {
-      const cachedBooks = get().prefetchedChunks.get(page);
+    if (source !== 'SEARCH' && source !== 'DATA_CHANGE' && !!get().prefetchedChunks[page]) {
+      const cachedBooks = get().prefetchedChunks[page];
       set({ books: cachedBooks, filteredBooks: cachedBooks });
-      console.log(`⚡ INSTANT LOAD: Retrieved page ${page} from prefetch cache (${cachedBooks.length} books)`);
+      // 🆕 CACHE HIT: Page loaded from prefetch cache
       return; // ✅ INSTANT LOAD FROM CACHE
     }
     
@@ -213,7 +201,7 @@ export class BookService {
     }
     
     // 🆕 DISCOVERY LOGS
-    console.log("PAGE SLICE:", { startIndex, endIndex, idsCount: currentPageIds.length, sampleIds: currentPageIds.slice(0, 3) });
+    // 🆕 FETCH STATUS: Summary log for production
     
     try {
       // 🆕 STEP B: Fetch FULL objects including image fields
@@ -222,13 +210,14 @@ export class BookService {
         .anyOf(currentPageIds)
         .toArray();
       
-      // 🆕 DISCOVERY LOGS
-      console.log("DB FETCH RESULT:", fullBooks.length);
+      // 🆕 FETCH RESULT: Summary log for production
       
       // 🛡️ RACE CONDITION GUARD: Check again after async operation
       // 🆕 RELAXED ABORT: Only abort for SEARCH operations, allow INITIAL_BOOT, RETRY and BACKGROUND_SYNC
       if (source === 'SEARCH' && searchId !== get().lastSearchId) {
-        console.log("🛡️ ABORT: Newer search detected after DB fetch");
+      // 🆕 SEARCH ABORT: Newer search detected
+        // ✅ PROPER CLEANUP: Reset loading state to prevent spinner lock
+        set({ isRefreshing: false, isLoading: false, isInteractionLocked: false });
         return;
       }
       
@@ -239,7 +228,7 @@ export class BookService {
       
       // 🆕 MANUAL RE-SORT: Strict manual re-sort to match matrix order exactly
       let sortedBooks = currentPageIds.map((id: any) => 
-        fullBooks.find((book: any) => String(book.localId) === String(id))  // ✅ STRING conversion for BOTH sides
+        fullBooks.find((book: any) => String(book.localId) === String(id))  // ✅ BULLETPROOF: String conversion for BOTH sides
       ).filter(Boolean);
       
       // 🆕 RESCUE FALLBACK: Ensure user NEVER sees empty screen if DB returned data
@@ -249,12 +238,41 @@ export class BookService {
       }
       
       // Update state with SORTED objects - ONLY STATE WRITER
-      set({ 
-        books: sortedBooks,
-        filteredBooks: sortedBooks
-      });
+      // 🛡️ [MATRIX ENGINE LAW 2.B] fetchPageChunk must be an OBSERVER, not a DESTRUCTOR
+      if (source === 'ENTRY_ADDED' || source === 'BACKGROUND_SYNC') {
+        // ✅ INTELLIGENT MERGING: Only update the books that actually changed, preserve the rest
+        set((state: any) => ({
+          books: state.books.map((b: any) => {
+            const freshData = sortedBooks.find((sb: any) => String(sb._id || sb.localId) === String(b._id || b.localId));
+            return freshData ? { ...b, ...freshData } : b;
+          }),
+          filteredBooks: state.filteredBooks.map((b: any) => {
+            const freshData = sortedBooks.find((sb: any) => String(sb._id || sb.localId) === String(b._id || b.localId));
+            return freshData ? { ...b, ...freshData } : b;
+          })
+        }));
+      } else if (source === 'SEARCH') {
+        // 🔍 [SEARCH FIX] Update both books and filteredBooks with full objects
+        // filteredBooks needs full book objects for BooksList rendering
+        set({ 
+          books: sortedBooks,
+          filteredBooks: sortedBooks  // ✅ Set to full book objects for UI
+        });
+      } else if (source === 'PAGE_CHANGE' || source === 'INITIAL_BOOT') {
+        // ✅ FULL UPDATE: Only for page changes or initial boot
+        set({ 
+          books: sortedBooks, 
+          filteredBooks: sortedBooks 
+        });
+      } else {
+        // ✅ DEFAULT: Preserve existing behavior for other sources
+        set({ 
+          books: sortedBooks, 
+          filteredBooks: sortedBooks 
+        });
+      }
       
-      console.log("Chunk Fetched. Displaying:", sortedBooks.length, "items for search:", get().searchQuery, "source:", source);
+      // 🆕 CHUNK FETCH: Displaying results
     } catch (error) {
       console.error("❌ fetchPageChunk error:", error);
     } finally {
@@ -267,8 +285,12 @@ export class BookService {
    * 📚 SAVE BOOK
    */
   async saveBook(get: any, set: any, bookData: any, editTarget?: any): Promise<{ success: boolean; book?: any; error?: Error }> {
-    const userId = identityManager.getUserId();
-    if (!userId) return { success: false };
+    // 🛡️ IDENTITY GATE: Get sovereign ID from multiple sources
+    const userId = await getSovereignId();
+    console.log('🔍 [MUTATION_AUDIT] Attempting save. Sovereign ID:', userId);
+    if (!userId) {
+      throw new Error("No user ID available for local mutation");
+    }
     
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
     const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
@@ -296,8 +318,8 @@ export class BookService {
       const bookPayload = {
         ...bookData,
         _id: editTarget?._id || bookData?._id,
-        cid: editTarget?.cid || bookData?.cid || (await import('@/lib/offlineDB')).generateCID(),
-        userId: String(get().userId || identityManager.getUserId()),
+        cid: editTarget?.cid || bookData?.cid || generateCID(),
+        userId: String(userId), // 🛡️ SOVEREIGN IDENTITY: Direct from UserManager
         vKey: editTarget ? Number(editTarget.vKey || 0) + (hasImageChange ? 2 : 1) : 1, // 🚨 DOUBLE increment for image changes
         synced: 0,
         syncAttempts: 0, // ✅ Ensure initialization
@@ -306,17 +328,14 @@ export class BookService {
 
       if (!editTarget?.createdAt) bookPayload.createdAt = getTimestamp();
 
-      const { normalizeRecord } = await import('../core/VaultUtils');
       const normalized = normalizeRecord(bookPayload, String(userId));
       if (!normalized) {
         throw new Error('Failed to normalize book data');
       }
 
-      const { db } = await import('@/lib/offlineDB');
       let id: number = 0;
       
       // 🆕 SURGICAL FIX: Use HydrationController for atomic writes
-      const { HydrationController } = await import('../hydration/HydrationController');
       const controller = HydrationController.getInstance();
       
       const result = await controller.ingestLocalMutation('BOOK', [normalized]);
@@ -326,31 +345,60 @@ export class BookService {
       
       id = result.id || result.count || 0;
       
-      // : Update Main Array + Matrix + Count
-      const currentBooks = get().books;
       const newBook = { ...normalized, localId: id };
-      const updatedBooks = [newBook, ...currentBooks.filter((b: any) => String(b._id || b.localId) !== String(newBook._id || newBook.localId))];
-      const updatedMatrix: BookMatrixItem[] = [{ 
-        localId: newBook.localId, 
-        userId: newBook.userId,
-        _id: newBook._id, 
-        cid: newBook.cid, 
-        name: newBook.name, 
-        image: newBook.image || '',
-        mediaCid: newBook.mediaCid || '',
-        isPinned: newBook.isPinned || 0, 
-        updatedAt: newBook.updatedAt 
-      }, ...get().allBookIds.filter((b: BookMatrixItem) => String(b._id || b.localId) !== String(newBook._id || newBook.localId))];
-
-      set({ 
-        books: updatedBooks, 
-        allBookIds: updatedMatrix,
-        totalBookCount: updatedMatrix.length,
-        filteredBooks: updatedBooks // : Set filteredBooks immediately
-      });
       
-      // : Apply filters and sort immediately
-      get().applyFiltersAndSort();
+      // 🛡️ [PATHOR LOGIC] Matrix Preserving Update
+      const currentMatrix = get().allBookIds;
+      const bookExistsInMatrix = currentMatrix.some((b: BookMatrixItem) => String(b._id || b.localId) === String(newBook._id || newBook.localId));
+
+      let updatedMatrix: BookMatrixItem[];
+
+      if (bookExistsInMatrix) {
+          // ✅ Update ONLY the target book, preserve all others in their current order
+          updatedMatrix = currentMatrix.map((b: BookMatrixItem) => 
+              String(b._id || b.localId) === String(newBook._id || newBook.localId) 
+              ? { 
+                  localId: newBook.localId, 
+                  userId: newBook.userId,
+                  _id: newBook._id, 
+                  cid: newBook.cid, 
+                  name: newBook.name, 
+                  image: newBook.image || '',
+                  mediaCid: newBook.mediaCid || '',
+                  isPinned: newBook.isPinned || 0, 
+                  updatedAt: newBook.updatedAt,
+                  cachedBalance: newBook.cachedBalance || 0 // Update metadata
+                } 
+              : b
+          );
+      } else {
+          // ✅ If it's a brand new book, add it to the top
+          const newMatrixItem: BookMatrixItem = {
+              localId: newBook.localId, 
+              userId: newBook.userId,
+              _id: newBook._id, 
+              cid: newBook.cid, 
+              name: newBook.name, 
+              image: newBook.image || '',
+              mediaCid: newBook.mediaCid || '',
+              isPinned: newBook.isPinned || 0, 
+              updatedAt: newBook.updatedAt,
+              cachedBalance: newBook.cachedBalance || 0
+          };
+          updatedMatrix = [newMatrixItem, ...currentMatrix];
+      }
+
+      // 🎯 PATHOR ALIGNMENT: Update both Matrix AND UI Arrays
+      set({ 
+        allBookIds: updatedMatrix,
+        books: updatedMatrix, // ✅ RESTORE UI VISIBILITY
+        filteredBooks: updatedMatrix, // ✅ RESTORE UI VISIBILITY
+        totalBookCount: updatedMatrix.length
+      });
+
+      // �️ [PATHOR SILENCE] DON'T call applyFiltersAndSort - it triggers destructive fetchPageChunk
+      // Matrix is already updated, UI arrays are synchronized, no need for destructive refresh
+      // get().applyFiltersAndSort();
       
       // : Trigger sync for new books or non-image updates
       // 🆕 SAFE IGNITION: Trigger sync for new books or non-image updates
@@ -358,10 +406,6 @@ export class BookService {
       const hasNoImageChange = !bookData.image || !bookData.image.startsWith('cid_');
 
       // Sync will be triggered by HydrationController's vault-updated event
-      
-      // 🆕 SILENT SAVE: No sync trigger - let MediaStore handle it
-      // const { orchestrator } = await import('../core/SyncOrchestrator');
-      // orchestrator.triggerSync();
       
       return { success: true, book: { ...normalized, localId: id } };
     } catch (error) {
@@ -376,7 +420,7 @@ export class BookService {
    * 🗑️ DELETE BOOK
    */
   async deleteBook(get: any, set: any, book: any, router: any): Promise<{ success: boolean; error?: Error }> {
-    const userId = identityManager.getUserId();
+    const userId = await getSovereignId();
     if (!userId || !book?.localId) return { success: false };
     
     const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
@@ -440,7 +484,6 @@ export class BookService {
     }
     
     try {
-      const { HydrationController } = await import('../hydration/HydrationController');
       const controller = HydrationController.getInstance();
       
       const restorePayload = {
@@ -471,19 +514,15 @@ export class BookService {
    */
   async applyFiltersAndSort(get: any, set: any, matrixOverride?: BookMatrixItem[]): Promise<void> {
     const { allBookIds, searchQuery, sortOption } = get();
-    const userId = identityManager.getUserId();
+    const userId = await getSovereignId();
     
     // 🆕 DISCOVERY LOGS: Move to top to see matrix status even if empty
-    console.log("🔍 [FILTER SORT] Starting filter:", { 
-      allBookIds: allBookIds.length, 
-      searchQuery: searchQuery, 
-      sortOption,
-      userId: userId ? 'VALID' : 'NULL'
-    });
+    // 🆕 FILTER SORT: Starting filter operation
     
     // 🆕 IDENTITY VALIDATION: Ensure userId is available
     if (!userId) {
-      console.log("🔐 [FILTER SORT] No userId available, skipping filter");
+      // 🆕 SELF-HEALING RETRY: Wait for identity to load instead of giving up
+      setTimeout(() => get().refreshBooks('RETRY'), 500);
       return;
     }
     
@@ -499,21 +538,23 @@ export class BookService {
       ? matrix.filter((b: any) => (b.name || "").toLowerCase().includes(q))
       : [...matrix];
     
+    // 🛡️ CONFLICT GUARD: Filter out conflicted books from the main list
+    filtered = filtered.filter((b: any) => b.conflicted !== 1);
+    
     // 🆕 STEP C: Updated sort logic - Activity sort by updatedAt DESC
     if (sortOption === 'Activity') {
       filtered.sort((a: BookMatrixItem, b: BookMatrixItem) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
     }
 
-    // 🆕 STEP D: Update filtered matrix state and restore pagination count
-    set({ filteredBookMatrix: filtered, totalBookCount: filtered.length });
+    // 🆕 STEP D: Atomic state update to prevent UI thrashing
+    set({ 
+      filteredBookMatrix: filtered, 
+      filteredBooks: filtered,
+      totalBookCount: filtered.length 
+    });
 
-    // 🆕 STEP E: EMPTY STATE HANDLING
-    if (filtered.length === 0) {
-      set({ books: [], filteredBooks: [] });
-      return; // 🚨 EARLY RETURN - Don't call fetchPageChunk
-    }
-
-    // 🆕 STEP F: TRIGGER CHUNK FETCH - ONLY WAY UI receives new sorted/filtered data
+    // � Now trigger the chunk fetch to hydrate these books with full objects
+    // fetchPageChunk will update filteredBooks with the full book objects
     await get().fetchPageChunk(1, filtered, 'SEARCH', currentId);
   }
 
@@ -527,7 +568,6 @@ export class BookService {
     }
     
     // 🚀 HYDRATE: Find full book in Dexie to get its _id and cid
-    const { db } = await import('@/lib/offlineDB');
     const fullBook = await db.books.get(book.localId) || book;
     
     // 🛡️ IDENTITY BLACK HOLE FIX: Never set activeBook to undefined/incomplete
@@ -550,6 +590,17 @@ export class BookService {
   async resurrectBookChain(get: any, bookCid: string): Promise<{ success: boolean; error?: Error }> {
     try {
       
+      // 🔐 SECURITY GUARD: Validate sync access before resurrection
+      const guardResult = await SyncGuard.validateSyncAccess({
+        serviceName: 'SyncOrchestrator', // Use allowed service name
+        onError: (msg: string) => console.warn(`🔒 [BOOK SERVICE] ${msg}`),
+        returnError: (msg: string) => ({ success: false, error: new Error(msg) })
+      });
+      if (!guardResult.valid) {
+        console.warn('🔒 [BOOK SERVICE] Book resurrection blocked by security guard');
+        return { success: false, error: new Error('Security guard blocked resurrection') };
+      }
+      
       // 🎯 STEP 1: FIND THE BOOK
       const book = await db.books.where('cid').equals(bookCid).first();
       if (!book) {
@@ -560,7 +611,7 @@ export class BookService {
       const resurrectedBook = {
         ...book,
         _id: undefined, // Remove server ID
-        vKey: (book.vKey || 0) + 100, // 🛡️ VKEY UPGRADE: +100 ensures override of any server drift
+        vKey: (book.vKey || 0) + 1, // 🎯 SMART VKEY: Increment by 1 instead of +100 hack
         synced: 0, // Mark as unsynced
         conflicted: 0, // Clear conflict
         conflictReason: '', // Clear conflict reason
@@ -569,7 +620,6 @@ export class BookService {
       };
       
       // 🎯 STEP 3: UPDATE BOOK AND ENTRIES IN SINGLE TRANSACTION
-      const { HydrationController } = await import('../hydration/HydrationController');
       const controller = HydrationController.getInstance();
       
       // Update the book first
@@ -589,7 +639,7 @@ export class BookService {
         const entryUpdates = allEntries.map((entry: LocalEntry) => ({
           ...entry,
           synced: 0, // Mark as unsynced
-          vKey: (entry.vKey || 0) + 100, // 🛡️ VKEY UPGRADE: +100 for entries too
+          vKey: (entry.vKey || 0) + 1, // 🎯 SMART VKEY: Increment by 1 instead of +100 hack
           updatedAt: getTimestamp()
         }));
         
@@ -626,8 +676,9 @@ export class BookService {
     const state = get();
     const { allBookIds } = state;
     
-    // Find and update the specific book in matrix
-    const updatedMatrix = allBookIds.map((item: BookMatrixItem) => {
+    // 🆕 ATOMIC MATRIX UPDATE: Get latest state to prevent race conditions
+    const currentMatrix = get().allBookIds;
+    const updatedMatrix = currentMatrix.map((item: BookMatrixItem) => {
       if (String(item.localId) === bookId) {
         return {
           ...item,
@@ -643,10 +694,11 @@ export class BookService {
     // 🛡️ ATOMIC CACHE BUSTING: Clear prefetched chunks to force fresh fetch
     set({ prefetchedChunks: new Map() });
     
-    // 🆕 UNIFIED PIPELINE: Call applyFiltersAndSort directly with updated matrix
-    await get().applyFiltersAndSort(updatedMatrix);
+    // 🛡️ [PATHOR SILENCE] DON'T call applyFiltersAndSort - it triggers destructive fetchPageChunk
+    // FinanceService already calls refreshBooks, so this extra call is unnecessary and harmful
+    // await get().applyFiltersAndSort(updatedMatrix); // ❌ REMOVED: Prevents destructive overwrite
     
-    console.log('⚡ [RE-SYNC] Matrix and UI Aligned');
+    // 🆕 MATRIX SYNC: Updated only - UI handled by refreshBooks
   }
 
   /**
@@ -657,7 +709,7 @@ export class BookService {
     const { prefetchedEntriesCache } = state;
     
     // Check if entries for this book are already cached
-    if (prefetchedEntriesCache.has(bookId)) {
+    if (!!prefetchedEntriesCache[bookId]) {
       return;
     }
     
@@ -670,11 +722,11 @@ export class BookService {
         .toArray();
       
       // 🆕 CACHE STORAGE: Store in prefetched entries cache
-      const newPrefetchedEntriesCache = new Map(prefetchedEntriesCache);
-      newPrefetchedEntriesCache.set(bookId, bookEntries);
+      const newPrefetchedEntriesCache = { ...prefetchedEntriesCache };
+      newPrefetchedEntriesCache[bookId] = bookEntries;
       set({ prefetchedEntriesCache: newPrefetchedEntriesCache });
       
-      console.log(`🚀 Prefetched ${bookEntries.length} entries for book ${bookId}`);
+      // 🆕 ENTRIES PREFETCH: Cached for book
     } catch (error) {
       console.error('❌ Entry prefetch failed:', error);
     }
@@ -688,7 +740,7 @@ export class BookService {
     const { filteredBookMatrix, isMobile, prefetchedChunks } = state;
     
     // Check if already cached
-    if (prefetchedChunks.has(page)) {
+    if (!!prefetchedChunks[page]) {
       return;
     }
     
@@ -721,11 +773,11 @@ export class BookService {
       ).filter(Boolean);
       
       // Update prefetched chunks cache
-      const newPrefetchedChunks = new Map(prefetchedChunks);
-      newPrefetchedChunks.set(page, sortedBooks);
+      const newPrefetchedChunks = { ...prefetchedChunks };
+      newPrefetchedChunks[page] = sortedBooks;
       set({ prefetchedChunks: newPrefetchedChunks });
       
-      console.log(`🚀 Prefetched page ${page} with ${sortedBooks.length} books`);
+      // 🆕 PAGE PREFETCH: Cached for future access
     } catch (error) {
       console.error('❌ Prefetch failed:', error);
     }
@@ -778,7 +830,7 @@ export class BookService {
         localId: book.localId,
         cid: book.cid,
         name: book.name || 'Deleted Ledger', // ✅ MANDATORY for Validator
-        userId: String(userId || get().userId || book.userId || ''),
+        userId: String(userId), // 🛡️ SOVEREIGN IDENTITY: Direct from parameter
         isDeleted: 1,
         synced: 0,
         vKey: Number(book.vKey || 0) + 1,

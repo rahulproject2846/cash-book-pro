@@ -1,7 +1,7 @@
 "use client";
 
 import { db } from '@/lib/offlineDB';
-import { identityManager } from '../core/IdentityManager';
+import { UserManager } from '../core/user/UserManager';
 
 /**
  * 🧹 MEDIA STORE GARBAGE COLLECTOR - Production Ready Cleanup
@@ -27,7 +27,14 @@ export class MediaStoreGarbageCollector {
    * Remove blobs not referenced by any book for 30+ days
    */
   async cleanupOrphanedBlobs(): Promise<{ cleaned: number; freedSpace: number }> {
-    console.log('🧹 [GARBAGE COLLECTOR] Starting orphaned blob cleanup...');
+    // 🛡️ DATABASE READINESS CHECK: Ensure mediaStore table exists before operations
+    try {
+      await db.open(); // Ensure database is fully initialized
+      console.log('🧹 [GARBAGE COLLECTOR] Starting orphaned blob cleanup...');
+    } catch (error) {
+      console.error('🚨 [GARBAGE COLLECTOR] Database not ready:', error);
+      return { cleaned: 0, freedSpace: 0 };
+    }
     
     const cutoffDate = Date.now() - (this.ORPHANED_DAYS * 24 * 60 * 60 * 1000);
     
@@ -40,7 +47,8 @@ export class MediaStoreGarbageCollector {
     let cleaned = 0;
     let freedSpace = 0;
     
-    console.log(`🔍 [GARBAGE COLLECTOR] Found ${oldBlobs.length} blobs older than ${this.ORPHANED_DAYS} days`);
+    // 🧹 [GARBAGE COLLECTOR] Found ${oldBlobs.length} blobs older than ${this.ORPHANED_DAYS} days - Silenced for production
+    // console.log(`🔍 [GARBAGE COLLECTOR] Found ${oldBlobs.length} blobs older than ${this.ORPHANED_DAYS} days`);
     
     // Process in batches to avoid blocking
     for (let i = 0; i < oldBlobs.length; i += this.BATCH_SIZE) {
@@ -62,7 +70,8 @@ export class MediaStoreGarbageCollector {
             cleaned++;
             freedSpace += blob.compressedSize || 0;
             
-            console.log(`🧹 [GARBAGE COLLECTOR] Deleted orphaned blob: ${blob.cid} (${((blob.compressedSize || 0) / 1024).toFixed(2)}KB)`);
+            // 🧹 [GARBAGE COLLECTOR] Deleted orphaned blob - Silenced for production
+            // console.log(`🧹 [GARBAGE COLLECTOR] Deleted orphaned blob: ${blob.cid} (${((blob.compressedSize || 0) / 1024).toFixed(2)}KB)`);
           }
         } catch (error) {
           console.error(`❌ [GARBAGE COLLECTOR] Error processing blob ${blob.cid}:`, error);
@@ -75,7 +84,8 @@ export class MediaStoreGarbageCollector {
       }
     }
     
-    console.log(`✅ [GARBAGE COLLECTOR] Orphaned cleanup: ${cleaned} blobs freed, ${(freedSpace / 1024 / 1024).toFixed(2)}MB recovered`);
+    // ✅ [GARBAGE COLLECTOR] Orphaned cleanup complete - Silenced for production
+    // console.log(`✅ [GARBAGE COLLECTOR] Orphaned cleanup: ${cleaned} blobs freed, ${(freedSpace / 1024 / 1024).toFixed(2)}MB recovered`);
     
     return { cleaned, freedSpace };
   }
@@ -85,7 +95,8 @@ export class MediaStoreGarbageCollector {
    * Remove blobs that failed to upload for 7+ days
    */
   async cleanupFailedUploads(): Promise<{ cleaned: number; freedSpace: number }> {
-    console.log('🧹 [GARBAGE COLLECTOR] Starting failed upload cleanup...');
+    // 🧹 [GARBAGE COLLECTOR] Starting failed upload cleanup - Silenced for production
+    // console.log('🧹 [GARBAGE COLLECTOR] Starting failed upload cleanup...');
     
     const cutoffDate = Date.now() - (this.FAILED_DAYS * 24 * 60 * 60 * 1000);
     
@@ -121,8 +132,6 @@ export class MediaStoreGarbageCollector {
         await new Promise(resolve => setTimeout(resolve, 10));
       }
     }
-    
-    console.log(`✅ [GARBAGE COLLECTOR] Failed cleanup: ${cleaned} blobs freed, ${(freedSpace / 1024 / 1024).toFixed(2)}MB recovered`);
     
     return { cleaned, freedSpace };
   }

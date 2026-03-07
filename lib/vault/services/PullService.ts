@@ -1,13 +1,12 @@
 "use client";
 
 import { db } from '@/lib/offlineDB';
-import { identityManager } from '../core/IdentityManager';
 import { normalizeRecord, validateCompleteness } from '../core/VaultUtils';
 import { getTimestamp } from '@/lib/shared/utils';
 import { validateBook, validateEntry } from '../core/schemas';
 import { getVaultStore } from '../store/storeHelper';
 import { LicenseVault, RiskManager } from '../security';
-import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../utils/security';
+import { SecureApiClient } from '../utils/SecureApiClient';
 import { SyncGuard } from '../guards/SyncGuard';
 
 // 🛡️ API PATH MAPPING - Prevent pluralization typos
@@ -39,7 +38,7 @@ class SmartBatchProcessor<T> {
       
       if (jsonSize > this.LARGE_PAYLOAD_THRESHOLD) {
         // 📦 SINGLE-ITEM BATCH: Large payload (likely image)
-        console.log(`📦 [SMART BATCH] Large payload detected (${jsonSize} bytes), creating single-item batch`);
+        // console.log(`📦 [SMART BATCH] Large payload detected (${jsonSize} bytes), creating single-item batch`); // SILENT_MODE
         batches.push([item]);
       } else {
         // 📦 NORMAL BATCHING: Group small items together
@@ -142,7 +141,8 @@ class SyncProgressTracker {
         eta: estimatedRemaining / 1000
       });
       
-      console.log(`📊 [PULL PROGRESS] Batch ${batchNumber} - ${this.processedItems}/${this.totalItems} (${progress.toFixed(1)}%) - Est. remaining: ${(estimatedRemaining/1000).toFixed(1)}s`);
+      // 📊 BATCH PROGRESS: Silenced for production - only summary logged
+      // console.log(`📊 [PULL PROGRESS] Batch ${batchNumber} - ${this.processedItems}/${this.totalItems} (${progress.toFixed(1)}%) - Est. remaining: ${(estimatedRemaining/1000).toFixed(1)}s`);
     }
   }
 
@@ -183,7 +183,35 @@ class SyncProgressTracker {
  */
 export class PullService {
   private userId: string = '';
-  private isPulling = false;
+  private isPulling: boolean = false;
+  private pullStartTime: number = 0;
+  
+  // 🔒 PULL LOCKING SYSTEM: Prevent concurrent writes to same record
+  private static pullLocks = new Set<string>();
+  
+  /**
+   * 🔒 ACQUIRE LOCK
+   * Attempts to acquire a lock for a specific record ID
+   * @param id - The record ID to lock
+   * @returns boolean - True if lock acquired, false if already locked
+   */
+  private static acquireLock(id: string): boolean {
+    if (this.pullLocks.has(id)) {
+      return false; // Already locked
+    }
+    this.pullLocks.add(id);
+    return true;
+  }
+  
+  /**
+   * 🔒 RELEASE LOCK
+   * Releases a lock for a specific record ID
+   * @param id - The record ID to unlock
+   */
+  private static releaseLock(id: string): void {
+    this.pullLocks.delete(id);
+  }
+
   private batchProcessor = new SmartBatchProcessor<any>();
   private _progressTracker = new SyncProgressTracker();
 
@@ -208,7 +236,14 @@ export class PullService {
         return { valid: false, error: 'User in lockdown' };
       }
 
-      const signatureValid = await LicenseVault.verifySignature(user);
+      let signatureValid = false;
+      try {
+        signatureValid = await LicenseVault.verifySignature(user);
+      } catch (cryptoError) {
+        console.error('🔐 [PULL SERVICE] Crypto API error during signature verification:', cryptoError);
+        return { valid: false, error: 'Cryptographic verification failed' };
+      }
+      
       if (!signatureValid) {
         return { valid: false, error: 'License signature invalid' };
       }
@@ -225,7 +260,8 @@ export class PullService {
   private async verifyTelemetryIntegrity(maxRetries: number = 3): Promise<{ valid: boolean; error?: string }> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const user = await db.users.where('userId').equals(this.userId).first();
+        const { UserManager } = await import('../core/user/UserManager');
+      const user = await db.users.where('userId').equals(UserManager.getInstance().getUserId() || '').first();
         if (user) {
           // Success - user found, proceed with security checks
           return await this.performSecurityChecks(user);
@@ -332,9 +368,10 @@ export class PullService {
     try {
       console.log('🧑 [PULL SERVICE] Fetching user settings from server...');
       
-      const response = await this.signedFetch(`/api/user/profile?userId=${encodeURIComponent(this.userId)}`, {
+      const { UserManager } = await import('../core/user/UserManager');
+      const response = await SecureApiClient.signedFetch(`/api/user/profile?userId=${encodeURIComponent(UserManager.getInstance().getUserId() || '')}`, {
         method: 'GET'
-      });
+      }, 'PullService');
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -407,11 +444,14 @@ export class PullService {
     let previousFailed = false;
 
     try {
-      // 🔄 START FROM BEGINNING: Simplified pull without checkpoints
-      let offset = 0;
-      let lastSequence = 0;
+      // 🔄 CHECKPOINT RESUME: Read syncPoints to avoid full fetch
+      const { db } = await import('@/lib/offlineDB');
+      const checkpoint = await db.syncPoints.where('type').equals('books').and((item: any) => item.userId === this.userId).first();
+      let lastSequence = checkpoint?.lastSequence || 0;
       
-      console.log('🚀 [BATCH PULL SERVICE] Starting books pull from offset:', offset);
+      let offset = 0;
+      
+      console.log('🚀 [BATCH PULL SERVICE] Starting books pull from sequence:', lastSequence);
       
       let hasMore = true;
       // 🔄 BATCH PROCESSING WITH ADAPTIVE THROTTLING
@@ -426,18 +466,26 @@ export class PullService {
       
       while (hasMore && batchIndex < maxLoopCount) {
         batchIndex++;
-        console.log(`🚀 [BATCH PULL SERVICE] Processing book batch ${batchIndex} from offset ${offset}`);
+        // 🚀 BATCH PROCESSING: Silenced for production - only summary logged
+        // console.log(`🚀 [BATCH PULL SERVICE] Processing book batch ${batchIndex} from offset ${offset}`);
         
         const batchStartTime = Date.now();
         let batchSuccess = true;
         
         try {
-          // 🎯 BATCHED NETWORK REQUEST (not local batching)
-          const response = await this.signedFetch(
-            `/api/books?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}`,
-            { method: 'GET' }
+          // 🎯 BULK FETCH: Single large fetch to kill API storm
+          const response = await SecureApiClient.signedFetch(
+            `/api/books?userId=${encodeURIComponent(this.userId)}&limit=1000&offset=0&sequenceAfter=${lastSequence}`,
+            { method: 'GET' },
+            'PullService'
           );
           
+          if (response.status === 404) {
+            console.warn('⚠️ [PULL SERVICE] End of data stream (404), stopping pull');
+            hasMore = false;
+            break; // End of data, not an error
+          }
+
           if (!response.ok) {
             throw new Error(`Server response: ${response.status}`);
           }
@@ -449,19 +497,16 @@ export class PullService {
           if (isFirstBatch && batch.total) {
             totalItems = batch.total;
             this._progressTracker.start(totalItems);
-            console.log(` [PULL SERVICE] Server reports ${totalItems} total books`);
             isFirstBatch = false;
           } else if (isFirstBatch) {
             // Fallback: Estimate from first batch if no total provided
             totalItems = books.length < 20 ? books.length : 1000; // Safer estimate
             this._progressTracker.start(totalItems);
-            console.log(` [PULL SERVICE] No total field, estimating ${totalItems} books`);
             isFirstBatch = false;
           }
           
           if (books.length === 0) {
             consecutiveEmptyBatches++;
-            console.warn(` [PULL SERVICE] Empty batch ${batchIndex} - consecutive empties: ${consecutiveEmptyBatches}`);
             
             // MAX-TRY GUARD: Stop after 3 consecutive empty batches
             if (consecutiveEmptyBatches >= 3) {
@@ -486,12 +531,19 @@ export class PullService {
             consecutiveEmptyBatches = 0; // Reset counter on successful batch
           }
           
+          // 🎯 KILL INFINITE PULL: Strict termination when books < 20
+          if (books.length < 20) {
+            hasMore = false;
+            // console.log(` [PULL SERVICE] Termination: books.length (${books.length}) < 20, stopping pull`); // SILENT_MODE
+            break;
+          }
+          
           // SEQUENCE NUMBER VERIFICATION
           const validBooks = books.filter((book: any) => 
-            book.sequenceNumber > lastSequence
+            lastSequence === 0 ? true : book.sequenceNumber > lastSequence
           );
           
-          console.log(` [BATCH PULL SERVICE] Retrieved ${books.length} books, ${validBooks.length} valid after sequence check`);
+          // console.log(` [BATCH PULL SERVICE] Retrieved ${books.length} books, ${validBooks.length} valid after sequence check`); // SILENT_MODE
           
           // INVALID BATCH GUARD: Stop if we get valid=0 but books>0 for 3 consecutive batches
           if (validBooks.length === 0 && books.length > 0) {
@@ -515,44 +567,51 @@ export class PullService {
             consecutiveInvalidBatches = 0; // Reset counter on valid batch
           }
           
-          // COMMIT BATCH - ATOMIC TRANSACTION WITH QUOTA SAFETY
+          // COMMIT BATCH - SINGLE TRANSACTION FOR 1000 RECORDS
           try {
-            await db.transaction('rw', db.books, db.syncPoints, async () => {
+            // Surround the loop with ONE transaction
+            await db.transaction('rw', [db.books, db.syncPoints], async () => {
               for (const book of validBooks) {
                 try {
                   // SAFETY GUARD: Validate completeness before storing
-                  // � [AUDIT] Log server payload to see what we're getting
+                  //  [AUDIT] Log server payload to see what we're getting
                   console.log('📡 [PULL PAYLOAD]', { id: book._id, image: book.image, mediaCid: book.mediaCid, localId: book.localId });
                   
-                  // �🛡️ SAFETY GUARD: Validate completeness before storing
+                  // SOFT VALIDATION: Accept server data, fix missing fields locally
                   const validation = validateCompleteness(book, 'book');
                   if (!validation.isValid) {
-                    errors.push(`Book ${book.cid} validation failed: ${validation.missingFields.join(', ')}`);
-                    batchSuccess = false;
-                    continue;
+                    console.warn(`⚠️ [SOFT VALIDATION] Book ${book.cid} incomplete, fixing missing fields: ${validation.missingFields.join(', ')}`);
+                    // RESCUE: Inject missing fields instead of rejecting
+                    if (validation.missingFields.includes('isPinned')) book.isPinned = 0;
+                    if (validation.missingFields.includes('mediaCid')) book.mediaCid = '';
+                    if (validation.missingFields.includes('image')) book.image = '';
+                    // Continue processing - don't skip entire record
                   }
                   
                   const result = await this.commitSingleBook(book);
-                  if (result.success) {
-                    processed++;
+                  if (result.success && result.localId) {
+                    // 🛡️ DNA Law 2.A: Triple-Link ID usage
+                    const bookLocalId = String(result.localId);
                     
-                    // 🌐 BACKGROUND MEDIA DOWNLOAD: Use saved record with localId
-                    const savedBook = await db.books.where('cid').equals(book.cid).first();
-                    if (savedBook?.image && savedBook.image.startsWith('http') && savedBook.localId) {
-                      this.hydrateMissingMedia(savedBook.image, savedBook.localId).catch(error => {
-                        console.warn(`⚠️ [PULL SERVICE] Background media download failed for book ${savedBook.localId}:`, error);
+                    // 🛡️ [PATHOR LOGIC] Fetch the CLEAN record from Dexie to get the correctly mapped fields
+                    const storedRecord = await db.books.get(result.localId);
+                    
+                    // Only call downloader if we have a real HTTP URL and no CID locally
+                    if (storedRecord?.image?.startsWith('http') && !storedRecord?.mediaCid) {
+                      console.log(`🚀 [SYNC] Triggering media resolution for ID: ${bookLocalId}`);
+                      // No need to await, let it run in background
+                      this.hydrateMissingMedia(storedRecord.image, bookLocalId).catch(error => {
+                        console.warn(`⚠️ [PULL SERVICE] Background media download failed for book ${bookLocalId}:`, error);
                       });
                     } else {
-                      console.warn('🚫 [PULL SERVICE] Media download blocked - missing data:', {
-                        hasImage: !!savedBook?.image,
-                        isHttp: savedBook?.image?.startsWith('http'),
-                        hasLocalId: !!savedBook?.localId,
-                        bookId: savedBook?.localId
-                      });
+                      console.log(`ℹ️ [PULL SERVICE] Skipping download for book ${bookLocalId}: Media already CID-mapped or no URL.`);
                     }
                   } else {
-                    errors.push(result.error || `Failed to commit book ${book.cid}`);
-                    batchSuccess = false;
+                    // 🛡️ ONLY COUNT AS FAILURE IF ACTUAL ERROR EXISTS
+                    if (!result.success && result.error) {
+                      errors.push(result.error || `Failed to commit book ${book.cid}`);
+                      batchSuccess = false;
+                    }
                   }
                 } catch (error) {
                   errors.push(`Book ${book.cid} commit failed: ${error}`);
@@ -565,6 +624,10 @@ export class PullService {
                 const maxSequence = Math.max(...validBooks.map((b: any) => b.sequenceNumber || 0));
                 console.log(`✅ [BATCH PULL SERVICE] Processed batch ${batchIndex} with ${validBooks.length} books, max sequence: ${maxSequence}`);
                 lastSequence = maxSequence;
+                processed += validBooks.length; // 🛡️ CRITICAL: Increment processed counter
+                
+                // 🎯 UPDATE SYNC PROGRESS: Reflect 1000-item jump
+                this._progressTracker.updateBatch(batchIndex, validBooks.length);
               }
             });
           } catch (error: any) {
@@ -591,17 +654,20 @@ export class PullService {
             await new Promise(resolve => setTimeout(resolve, delay));
           }
           
-          // 🔄 UPDATE OFFSET: Only increment if we have valid data or need more
-          if (validBooks.length > 0) {
-            offset += validBooks.length; // Use valid count, not total response count
-          } else {
-            offset += books.length; // Fallback to response count if no valid books
+          // 🔄 UPDATE OFFSET: Single bulk fetch - no pagination needed
+          offset += books.length;
+          
+          // 🔍 CHECK COMPLETION: Single bulk fetch completion
+          if (books.length < 1000 || offset >= totalItems) {
+            hasMore = false;
+            console.log(`🏁 [PULL] Bulk fetch complete. Retrieved: ${books.length}, Total: ${totalItems}`);
           }
           
-          // 🔍 CHECK COMPLETION: Multiple termination conditions
-          if (books.length < 20 || batch.isComplete || validBooks.length === 0) {
-            hasMore = false;
-            console.log(`🏁 [PULL SERVICE] Books pull complete - less than full batch (${books.length}) or completion flag set`);
+          // 🎯 UPDATE SEQUENCE: Update lastSequence with highest found in batch
+          if (validBooks.length > 0) {
+            const maxSequence = Math.max(...validBooks.map((b: any) => b.sequenceNumber || 0));
+            lastSequence = maxSequence;
+            console.log(`✅ [PULL SERVICE] Updated lastSequence: ${maxSequence}`);
           }
           
           this._progressTracker.updateBatch(batchIndex, validBooks.length);
@@ -662,11 +728,11 @@ export class PullService {
         let batchSuccess = true;
         
         try {
-          // 🎯 BATCHED NETWORK REQUEST (not local batching)
-          // 🚨 FORCE FULL SYNC: Hardcode since parameter to '0' to get all entries
-          const response = await this.signedFetch(
-            `/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=20&offset=${offset}&sequenceAfter=${lastSequence}&since=0`,
-            { method: 'GET' }
+          // 🎯 BULK FETCH: Single large fetch to kill API storm
+          const response = await SecureApiClient.signedFetch(
+            `/api/entries/all?userId=${encodeURIComponent(this.userId)}&limit=1000&offset=0&sequenceAfter=${lastSequence}&since=0`,
+            { method: 'GET' },
+            'PullService'
           );
           
           if (!response.ok) {
@@ -719,7 +785,7 @@ export class PullService {
           
           // 🛡️ SEQUENCE NUMBER VERIFICATION
           const validEntries = entries.filter((entry: any) => 
-            entry.sequenceNumber > lastSequence
+            lastSequence === 0 ? true : entry.sequenceNumber > lastSequence
           );
           
           console.log(`🚀 [BATCH PULL SERVICE] Retrieved ${entries.length} entries, ${validEntries.length} valid after sequence check`);
@@ -748,15 +814,19 @@ export class PullService {
           
           // 🔄 COMMIT BATCH - ATOMIC TRANSACTION WITH QUOTA SAFETY
           try {
-            await db.transaction('rw', db.entries, db.syncPoints, async () => {
+            // 🛡️ [PATHOR LOGIC] Atomic Entry Batch Commit
+            await db.transaction('rw', [db.entries, db.mediaStore, db.syncPoints], async () => {
               for (const entry of validEntries) {
                 try {
-                  // 🛡️ SAFETY GUARD: Validate completeness before storing
+                  // 🛡️ SOFT VALIDATION: Accept server data, fix missing fields locally
                   const validation = validateCompleteness(entry, 'entry');
                   if (!validation.isValid) {
-                    errors.push(`Entry ${entry.cid} validation failed: ${validation.missingFields.join(', ')}`);
-                    batchSuccess = false;
-                    continue;
+                    console.warn(`⚠️ [SOFT VALIDATION] Entry ${entry.cid} incomplete, fixing missing fields: ${validation.missingFields.join(', ')}`);
+                    // 🚨 RESCUE: Inject missing fields instead of rejecting
+                    if (validation.missingFields.includes('isPinned')) entry.isPinned = 0;
+                    if (validation.missingFields.includes('mediaCid')) entry.mediaCid = '';
+                    if (validation.missingFields.includes('image')) entry.image = '';
+                    // Continue processing - don't skip entire record
                   }
                   
                   const result = await this.commitSingleEntry(entry);
@@ -803,17 +873,38 @@ export class PullService {
             await new Promise(resolve => setTimeout(resolve, delay));
           }
           
-          // 🔄 UPDATE OFFSET: Only increment if we have valid data or need more
-          if (validEntries.length > 0) {
-            offset += validEntries.length; // Use valid count, not total response count
-          } else {
-            offset += entries.length; // Fallback to response count if no valid entries
+          // 🔄 UPDATE OFFSET: Single bulk fetch - no pagination needed
+          offset += entries.length;
+          
+          // 🔍 CHECK COMPLETION: Single bulk fetch completion
+          if (entries.length < 1000 || offset >= totalItems) {
+            hasMore = false;
+            console.log(`🏁 [PULL] Entry bulk fetch complete. Retrieved: ${entries.length}, Total: ${totalItems}`);
           }
           
-          // 🔍 CHECK COMPLETION: Multiple termination conditions
-          if (entries.length < 20 || batch.isComplete || validEntries.length === 0) {
-            hasMore = false;
-            console.log(`🏁 [PULL SERVICE] Entries pull complete - less than full batch (${entries.length}) or completion flag set`);
+          // 🎯 UPDATE SEQUENCE: Update lastSequence with highest found in batch
+          if (validEntries.length > 0) {
+            const maxSeq = Math.max(...validEntries.map((e: any) => e.sequenceNumber || 0), 0);
+            lastSequence = maxSeq;
+            console.log(`✅ [PULL SERVICE] Updated lastSequence: ${maxSeq}`);
+          }
+          
+          // 🎯 PERSIST CHECKPOINT: Save checkpoint from validEntries only
+          if (validEntries.length > 0) {
+            const maxSeq = Math.max(...validEntries.map((e: any) => e.sequenceNumber || 0), 0);
+            lastSequence = maxSeq;
+            console.log(`✅ [PULL SERVICE] Updated lastSequence: ${maxSeq}`);
+          }
+          
+          // 🎯 PERSIST CHECKPOINT: Save checkpoint from validEntries only
+          if (validEntries.length > 0) {
+            await db.syncPoints.put({
+              userId: this.userId,
+              type: 'entries',
+              lastSequence: lastSequence,
+              timestamp: Date.now()
+            });
+            console.log(`✅ [PULL SERVICE] Checkpoint saved - lastSequence: ${lastSequence}`);
           }
           
           this._progressTracker.updateBatch(batchIndex, validEntries.length);
@@ -841,14 +932,28 @@ export class PullService {
   /**
    * 📚 COMMIT SINGLE BOOK
    */
-  private async commitSingleBook(book: any): Promise<{ success: boolean; error?: string }> {
+  private async commitSingleBook(book: any): Promise<{ success: boolean; localId?: number; error?: string }> {
+    // 🔒 PULL LOCK: Prevent concurrent writes to same record
+    if (!PullService.acquireLock(book.cid)) {
+      console.log(`🔒 [PULL SERVICE] Book ${book.cid} is being processed by another thread, skipping...`);
+      return { success: true }; // Assume another process is handling it
+    }
+    
     try {
-      // 🛡️ SCHEMA GUARD: Validate server data before storing
-      const validationResult = validateBook(book);
+      // 1. Normalize and Enrich FIRST
+      const normalized = normalizeRecord({
+        ...book,
+        userId: String(this.userId),
+        synced: 1, // Server data is synced
+        isDeleted: book.isDeleted || 0,
+        updatedAt: Number(book.updatedAt) || Date.now() // �️ DNA LAW V4.0: Force Number type
+      }, this.userId);
+
+      // 2. SOFT VALIDATION: Accept server data, log warnings only
+      const validationResult = validateBook(normalized);
       if (!validationResult.success) {
-        const errorMsg = `🚨 [PULL VALIDATOR] Server book data corruption blocked for ID: ${book.cid}. ${validationResult.error}`;
-        console.error(errorMsg, { book });
-        return { success: false, error: errorMsg };
+        console.warn(`⚠️ [SOFT VALIDATION] Book ${book.cid} has validation issues, but accepting server data: ${validationResult.error}`);
+        // Continue processing - don't reject entire record
       }
 
       // 🔍 CHECK-BEFORE-PUT: Check if local record exists
@@ -861,23 +966,53 @@ export class PullService {
       }
       
       // 🛡️ TIMESTAMP CONFLICT GUARD: Only overwrite if server is strictly newer
-      if (existing && existing.synced === 1) {
+      // 🚨 CRITICAL FIX: Force server truth during DATA_HYDRATION
+      const store = getVaultStore();
+      const isDataHydration = store.bootStatus === 'DATA_HYDRATION';
+      
+      // 🚨 NUCLEAR DATA RECOVERY: During initial hydration, server is absolute truth
+      const forceOverwrite = isDataHydration;
+      
+      if (existing && existing.synced === 1 && !forceOverwrite) {
         const localTime = new Date(existing.updatedAt || 0).getTime();
         const serverTime = new Date(book.updatedAt || 0).getTime();
         
-        if (localTime >= serverTime) {
-          console.warn(`🛡️ [PULL SERVICE] Skipping Book ${book.cid} - local version is already up-to-date or newer`);
-          return { success: true }; 
+        // 🎯 PRECISION SYNC: Enhanced conflict detection with vKey guard
+        const localVKey = existing.vKey || 0;
+        const serverVKey = book.vKey || 0;
+        
+        // 1. EQUALITY CHECK: No action needed if timestamps match
+        if (localTime === serverTime) {
+          console.log(`⏰ [PULL SERVICE] Book ${book.cid} already in sync (timestamp match)`);
+          return { success: true };
         }
+        
+        // 2. LOCAL NEWER CHECK: Push back to server
+        if (localTime > serverTime) {
+          // � vKey CONFLICT GUARD: Use vKey as secondary conflict detection
+          if (localVKey > serverVKey) {
+            console.log(`🔄 [PRECISION SYNC] Book ${book.cid} local is newer (time: ${localTime} > ${serverTime}, vKey: ${localVKey} > ${serverVKey}) - marking for push`);
+          } else {
+            console.log(`⚠️ [PRECISION SYNC] Book ${book.cid} local newer but lower vKey (time: ${localTime} > ${serverTime}, vKey: ${localVKey} <= ${serverVKey}) - marking for push anyway`);
+          }
+          
+          // 🚨 DNA HARDENING: Race condition protection - only set synced: 0 if significantly newer
+          const timeDifference = localTime - serverTime;
+          if (timeDifference > 5000) {
+            console.log(`🔄 [PRECISION SYNC] Book ${book.cid} local significantly newer (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - marking for push`);
+            await db.books.update(existing.localId!, { synced: 0 });
+            if (typeof window !== 'undefined') {
+               window.dispatchEvent(new CustomEvent('sync-request'));
+            }
+            return { success: true };
+          } else {
+            console.log(`⚠️ [PRECISION SYNC] Book ${book.cid} local newer but within threshold (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - keeping synced status`);
+          }
+        }
+        
+        // 3. SERVER NEWER CHECK: Proceed with server update
+        console.log(`📥 [PRECISION SYNC] Book ${book.cid} server is newer (time: ${serverTime} > ${localTime}) - proceeding with update`);
       }
-      
-      // Normalize and store
-      const normalized = normalizeRecord({
-        ...book,
-        userId: String(this.userId),
-        synced: 1, // Server data is synced
-        isDeleted: book.isDeleted || 0
-      }, this.userId);
       
       // 📝 [AUDIT] Log what we're storing in DB
       console.log('📝 [DB COMMIT]', { 
@@ -896,14 +1031,17 @@ export class PullService {
       if (book.isDeleted === 1 && existing) {
         await db.books.delete(existing.localId!);
         console.log(`🗑️ [PULL SERVICE] Book ${book.cid} hard deleted after pull`);
+        return { success: true, localId: existing.localId };
       } else if (book.isDeleted === 0) {
         // Store or update the book
         if (existing?.localId) {
           await db.books.update(existing.localId!, normalized);
           console.log(`✅ [PULL SERVICE] Updated book: ${book.cid}`);
+          return { success: true, localId: existing.localId };
         } else {
-          await db.books.add(normalized);
+          const newId = await db.books.add(normalized);
           console.log(`✅ [PULL SERVICE] Added book: ${book.cid}`);
+          return { success: true, localId: newId };
         }
       }
       
@@ -911,20 +1049,37 @@ export class PullService {
     } catch (error) {
       console.error('❌ [PULL SERVICE] Single book commit failed:', book.cid, error);
       return { success: false, error: `Exception for book ${book.cid}: ${error}` };
+    } finally {
+      // 🔒 RELEASE LOCK: Always release lock when done
+      PullService.releaseLock(book.cid);
     }
   }
 
   /**
    * 📝 COMMIT SINGLE ENTRY
    */
-  private async commitSingleEntry(entry: any): Promise<{ success: boolean; error?: string }> {
+  private async commitSingleEntry(entry: any): Promise<{ success: boolean; localId?: number; error?: string }> {
+    // 🔒 PULL LOCK: Prevent concurrent writes to same record
+    if (!PullService.acquireLock(entry.cid)) {
+      console.log(`🔒 [PULL SERVICE] Entry ${entry.cid} is being processed by another thread, skipping...`);
+      return { success: true }; // Assume another process is handling it
+    }
+    
     try {
-      // 🛡️ SCHEMA GUARD: Validate server data before storing
-      const validationResult = validateEntry(entry);
+      // 1. Normalize and Enrich FIRST
+      const normalized = normalizeRecord({
+        ...entry,
+        userId: String(this.userId),
+        synced: 1, // Server data is synced
+        isDeleted: entry.isDeleted || 0,
+        updatedAt: Number(entry.updatedAt) || Date.now() // �️ DNA LAW V4.0: Force Number type
+      }, this.userId);
+
+      // 2. SOFT VALIDATION: Accept server data, log warnings only
+      const validationResult = validateEntry(normalized);
       if (!validationResult.success) {
-        const errorMsg = `🚨 [PULL VALIDATOR] Server entry data corruption blocked for ID: ${entry.cid}. ${validationResult.error}`;
-        console.error(errorMsg, { entry });
-        return { success: false, error: errorMsg };
+        console.warn(`⚠️ [SOFT VALIDATION] Entry ${entry.cid} has validation issues, but accepting server data: ${validationResult.error}`);
+        // Continue processing - don't reject entire record
       }
 
       // 🔍 CHECK-BEFORE-PUT: Check if local record exists
@@ -937,23 +1092,48 @@ export class PullService {
       }
       
       // 🛡️ TIMESTAMP CONFLICT GUARD: Only overwrite if server is strictly newer
-      if (existing && existing.synced === 1) {
+      // 🚨 CRITICAL FIX: Force server truth during DATA_HYDRATION
+      const store = getVaultStore();
+      const isDataHydration = store.bootStatus === 'DATA_HYDRATION';
+      
+      if (existing && existing.synced === 1 && !isDataHydration) {
         const localTime = new Date(existing.updatedAt || 0).getTime();
         const serverTime = new Date(entry.updatedAt || 0).getTime();
         
-        if (localTime >= serverTime) {
-          console.warn(`🛡️ [PULL SERVICE] Skipping Entry ${entry.cid} - local version is already up-to-date or newer`);
+        // 🎯 PRECISION SYNC: Enhanced conflict detection with vKey guard
+        const localVKey = existing.vKey || 0;
+        const serverVKey = entry.vKey || 0;
+        
+        // 1. EQUALITY CHECK: No action needed if timestamps match
+        if (localTime === serverTime) {
+          console.log(`⏰ [PULL SERVICE] Entry ${entry.cid} already in sync (timestamp match)`);
           return { success: true };
         }
+        
+        // 2. LOCAL NEWER CHECK: Push back to server
+        if (localTime > serverTime) {
+          // � DNA HARDENING: Race condition protection - only set synced: 0 if significantly newer
+          if (localVKey > serverVKey) {
+            console.log(`🔄 [PRECISION SYNC] Entry ${entry.cid} local is newer (time: ${localTime} > ${serverTime}, vKey: ${localVKey} > ${serverVKey}) - marking for push`);
+          } else {
+            console.log(`⚠️ [PRECISION SYNC] Entry ${entry.cid} local newer but lower vKey (time: ${localTime} > ${serverTime}, vKey: ${localVKey} <= ${serverVKey}) - marking for push anyway`);
+          }
+          const timeDifference = localTime - serverTime;
+          if (timeDifference > 5000) {
+            console.log(`🔄 [PRECISION SYNC] Entry ${entry.cid} local significantly newer (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - marking for push`);
+            await db.entries.update(existing.localId!, { synced: 0 });
+            if (typeof window !== 'undefined') {
+               window.dispatchEvent(new CustomEvent('sync-request'));
+            }
+            return { success: true };
+          } else {
+            console.log(`⚠️ [PRECISION SYNC] Entry ${entry.cid} local newer but within threshold (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - keeping synced status`);
+          }
+        }
+        
+        // 3. SERVER NEWER CHECK: Proceed with server update
+        console.log(`📥 [PRECISION SYNC] Entry ${entry.cid} server is newer (time: ${serverTime} > ${localTime}) - proceeding with update`);
       }
-      
-      // Normalize and store
-      const normalized = normalizeRecord({
-        ...entry,
-        userId: String(this.userId),
-        synced: 1, // Server data is synced
-        isDeleted: entry.isDeleted || 0
-      }, this.userId);
       
       // Preserve localId if it exists to ensure bulkPut updates correct record
       if (existing?.localId) {
@@ -964,14 +1144,17 @@ export class PullService {
       if (entry.isDeleted === 1 && existing) {
         await db.entries.delete(existing.localId!);
         console.log(`🗑️ [PULL SERVICE] Entry ${entry.cid} hard deleted after pull`);
+        return { success: true, localId: existing.localId };
       } else if (entry.isDeleted === 0) {
         // Store or update the entry
         if (existing?.localId) {
           await db.entries.update(existing.localId!, normalized);
           console.log(`✅ [PULL SERVICE] Updated entry: ${entry.cid}`);
+          return { success: true, localId: existing.localId };
         } else {
-          await db.entries.add(normalized);
+          const newId = await db.entries.add(normalized);
           console.log(`✅ [PULL SERVICE] Added entry: ${entry.cid}`);
+          return { success: true, localId: newId };
         }
       }
       
@@ -979,6 +1162,9 @@ export class PullService {
     } catch (error) {
       console.error('❌ [PULL SERVICE] Single entry commit failed:', entry.cid, error);
       return { success: false, error: `Exception for entry ${entry.cid}: ${error}` };
+    } finally {
+      // 🔒 RELEASE LOCK: Always release lock when done
+      PullService.releaseLock(entry.cid);
     }
   }
 
@@ -997,8 +1183,15 @@ export class PullService {
     console.log('🚀 [DOWNLOADER TRY]', { url: imageUrl, book: bookId });
     
     try {
-      // 🛡️ SKIP GUARDS: Only process HTTP URLs (Cloudinary)
+      // 🛡️ SKIP GUARDS: Process HTTP URLs OR existing mediaCid
       if (!imageUrl || !imageUrl.startsWith('http')) {
+        // 🚨 CRITICAL FIX: Check if book has mediaCid for CID-based resolution
+        const bookRecord = await db.books.where('localId').equals(bookId).first();
+        if (bookRecord?.mediaCid) {
+          console.log('🚀 [DOWNLOADER] Using mediaCid for resolution:', bookRecord.mediaCid);
+          return; // Skip download - media already exists via CID
+        }
+        
         console.warn('🚫 [DOWNLOADER] Skipped - not HTTP URL:', imageUrl);
         return;
       }
@@ -1012,9 +1205,9 @@ export class PullService {
 
       // 🌐 FETCH BLOB: Download image from Cloudinary
       console.log(`🌐 [MEDIA DOWNLOADER] Downloading media for book ${bookId} from ${imageUrl}`);
-      const response = await this.signedFetch(imageUrl, {
+      const response = await SecureApiClient.signedFetch(imageUrl, {
         method: 'GET'
-      });
+      }, 'PullService');
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
@@ -1046,7 +1239,7 @@ export class PullService {
       await db.books.where('localId').equals(bookId).modify({
         image: imageUrl, // Keep original URL
         mediaCid: mediaCid, // Add local CID reference
-        updatedAt: Date.now()
+        // 🚨 DNA HARDENING: Media downloads must NOT trigger timestamp change
       });
 
       console.log(`✅ [MEDIA DOWNLOADER] Successfully downloaded and stored media for book ${bookId} (CID: ${mediaCid})`);
@@ -1066,9 +1259,9 @@ export class PullService {
       console.log(`🔄 [PULL SERVICE] Full dataset pull for ${type}`);
       
       const endpoint = type === 'BOOKS' ? '/api/books' : '/api/entries';
-      const response = await this.signedFetch(`${endpoint}?userId=${encodeURIComponent(this.userId)}&limit=10000`, { 
+      const response = await SecureApiClient.signedFetch(`${endpoint}?userId=${encodeURIComponent(this.userId)}&limit=10000`, { 
         method: 'GET' 
-      });
+      }, 'PullService');
       
       if (!response.ok) {
         throw new Error(`Failed to fetch ${type}: ${response.statusText}`);
@@ -1093,9 +1286,9 @@ export class PullService {
     try {
       console.log(`🎯 [PULL SERVICE] Single item pull for ${type} ${id}`);
       
-      const response = await this.signedFetch(`/api/${API_PATH_MAP[type]}/${id}`, { 
+      const response = await SecureApiClient.signedFetch(`/api/${API_PATH_MAP[type]}/${id}`, { 
         method: 'GET' 
-      });
+      }, 'PullService');
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -1124,31 +1317,8 @@ export class PullService {
     }
   }
 
-
   /**
-   * � SECURE SIGNED FETCH - Phase 20 Implementation
-   * Uses centralized security utility for cryptographic signing
-   */
-  private async signedFetch(url: string, options: RequestInit): Promise<Response> {
-    try {
-      const timestamp = Date.now().toString();
-      const payload = preparePayload(options);
-      const signature = await generateVaultSignature(payload, timestamp);
-      const signedHeaders = prepareSignedHeaders(options, signature, timestamp);
-      
-      return fetch(url, {
-        ...options,
-        headers: signedHeaders,
-        body: payload || undefined
-      });
-    } catch (error) {
-      console.error('❌ [PULL SERVICE] Signature generation failed:', error);
-      return fetch(url, options); // Fallback to standard fetch on security error
-    }
-  }
-
-  /**
-   * �🔄 GET PULL STATUS
+   * 🔄 GET PULL STATUS
    */
   getPullStatus(): { isPulling: boolean; userId: string } {
     return {

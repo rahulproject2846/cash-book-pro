@@ -22,7 +22,7 @@ export const PusherProvider = ({ children, currentUser }: { children: React.Reac
             forceTLS: true
         });
 
-        console.log("📡 Pusher: Identity Protocol Linked.");
+        console.log("📡 Pusher: Identity Protocol Linked - READY STATE ONLY");
         setPusher(pusherInstance);
 
         return () => {
@@ -38,14 +38,18 @@ export const PusherProvider = ({ children, currentUser }: { children: React.Reac
             console.log('🔴 [PUSHER] State: OFFLINE - Disconnecting');
             pusher.disconnect();
         } else if (networkMode === 'DEGRADED') {
-            console.log('⚠️ [PUSHER] State: DEGRADED - Disconnecting to save battery');
-            pusher.disconnect();
+            // 🚨 DEVELOPMENT BYPASS: Keep Pusher connected during DEGRADED mode
+            console.log('⚠️ [PUSHER] State: DEGRADED - Keeping connection for development');
+            // pusher.disconnect(); // DISABLED for development
         } else if (networkMode === 'SYNCING') {
-            console.log('� [PUSHER] State: SYNCING - Disconnecting to prevent race conditions');
+            console.log(' [PUSHER] State: SYNCING - Disconnecting to prevent race conditions');
             pusher.disconnect();
-        } else if (networkMode === 'ONLINE' && !isSecurityLockdown && bootStatus === 'READY') {
+        } else if (networkMode === 'ONLINE' && !isSecurityLockdown && ['IDENTITY_WAIT', 'PROFILE_SYNC', 'DATA_HYDRATION', 'READY'].includes(bootStatus)) {
             console.log('🟢 [PUSHER] State: ONLINE - Connecting');
             pusher.connect();
+        } else if (['IDENTITY_WAIT', 'PROFILE_SYNC', 'DATA_HYDRATION'].includes(bootStatus)) {
+            console.log('⏳ [PUSHER] Boot Phase - Keeping connection');
+            // Don't disconnect during boot phases
         } else {
             console.log('🔒 [PUSHER] Boot Status Guard - Disconnecting');
             pusher.disconnect();

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { db } from '@/lib/offlineDB';
-import { identityManager } from './core/IdentityManager';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 import { mapConflictType } from './ConflictMapper';
 import { getTimestamp } from '@/lib/shared/utils';
 import toast from 'react-hot-toast';
@@ -108,7 +108,7 @@ export const useConflictStore = create<ConflictStore>()(
             }
             
             if (expiredKeys.length > 0) {
-                const userId = identityManager.getUserId();
+                const userId = UserManager.getInstance().getUserId();
                 if (userId) {
                     window.dispatchEvent(new CustomEvent('sync-request', { detail: { userId } }));
                 }
@@ -172,7 +172,7 @@ export const useConflictStore = create<ConflictStore>()(
                     record: JSON.parse(JSON.stringify(item.record)),
                     timestamp: getTimestamp(),
                     reason: 'pre_resolution_backup',
-                    userId: identityManager.getUserId() || 'unknown'
+                    userId: UserManager.getInstance().getUserId() || 'unknown'
                 };
                 await db.snapshots.add(snapshot);
             } catch (error) {
@@ -213,8 +213,13 @@ export const useConflictStore = create<ConflictStore>()(
                     type: item.type,
                     decision: resolution,
                     timestamp: getTimestamp(),
-                    userId: identityManager.getUserId() || 'unknown'
+                    userId: UserManager.getInstance().getUserId() || 'unknown'
                 });
+                
+                // 🧹 MEMORY CLEANUP: Remove resolved conflict from state
+                set(state => ({
+                    conflicts: state.conflicts.filter(c => c.cid !== item.cid)
+                }));
                 
             } catch (error) {
                 console.error(`🚨 [RESOLUTION] Failed for ${item.cid}:`, error);

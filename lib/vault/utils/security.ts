@@ -7,6 +7,9 @@
  * Prevents code duplication and ensures consistent security implementation
  */
 
+// 🚨 WARNING FLAG: Only show security warning once per session
+let hasWarned = false;
+
 /**
  * Generate HMAC-SHA256 signature for vault requests
  * 
@@ -16,7 +19,22 @@
  */
 export async function generateVaultSignature(payload: string, timestamp: string): Promise<string> {
   try {
-    const secretKey = process.env.NEXT_PUBLIC_VAULT_SECRET || 'robot_vault_2026';
+    // 🔐 SECURITY: Validate required environment variable with fallback
+    let secretKey = process.env.VAULT_CLIENT_SECRET || process.env.NEXT_PUBLIC_VAULT_CLIENT_SECRET;
+    
+    if (!secretKey) {
+      // 🚨 PRODUCTION SECURITY: Throw hard error if secret missing in production
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error("FATAL: VAULT_CLIENT_SECRET is missing in Production!");
+      }
+      
+      // 🚨 CRITICAL WARNING: Missing security key, using fallback for local development
+      if (!hasWarned) {
+        console.warn('⚠️ [SECURITY] VAULT_CLIENT_SECRET or NEXT_PUBLIC_VAULT_CLIENT_SECRET environment variable is not set. Using fallback for local development.');
+        hasWarned = true;
+      }
+      secretKey = 'development-fallback-key-do-not-use-in-production';
+    }
     
     // Prepare data for signing: timestamp:payload
     const encoder = new TextEncoder();
@@ -46,12 +64,11 @@ export async function generateVaultSignature(payload: string, timestamp: string)
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
     
-    console.log('🔐 [SECURITY] Vault signature generated successfully');
     return signature;
     
   } catch (error) {
-    console.error('❌ [SECURITY] Failed to generate vault signature:', error);
-    throw new Error(`Vault signature generation failed: ${error}`);
+    // 🔒 SECURITY: No fallback for cryptographic failures
+    throw new Error(`CRITICAL_CRYPTOGRAPHIC_ERROR: Vault signature generation failed: ${error}`);
   }
 }
 

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLocalPreview } from '@/hooks/useLocalPreview';
@@ -131,6 +132,8 @@ const BookCard = React.memo<BookCardProps>(({
         }, 500);
     }, [bookId, reactiveBook, router, isGlobalAnimating, onOpen]);
 
+    if (reactiveBook?.conflicted === 1) return null;
+
     return (
         <motion.div 
             ref={elementRef}
@@ -226,7 +229,14 @@ const BookCard = React.memo<BookCardProps>(({
                     {onDelete && (
                         <Tooltip text={t('delete_book') || 'Delete Book'}>
                             <button 
-                                onClick={(e) => { e.stopPropagation(); onDelete(reactiveBook); }} 
+                                onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if (reactiveBook.conflicted === 1) {
+                                        toast.error("Please resolve conflict before deleting");
+                                        return;
+                                    }
+                                    onDelete(reactiveBook); 
+                                }} 
                                 className="w-8 h-8 md:w-10 md:h-10 bg-[var(--bg-app)] hover:bg-red-500 border border-[var(--border)] hover:border-red-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg"
                             >
                                 <Trash2 size={16} strokeWidth={2} />

@@ -14,7 +14,6 @@ export { HydrationController } from './HydrationController';
 export { HydrationEngine } from './engine/HydrationEngine';
 
 // Slices (Modular Components)
-export { IdentitySlice } from './slices/IdentitySlice';
 export { BulkSlice } from './slices/BulkSlice';
 export { RealtimeSlice } from './slices/RealtimeSlice';
 export { SniperSlice } from './slices/SniperSlice';

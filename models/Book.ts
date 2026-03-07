@@ -12,13 +12,12 @@ export interface IBook extends Document {
   name: string;
   entryCount?: number;
   description?: string;
-  color?: string;
   vKey: number;         
   syncAttempts: number; 
   lastAttempt?: number; 
   isPinned?: number;     
   userId: string; 
-  isPublic: boolean;
+  isPublic: number;
   shareToken?: string;
   type: 'general' | 'customer' | 'supplier';
   phone?: string;
@@ -27,8 +26,8 @@ export interface IBook extends Document {
   conflicted?: number;
   conflictReason?: string;
   serverData?: any;
-  createdAt: Date;
-  updatedAt: Date; // কেবল একবার রাখা হয়েছে
+  createdAt: number;
+  updatedAt: number; // 🚨 DNA HARDENING: Changed from Date to number for consistency
   mediaCid?: string; // ✅ ADDED: Cloudinary URL reference
 }
 
@@ -56,10 +55,6 @@ const BookSchema = new Schema<IBook>({
     maxlength: [200, "Description cannot exceed 200 characters"],
     default: ""
   },
-  color: {
-    type: String,
-    default: "var(--accent)"
-  },
   vKey: {
     type: Number,
     default: 1,
@@ -78,8 +73,8 @@ const BookSchema = new Schema<IBook>({
   },
   // পাবলিক শেয়ারিং ও অন্যান্য প্রোটোকল
   isPublic: { 
-    type: Boolean, 
-    default: true 
+    type: Number, 
+    default: 1 
   },
   shareToken: { 
     type: String, 
@@ -123,9 +118,17 @@ const BookSchema = new Schema<IBook>({
   serverData: {
     type: Schema.Types.Mixed,
     default: null
+  },
+  createdAt: {
+    type: Number,
+    required: true
+  },
+  updatedAt: {
+    type: Number,
+    required: true
   }
 }, { 
-  timestamps: true, 
+  timestamps: false, // 🚨 DNA HARDENING: Disable Mongoose auto-timestamps to prevent Date injection
   versionKey: false 
 });
 
@@ -134,4 +137,10 @@ BookSchema.index({ userId: 1, updatedAt: -1 });
 BookSchema.index({ userId: 1, type: 1 }); 
 BookSchema.index({ userId: 1, vKey: 1 }); 
 
-export default models.Book || model<IBook>('Book', BookSchema);
+// 🛡️ FORCE RECOMPILE: Delete existing model from cache to apply Number types
+if (mongoose.models.Book) {
+  delete (mongoose.models as any).Book;
+}
+
+const BookModel = mongoose.model('Book', BookSchema);
+export default BookModel;

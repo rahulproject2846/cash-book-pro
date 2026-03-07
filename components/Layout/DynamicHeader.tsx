@@ -253,9 +253,9 @@ export const DynamicHeader = () => {
                             )}
                         >
                             {userProfilePreview.previewUrl ? (
-                                <img src={userProfilePreview.previewUrl} alt="U" className="w-full h-full object-cover" />
+                                <img src={userProfilePreview.previewUrl} alt="Profile" className="w-full h-full object-cover" />
                             ) : (
-                                <span className="text-[var(--text-main)] font-black text-lg">{(currentUser?.username?.charAt(0) || "U").toUpperCase()}</span>
+                                <span className="text-[var(--text-main)] font-black text-lg">{currentUser?.username?.charAt(0).toUpperCase()}</span>
                             )}
                         </button>
                         

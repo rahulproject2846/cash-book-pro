@@ -1,14 +1,12 @@
 "use client";
 
-
-
 import { db } from '@/lib/offlineDB';
-
-import { identityManager } from '../core/IdentityManager';
 
 import { normalizeRecord, validateCompleteness } from '../core/VaultUtils';
 
 import { getTimestamp } from '@/lib/shared/utils';
+
+import { UserManager } from '../core/user/UserManager';
 
 import toast from 'react-hot-toast';
 
@@ -18,7 +16,7 @@ import { getVaultStore } from '../store/storeHelper';
 
 import { LicenseVault, RiskManager } from '../security';
 
-import { generateVaultSignature, prepareSignedHeaders, preparePayload } from '../utils/security';
+import { SecureApiClient } from '../utils/SecureApiClient';
 
 import { SyncGuard } from '../guards/SyncGuard';
 
@@ -331,10 +329,11 @@ class SyncProgressTracker {
 /**
 
  * 🚀 INDUSTRIAL-GRADE BATCH SYNC ENGINE - Handles large data volumes efficiently
-
  */
 
 export class PushService {
+
+  private static instance: PushService;
 
   private isSyncing = false;
 
@@ -346,7 +345,7 @@ export class PushService {
 
   private readonly SHADOW_CACHE_TTL = 15000; // 15 seconds
 
-
+  
 
   // 🎯 SMART COMPONENTS
 
@@ -364,12 +363,153 @@ export class PushService {
 
   }
 
+  // Singleton pattern for centralized access
 
+  static getInstance(): PushService {
+
+    if (!PushService.instance) {
+
+      PushService.instance = new PushService();
+
+    }
+
+    return PushService.instance;
+
+  }
 
   constructor() {
+    // Remove top-level userId initialization to prevent circular dependency
+    // userId will be retrieved lazily when methods are called
+  }
 
-    this.userId = identityManager.getUserId() || '';
+  /**
+   * Provides signed fetch with HMAC-SHA256 headers for secure API calls
+   */
+  public async secureFetch(url: string, options: RequestInit): Promise<Response> {
+    return SecureApiClient.signedFetch(url, options, 'PushService');
+  }
 
+  /**
+   * Centralized API: Fetch books batch (replaces HydrationService direct fetch)
+   */
+  public async fetchBooksBatch(userId: string, limit: number = 1000, offset: number = 0): Promise<{ data: any[]; success: boolean; error?: string }> {
+    try {
+      console.log(`📚 [PUSH SERVICE] Fetching books batch for user ${userId}, limit: ${limit}, offset: ${offset}`);
+      const response = await SecureApiClient.signedFetch(`/api/books?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }, 'PushService');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch books: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      const data = result.data || result.books || [];
+      
+      console.log(`✅ [PUSH SERVICE] Retrieved ${data.length} books`);
+      return { success: true, data };
+      
+    } catch (error) {
+      console.error(`❌ [PUSH SERVICE] Books batch fetch failed:`, error);
+      return { success: false, error: String(error), data: [] };
+    }
+  }
+
+  /**
+   * Centralized API: Fetch entries batch (replaces HydrationService direct fetch)
+   */
+  public async fetchEntriesBatch(userId: string, limit: number = 5000, offset: number = 0): Promise<{ data: any[]; success: boolean; error?: string }> {
+    try {
+      console.log(`📝 [PUSH SERVICE] Fetching entries batch for user ${userId}, limit: ${limit}, offset: ${offset}`);
+      const response = await SecureApiClient.signedFetch(`/api/entries?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }, 'PushService');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch entries: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      const data = result.data || result.entries || [];
+      
+      console.log(`✅ [PUSH SERVICE] Retrieved ${data.length} entries`);
+      return { success: true, data };
+      
+    } catch (error) {
+      console.error(`❌ [PUSH SERVICE] Entries batch fetch failed:`, error);
+      return { success: false, error: String(error), data: [] };
+    }
+  }
+
+  /**
+   * Update user profile on server
+   */
+  public async updateUserProfile(userId: string, profileData: any): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      console.log(`👤 [PUSH SERVICE] Updating profile for user ${userId}`);
+      const response = await SecureApiClient.signedFetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          ...profileData
+        })
+      }, 'PushService');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update profile: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      const data = result.data || result;
+      
+      console.log(`✅ [PUSH SERVICE] Profile updated successfully`);
+      return { success: true, data };
+      
+    } catch (error) {
+      console.error(`❌ [PUSH SERVICE] Profile update failed:`, error);
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Get user profile from server
+   */
+  public async getUserProfile(userId: string): Promise<{ data?: any; success: boolean; error?: string }> {
+    try {
+      console.log(`👤 [PUSH SERVICE] Getting profile for user ${userId}`);
+      const response = await SecureApiClient.signedFetch(`/api/user/profile?userId=${encodeURIComponent(userId)}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }, 'PushService');
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          return { success: true, data: null }; // User not found
+        }
+        throw new Error(`Failed to get profile: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      const data = result.data || result;
+      
+      if (!data) {
+        console.warn(`⚠️ [PUSH SERVICE] User profile not found for ID: ${userId}`);
+        return { 
+          success: false, 
+          error: `User profile not found for ID: ${userId}`
+        };
+      }
+      
+      console.log(`✅ [PUSH SERVICE] Retrieved user profile`);
+      return { success: true, data };
+      
+    } catch (error) {
+      console.error(`❌ [PUSH SERVICE] Profile fetch failed:`, error);
+      return { success: false, error: String(error) };
+    }
   }
 
 
@@ -543,7 +683,7 @@ export class PushService {
 
    */
 
-  async pushPendingData(): Promise<{ success: boolean; itemsProcessed: number; errors: string[] }> {
+  async pushPendingData(changedCid?: string): Promise<{ success: boolean; itemsProcessed: number; errors: string[] }> {
 
     // PRIORITY SYNC: Sync telemetry evidence FIRST
 
@@ -588,10 +728,68 @@ export class PushService {
       
 
       // 📊 COUNT TOTAL ITEMS FOR PROGRESS TRACKING
+      // � SYNC TSUNAMI GUARD: Target specific CID instead of mass queries
+      let unsyncedBooks: any[] = [];
+      let unsyncedEntries: any[] = [];
 
-      const unsyncedBooks = await db.books.where('synced').equals(0).toArray();
+      try {
+        // 🛡️ SOVEREIGN ID GUARD: Wait for identity to be ready before aborting
+        let currentSovereignId = UserManager.getInstance().getUserId();
+        if (!currentSovereignId) {
+          console.log('⏳ [PUSH SERVICE] Identity not ready yet, waiting...');
+          try {
+            currentSovereignId = await UserManager.getInstance().waitForIdentity();
+            console.log('✅ [PUSH SERVICE] Identity ready, proceeding with sync');
+          } catch (error) {
+            console.error('🚨 [PUSH SERVICE] Identity timeout after 10s - aborting sync');
+            return { success: false, itemsProcessed: 0, errors: ['Identity timeout: No user data available after 10 seconds'] };
+          }
+        }
 
-      const unsyncedEntries = await db.entries.where('synced').equals(0).toArray();
+        if (changedCid) {
+          // 🎯 TARGETED SYNC: Only push the specific CID that changed
+          console.log(`🎯 [SYNC TSUNAMI GUARD] Targeted sync for CID: ${changedCid}`);
+          
+          const targetBook = await db.books.where('cid').equals(changedCid)
+            .and((book: any) => book.synced === 0 && book.userId === currentSovereignId)
+            .first();
+          if (targetBook) {
+            unsyncedBooks = [targetBook];
+          }
+          
+          // Also check for entries with this bookId
+          const targetEntries = await db.entries.where('bookId').equals(changedCid)
+            .and((entry: any) => entry.synced === 0 && entry.userId === currentSovereignId)
+            .toArray();
+          unsyncedEntries = targetEntries;
+          
+          console.log(`🎯 [TARGETED SYNC] Found ${unsyncedBooks.length} book and ${unsyncedEntries.length} entries for CID ${changedCid}`);
+        } else {
+          // 🚨 FALLBACK: Use smart filtering for general sync
+          const recentThreshold = Date.now() - (5 * 60 * 1000); // 5 minutes ago
+          
+          const allUnsyncedBooks = await db.books.where('synced').equals(0)
+            .and((book: any) => book.userId === currentSovereignId)
+            .toArray();
+          unsyncedBooks = allUnsyncedBooks.filter((book: any) => {
+            const lastModified = book.lastModified || book.updatedAt || book.createdAt || 0;
+            return lastModified > recentThreshold;
+          });
+
+          // For entries, we can be more permissive since entries are usually recent
+          unsyncedEntries = await db.entries.where('synced').equals(0)
+            .and((entry: any) => entry.userId === currentSovereignId)
+            .toArray();
+
+          console.log(`🛡️ [PUSH] Smart filtering applied: ${unsyncedBooks.length}/${allUnsyncedBooks.length} recent books, ${unsyncedEntries.length} entries`);
+        }
+        
+      } catch (error) {
+        console.error('🚨 [PUSH] Error querying unsynced items:', error);
+        // Fallback to empty arrays to prevent sync tsunami
+        unsyncedBooks = [];
+        unsyncedEntries = [];
+      }
 
       const totalItems = unsyncedBooks.length + unsyncedEntries.length;
 
@@ -863,7 +1061,16 @@ export class PushService {
 
     try {
 
-      const pendingEntries = await db.entries.where('synced').equals(0).toArray();
+      // 🛡️ SOVEREIGN ID ENFORCEMENT: Get current user ID for strict filtering
+      const currentSovereignId = UserManager.getInstance().getUserId();
+      if (!currentSovereignId) {
+        console.error('🚨 [SOVEREIGN PUSH] No user ID available for entries - aborting');
+        return { success: false, processed: 0, errors: ['No sovereign ID available for entries'] };
+      }
+
+      const pendingEntries = await db.entries.where('synced').equals(0)
+        .and((entry: any) => entry.userId === currentSovereignId)
+        .toArray();
 
       console.log('🚀 [BATCH PUSH SERVICE] Pending entries found:', pendingEntries.length);
 
@@ -1039,7 +1246,7 @@ export class PushService {
 
       // 🧹 CLEAN PAYLOAD
 
-      const { serverData, conflictReason, localId, synced, ...cleanBook } = book;
+      const { serverData, conflictReason, localId, synced, syncAttempts, localStatus, lastAttempt, lastSniperFetch, color, ...cleanBook } = book;
 
       
 
@@ -1155,19 +1362,24 @@ export class PushService {
 
       
 
+      // 🛡️ SOVEREIGN ID ENFORCEMENT: Get fresh user ID at payload construction
+      const sovereignUserId = UserManager.getInstance().getUserId();
+      if (!sovereignUserId) {
+        console.error('🚨 [SOVEREIGN PUSH] CRITICAL: No user ID available at payload construction - aborting push');
+        return { success: false, error: 'CRITICAL: No sovereign ID available for payload' };
+      }
+
       const payload = {
 
         ...cleanBook,
 
         cid: book.cid, // 🆕 CRITICAL: Include CID in creation
 
-        userId: this.userId,
+        userId: sovereignUserId, // 🛡️ SOVEREIGN ID: Fresh from UserManager
 
         vKey: book.vKey,
 
       };
-
-
 
       // 🟠 [FORENSIC AUDIT] Log what's being pushed to server
 
@@ -1184,6 +1396,14 @@ export class PushService {
         body: JSON.stringify(payload),
 
       });
+
+      // 📡 [BLOOD-TRAIL] Log server response for forensic audit
+      console.log('📡 [PUSH_AUDIT] Server Response for CID:', book.cid, 'Status:', res.status);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('🚨 [PUSH_AUDIT] Server Error Response:', errorText);
+      }
 
 
 
@@ -1435,7 +1655,7 @@ export class PushService {
 
       // 🧹 CLEAN PAYLOAD
 
-      const { serverData, conflictReason, localId, synced, ...cleanEntry } = entry;
+      const { serverData, conflictReason, localId, synced, syncAttempts, lastAttempt, _emergencyFlushed, _emergencyFlushAt, ...cleanEntry } = entry;
 
       
 
@@ -1947,31 +2167,19 @@ export class PushService {
 
       // 🚨 IMMEDIATE EXECUTION: No queuing, no batching
 
-      const response = await this.signedFetch(endpoint, {
-
+      const response = await SecureApiClient.signedFetch(endpoint, {
         method,
-
         headers: {
-
           'Content-Type': 'application/json',
-
           'X-Priority': config.priority,
-
           'X-System-Config': config.type
-
         },
-
         body: JSON.stringify({
-
           ...config.data,
-
           userId: this.userId,
-
           ...config.metadata
-
         })
-
-      });
+      }, 'PushService');
 
       
 
@@ -2033,49 +2241,4 @@ export class PushService {
 
   }
 
-
-
-  /**
-
-   * 🔐 SECURE SIGNED FETCH - Phase 20 Implementation
-
-   * Uses centralized security utility for cryptographic signing
-
-   */
-
-  private async signedFetch(url: string, options: RequestInit): Promise<Response> {
-
-    try {
-
-      const timestamp = Date.now().toString();
-
-      const payload = preparePayload(options);
-
-      const signature = await generateVaultSignature(payload, timestamp);
-
-      const signedHeaders = prepareSignedHeaders(options, signature, timestamp);
-
-      
-
-      return fetch(url, {
-
-        ...options,
-
-        headers: signedHeaders,
-
-        body: payload || undefined
-
-      });
-
-    } catch (error) {
-
-      console.error('❌ [PUSH SERVICE] Signature generation failed:', error);
-
-      return fetch(url, options); // Fallback to standard fetch on security error
-
-    }
-
-  }
-
 }
-

@@ -1,7 +1,7 @@
 "use client";
 
 import { getTimestamp } from '@/lib/shared/utils';
-import { identityManager } from '../../core/IdentityManager';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 import { db } from '@/lib/offlineDB';
 import { financeService } from '../../services/FinanceService';
 
@@ -22,6 +22,9 @@ export interface EntryState {
     totalItems: number;
   };
   isRefreshing: boolean;
+  conflicted: number;
+  conflictReason: string;
+  serverData: any;
 }
 
 // 📝 ENTRY ACTIONS INTERFACE
@@ -64,6 +67,9 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
     totalItems: 0
   },
   isRefreshing: false,
+  conflicted: 0,
+  conflictReason: '',
+  serverData: null,
 
   // 📝 REFRESH ENTRIES
   refreshEntries: async () => {
@@ -150,6 +156,9 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
         entry.category.toLowerCase().includes(searchLower)
       );
     }
+    
+    // 🛡️ CONFLICT GUARD: Filter out conflicted entries from the main list
+    processed = processed.filter((entry: any) => entry.conflicted !== 1);
     
     // Apply sorting
     processed.sort((a: any, b: any) => {

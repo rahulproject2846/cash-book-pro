@@ -17,8 +17,8 @@ export const OfflineFallback = React.memo(({
 
     useEffect(() => {
         const handleOnline = () => {
-            // Auto-hide when connection is restored
-            window.location.reload();
+            // 🛡️ Use centralized redirect instead of reload
+            window.location.href = '/';
         };
 
         window.addEventListener('online', handleOnline);

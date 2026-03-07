@@ -1,7 +1,7 @@
 // src/app/api/books/route.ts
 import connectDB from "@/lib/db";
 import mongoose from "mongoose";
-import Book from "@/models/Book";
+import Book, { IBook } from "@/models/Book";
 import User from "@/models/User"; // ইউজার মডেল ইমপোর্ট
 import { NextResponse } from "next/server";
 import Pusher from 'pusher';
@@ -73,9 +73,10 @@ export async function GET(req: Request) {
     if (books.length === 0) {
       const stringBooks = await Book.find({ userId: userId, isDeleted: { $ne: 1 } }).lean().select('-image').sort({ updatedAt: -1 });
       
-      let objectIdBooks: any[] = [];
+      let objectIdBooks: IBook[] = [];
       if (mongoose.Types.ObjectId.isValid(userId)) {
-        objectIdBooks = await Book.find({ userId: new mongoose.Types.ObjectId(userId), isDeleted: { $ne: 1 } }).lean().select('-image').sort({ updatedAt: -1 });
+        // Schema uses String for userId, so we query as string
+        objectIdBooks = await Book.find({ userId: userId, isDeleted: { $ne: 1 } }).lean().select('-image').sort({ updatedAt: -1 });
       }
       
       const allFallbackBooks = [...stringBooks, ...objectIdBooks];
@@ -114,9 +115,6 @@ export async function POST(req: Request) {
     const data = await req.json();
     const { name, description, userId, type, phone, image, vKey, cid, mediaCid } = data;
 
-    // 🔥 API LOGGING: Show received payload for debugging (SILENCED)
-    // console.log('📦 [API-BOOKS] Received Payload:', JSON.stringify(data));
-
     if (!userId || !name) return NextResponse.json({ message: "Fields missing" }, { status: 400 });
 
     await connectDB();
@@ -134,35 +132,37 @@ export async function POST(req: Request) {
         return NextResponse.json({ isActive: false, message: "Account Suspended" }, { status: 403 });
     }
 
+    // 🔍 [FORENSIC AUDIT] Trace bookData before save
+    const bookData = {
+      name: name.trim(),
+      description: description || "",
+      userId,
+      type: String(type || 'general').toLowerCase(),
+      phone: phone || "",
+      image: (image && image !== "") ? image : undefined,
+      mediaCid: mediaCid || undefined,
+      vKey: vKey || Date.now(),
+      cid: cid || undefined,
+      isDeleted: 0, // Ensure active status
+      // 🚨 DNA HARDENING: Force Number casting to prevent Mongoose auto-conversion
+      updatedAt: Number(data.updatedAt) || Date.now(),
+      isPublic: Number(data.isPublic ?? 1) // 🛡️ NULLISH COALESCING: Use ?? instead of ||
+    };
+
+    
     // 🚀 PHASE 24.2: ATOMIC UPSERT OPERATION
     // This eliminates E11000 duplicate key errors by using findOneAndUpdate with upsert
     try {
-      const bookData = {
-        name: name.trim(),
-        description: description || "",
-        userId,
-        type: String(type || 'general').toLowerCase(),
-        phone: phone || "",
-        image: (image && image !== "") ? image : undefined,
-        mediaCid: mediaCid || undefined,
-        vKey: vKey || Date.now(),
-        cid: cid || undefined,
-        isDeleted: 0, // Ensure active status
-        updatedAt: Date.now(),
-                // shareToken removed - let schema default handle it
-      };
-
       // 🔥 ATOMIC UPSERT: Create if not exists, update if exists (by CID)
       const filter = cid ? { cid } : { userId, name: { $regex: new RegExp(`^${name.trim()}$`, "i") }, isDeleted: { $ne: 1 } };
       
-            
       const upsertedBook = await Book.findOneAndUpdate(
         filter,
         { 
           $set: bookData,
           $setOnInsert: { 
-            createdAt: Date.now(),
-            isPublic: false,
+            createdAt: Number(data.createdAt) || Date.now(),
+            isPublic: Number(data.isPublic) || 1,
             syncAttempts: 0,
             isPinned: 0
           }
@@ -306,7 +306,11 @@ export async function PUT(req: Request) {
             image: imageToSave, 
             mediaCid: mediaCid || undefined, // ✅ ADDED: Store mediaCid
             vKey: vKey, // লেটেস্ট ভার্সন কি আপডেট করা
-            updatedAt: Date.now() 
+            // 🚨 DNA HARDENING: Force Number casting to prevent Mongoose auto-conversion
+            updatedAt: Number(data.updatedAt) || Date.now(),
+            // 🚨 DNA HARDENING: Force Number casting for isPublic
+            ...(data.isPublic !== undefined && { isPublic: Number(data.isPublic) })
+            // 🛡️ INTERNAL FIELDS: Excluding syncAttempts from client updates
         } 
       },
       { new: true }
@@ -314,12 +318,16 @@ export async function PUT(req: Request) {
 
     // সিগন্যাল ট্রিগার
     try {
-        await pusher.trigger(`vault_channel_${updatedBook.userId}`, 'BOOK_UPDATED', { 
-            cid: updatedBook.cid,
-            _id: updatedBook._id,
-            userId: updatedBook.userId,
-            vKey: updatedBook.vKey
-        });
+        if (updatedBook) {
+            await pusher.trigger(`vault_channel_${updatedBook.userId}`, 'BOOK_UPDATED', { 
+                cid: updatedBook.cid,
+                _id: updatedBook._id,
+                userId: updatedBook.userId,
+                vKey: updatedBook.vKey
+            });
+        } else {
+            return NextResponse.json({ message: "Book not found" }, { status: 404 });
+        }
     } catch (e) {}
 
     return NextResponse.json({ success: true, book: updatedBook, isActive: true }, { status: 200 });

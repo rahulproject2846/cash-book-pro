@@ -10,6 +10,7 @@ declare global {
       hydrateSingleItem: (type: 'BOOK' | 'ENTRY', id: string) => Promise<{ success: boolean; error?: string }>;
     };
     mediaStore: any;
+    __SESSION_GUARD_INSTANCE__: any; // 🛡️ Session Guard singleton instance
   }
 }
 

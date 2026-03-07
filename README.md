@@ -40,6 +40,410 @@ git add .
 git commit -m "fix: update saveBook signature to accept editTarget"
 git push origin main
 
+Validation:
+- Run: npx tsc --noEmit
+- Verify that only ONE instance of the user identity exists in the entire app.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+You are a Senior Staff Software Engineer, Security Engineer, and Enterprise Code Auditor.
+
+Your task is to perform a FULL PRODUCTION-LEVEL AUDIT of the following file and the entire project root.
+
+TARGET FILE:
+[FILE_NAME]
+
+This project follows Clean Architecture and production-grade standards.
+
+You MUST analyze not only the target file but also ALL RELATED FILES across the project root that interact with this file.
+
+Perform a deep audit across the entire codebase.
+
+--------------------------------------------------
+
+AUDIT SCOPE
+
+1. FILE LEVEL ANALYSIS
+
+Check the entire file line-by-line.
+
+Detect:
+
+- duplicate logic
+- dead code
+- unused imports
+- unused variables
+- unreachable logic
+- incorrect typing
+- unsafe null handling
+- incorrect async usage
+- hidden side effects
+
+--------------------------------------------------
+
+2. PROJECT WIDE DEPENDENCY ANALYSIS
+
+Trace all dependencies including:
+
+- services
+- hooks
+- components
+- repositories
+- utilities
+- state management
+- APIs
+- database access
+- middleware
+- background jobs
+
+Check:
+
+- where this file is used
+- what uses this file
+- circular dependencies
+- incorrect architecture layering
+- improper imports
+
+--------------------------------------------------
+
+3. CLEAN ARCHITECTURE COMPLIANCE
+
+Verify whether the file follows proper layering.
+
+Allowed layers:
+
+Presentation  
+Application  
+Domain  
+Infrastructure
+
+Check for violations such as:
+
+- UI directly calling database
+- business logic inside UI
+- infrastructure leaking into domain
+- services tightly coupled to frameworks
+
+--------------------------------------------------
+
+4. SECURITY AUDIT
+
+Check for any possible:
+
+- data leaks
+- server secrets exposed
+- environment variable leaks
+- sensitive logging
+- insecure API usage
+- token exposure
+- authorization bypass
+- unsafe serialization
+- injection risks
+- client/server boundary violations
+
+--------------------------------------------------
+
+5. CONCURRENCY & RACE CONDITIONS
+
+Check for:
+
+- race conditions
+- shared state mutation
+- async concurrency bugs
+- promise handling errors
+- parallel request collisions
+- stale state updates
+- transaction safety
+
+--------------------------------------------------
+
+6. PERFORMANCE ANALYSIS
+
+Detect:
+
+- unnecessary re-renders
+- repeated heavy computations
+- N+1 queries
+- inefficient loops
+- redundant network calls
+- unnecessary memory allocations
+- blocking operations
+
+--------------------------------------------------
+
+7. DATA FLOW VALIDATION
+
+Trace the full lifecycle of data:
+
+Input → Validation → Processing → Storage → Output
+
+Verify:
+
+- data validation
+- error handling
+- null safety
+- type safety
+- schema mismatch
+- unsafe casts
+
+--------------------------------------------------
+
+8. CROSS FILE LOGIC DUPLICATION
+
+Scan the entire project and detect:
+
+- duplicated business logic
+- similar services
+- repeated validation logic
+- repeated API calls
+- repeated utilities
+
+Suggest refactoring opportunities.
+
+--------------------------------------------------
+
+9. CONFLICT DETECTION
+
+Check whether:
+
+- another file implements the same logic
+- multiple services handle the same responsibility
+- conflicting state updates exist
+- overlapping API handlers exist
+- naming collisions exist
+
+--------------------------------------------------
+
+10. PROJECT INTEGRATION TEST
+
+Validate whether this file works correctly with:
+
+- routing
+- API layer
+- services
+- UI components
+- state managers
+- database layer
+
+Check if any integration points may break.
+
+--------------------------------------------------
+
+11. ERROR HANDLING
+
+Verify:
+
+- all async calls have proper error handling
+- try/catch usage
+- safe fallback states
+- logging best practices
+- no silent failures
+
+--------------------------------------------------
+
+12. TYPE SYSTEM VALIDATION
+
+Check:
+
+- type safety
+- missing interfaces
+- unsafe `any` usage
+- improper generics
+- schema mismatches
+
+--------------------------------------------------
+
+13. UNUSED / DEAD SYSTEM DETECTION
+
+Find:
+
+- functions never called
+- services not used
+- unused exports
+- unused API endpoints
+- abandoned utilities
+
+--------------------------------------------------
+
+14. EDGE CASE VALIDATION
+
+Check behavior for:
+
+- null inputs
+- empty responses
+- API failure
+- partial data
+- concurrent requests
+- invalid user states
+
+--------------------------------------------------
+
+15. SUPER HARDCORE ROOT PROJECT AUDIT
+
+Scan the entire repository and build a structural understanding of the system.
+
+Generate:
+
+1. Project Architecture Overview
+
+Explain the full system architecture including:
+
+- layers
+- modules
+- service boundaries
+- core domain logic
+
+2. Architecture Diagram (Text Based)
+
+Provide a structured diagram showing:
+
+Client/UI  
+↓  
+Application Layer  
+↓  
+Domain Layer  
+↓  
+Infrastructure Layer  
+↓  
+Database / External APIs
+
+Show where the TARGET FILE fits into this architecture.
+
+3. Service Dependency Map
+
+Generate a dependency map showing:
+
+Which services depend on which other services.
+
+Example:
+
+AuthService  
+↓  
+UserRepository  
+↓  
+Database
+
+Also detect:
+
+- circular dependencies
+- tight coupling
+- hidden dependencies
+
+4. Security Surface Map
+
+Identify the security attack surface of the project including:
+
+- public APIs
+- authentication flows
+- authorization boundaries
+- sensitive data flows
+- external integrations
+
+Highlight any high risk areas.
+
+5. Performance Bottleneck Map
+
+Analyze the project for:
+
+- heavy services
+- slow queries
+- blocking operations
+- expensive loops
+- repeated API calls
+
+Highlight potential performance bottlenecks.
+
+--------------------------------------------------
+
+16. AUTO BUG HUNTER MODE
+
+Assume the codebase contains hidden bugs.
+
+Act like a senior debugging engineer.
+
+Search for:
+
+- subtle logic bugs
+- edge case failures
+- state desynchronization
+- async timing bugs
+- incorrect condition checks
+- stale cache usage
+- mutation side effects
+- hidden null reference risks
+- incorrect error propagation
+- memory leaks
+- race conditions under high load
+
+Try to break the system mentally and explain how bugs could appear in production.
+
+--------------------------------------------------
+
+17. FINAL PRODUCTION READINESS SCORE
+
+Rate the file and system from:
+
+0–100
+
+Based on:
+
+- security
+- maintainability
+- architecture compliance
+- performance
+- reliability
+
+--------------------------------------------------
+
+OUTPUT FORMAT
+
+Provide a structured report with:
+
+1. Executive Summary
+2. Critical Issues
+3. Security Issues
+4. Architecture Violations
+5. Performance Problems
+6. Race Condition Risks
+7. Duplicate Logic Found
+8. Dead / Unused Code
+9. Project Conflict Findings
+10. Root Architecture Overview
+11. Service Dependency Map
+12. Security Surface Map
+13. Performance Bottleneck Map
+14. Hidden Bugs Detected
+15. Refactoring Suggestions
+16. Production Readiness Score
+17. Final Verdict (Production Safe / Not Safe)
+
+Be extremely strict.
+
+Assume this code will run in a high-scale production environment with millions of users.
+
+If no issues are found, explicitly confirm that the system is production-safe.
+
+
+
+
+
+
+
+
+
+
 
 
 CASH-BOOK-APP

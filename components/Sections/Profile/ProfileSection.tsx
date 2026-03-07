@@ -6,7 +6,7 @@ import {
     AlertTriangle, Shield, Activity 
 } from 'lucide-react';
 import { useProfile } from '@/hooks/useProfile';
-import { orchestrator } from '@/lib/vault/core/SyncOrchestrator';
+import { getOrchestrator } from '@/lib/vault/core/SyncOrchestrator';
 
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
@@ -57,7 +57,7 @@ export const ProfileSection = () => {
     // --- FETCH SYSTEM RISK (Real-time Audit) ---
     useEffect(() => {
         const fetchRisk = async () => {
-            const risk = await orchestrator.getSystemRiskStatus();
+            const risk = await getOrchestrator().getSystemRiskStatus();
             setSystemRisk(risk);
         };
         fetchRisk();

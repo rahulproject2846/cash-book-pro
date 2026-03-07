@@ -2,13 +2,7 @@
 
 
 
-import { getTimestamp } from '@/lib/shared/utils';
-
-import { identityManager } from '../../core/IdentityManager';
-
-import { db } from '@/lib/offlineDB';
-
-import Dexie from 'dexie';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 
 import { financeService } from '../../services/FinanceService';
 
@@ -20,13 +14,11 @@ import { snipedInSession } from '../sessionGuard';
 
 import { immer } from 'zustand/middleware/immer';
 
-import { HydrationController } from '../../hydration/HydrationController';
-
 
 
 // 📚 LIGHTWEIGHT MATRIX INTERFACE
 
-interface BookMatrixItem {
+export interface BookMatrixItem {
 
   localId: string;
 
@@ -86,11 +78,13 @@ export interface BookState {
 
   isMobile: boolean; // 🆕 Device state for responsive UI
 
-  prefetchedChunks: Map<number, any[]>; // 🆕 Prefetched page cache for zero-lag
+  prefetchedChunks: Record<number, any[]>; // 🆕 Prefetched page cache for zero-lag
 
-  prefetchedEntriesCache: Map<string, any[]>; // 🆕 Prefetched entries cache for instant book details
+  prefetchedEntriesCache: Record<string, any[]>; // 🆕 Prefetched entries cache for instant book details
 
   isInteractionLocked: boolean; // 🆕 Interaction lock state
+
+  dashPage: number; // 🆕 Current dashboard page for pagination
 
 }
 
@@ -107,6 +101,8 @@ export interface BookActions {
   prefetchBookEntries: (bookId: string) => Promise<void>; // 🆕 Smart pre-fetching for zero-lag
 
   prefetchNextPage: (page: number) => Promise<void>; // 🆕 Prefetch next page for zero-lag
+
+  setDashPage: (page: number) => void; // 🆕 Set current dashboard page
 
   saveBook: (bookData: any, editTarget?: any) => Promise<{ success: boolean; book?: any; error?: Error }>;
 
@@ -188,11 +184,13 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
   isMobile: false, // 🆕 Device state for responsive UI
 
-  prefetchedChunks: new Map(), // 🆕 Prefetched page cache for zero-lag
+  prefetchedChunks: {}, // 🆕 Prefetched page cache for zero-lag
 
-  prefetchedEntriesCache: new Map(), // 🆕 Prefetched entries cache for instant book details
+  prefetchedEntriesCache: {}, // 🆕 Prefetched entries cache for instant book details
 
   isInteractionLocked: false, // 🆕 Interaction lock state
+
+  dashPage: 1, // 🆕 Current dashboard page for pagination
 
 
 
@@ -259,19 +257,22 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
   // 🔍 SEARCH & SORT ACTIONS
 
   setSearchQuery: (query: string) => {
-
-    console.log("STORE: searchQuery updated to:", query);
-
+    const currentQuery = get().searchQuery;
+    
+    // Only skip if there's genuinely no change in the input state
+    if (query === currentQuery) {
+      return;
+    }
+    
+    // Update state and immediately apply filters
     set({ 
-
       searchQuery: query,
-
-      isUserSearching: query.length > 0 // 🆕 Set search priority state
-
+      isUserSearching: query.length > 0,
+      dashPage: 1 // 🛡️ ALWAYS reset to page 1 on new search or clear
     });
-
+    
+    // � Force the matrix to re-evaluate the new query
     get().applyFiltersAndSort();
-
   },
 
 
@@ -280,7 +281,9 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
     set({ sortOption: option });
 
-    get().applyFiltersAndSort();
+    // 🛡️ [PATHOR SILENCE] DON'T call applyFiltersAndSort - it triggers destructive fetchPageChunk
+    // Sort changes should be handled by explicit user action, not automatic destructive refresh
+    // get().applyFiltersAndSort();
 
   },
 
@@ -394,41 +397,26 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
 
 
+  // 🆕 SET DASHBOARD PAGE
+
+  setDashPage: (page: number) => {
+
+    set({ dashPage: page });
+
+    // 🛡️ DNA Law 2.B: Trigger fetch for new page with correct source
+    get().fetchPageChunk(page, undefined, 'PAGE_CHANGE');
+
+  },
+
+
+
   // 🆕 ZERO-LAG NAVIGATION
 
   transitionToDashboard: (router: any) => {
 
-    // a. Save current scroll position if available
+    const bookService = BookService.getInstance();
 
-    const scrollEl = document.querySelector('main[layoutId="main-container"]');
-
-    if (scrollEl) {
-
-      get().setLastScrollPosition(scrollEl.scrollTop);
-
-    }
-
-    
-
-    // b. Trigger navigation
-
-    if (router) {
-
-      router.push('/?tab=books');
-
-    }
-
-    
-
-    // c. Wait 300ms (allow transition animation)
-
-    setTimeout(() => {
-
-      // d. THEN set activeBook: null
-
-      get().clearActiveBook();
-
-    }, 300);
+    return bookService.transitionToDashboard(get, set, router);
 
   },
 
@@ -438,15 +426,9 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
   cancelDeletion: () => {
 
-    const { pendingDeletion } = get();
+    const bookService = BookService.getInstance();
 
-    if (pendingDeletion?.timeoutId) {
-
-      clearTimeout(pendingDeletion.timeoutId);
-
-    }
-
-    set({ pendingDeletion: null });
+    return bookService.cancelDeletion(get, set);
 
   },
 
@@ -456,97 +438,9 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
   executeFinalDeletion: async (book: any, userId: string): Promise<void> => {
 
-    const bookId = String(book._id || book.localId);
+    const bookService = BookService.getInstance();
 
-    
-
-    try {
-
-      
-
-      // Create delete payload with mandatory name field
-
-      const deletePayload = {
-
-        _id: book._id,
-
-        localId: book.localId,
-
-        cid: book.cid,
-
-        name: book.name || 'Deleted Ledger', // ✅ MANDATORY for Validator
-
-        userId: String(userId || get().userId || book.userId || ''),
-
-        isDeleted: 1,
-
-        synced: 0,
-
-        vKey: Number(book.vKey || 0) + 1,
-
-        updatedAt: getTimestamp()
-
-      };
-
-      
-
-      // a. Execute Dexie Transaction (Book + Entries marked isDeleted: 1)
-
-      await db.transaction('rw', db.books, db.entries, db.users, async () => {
-
-        // Mark book as deleted
-
-        await db.books.put(deletePayload);
-
-        
-
-        // Cascade delete all entries for this book
-
-        await db.entries
-
-          .where('bookId')
-
-          .equals(bookId)
-
-          .modify({ isDeleted: 1, synced: 0, updatedAt: getTimestamp() });
-
-        
-
-      });
-
-      
-
-      // b. Fire sync event to trigger 7-second auto-sync
-
-      if (typeof window !== 'undefined') {
-
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-
-          detail: { source: 'HydrationController', origin: 'batch-mutation' } 
-
-        }));
-
-      }
-
-      
-
-      // c. Call get().refreshBooks() to update the local list
-
-      get().refreshBooks();
-
-      
-
-      // d. Set get().setActiveBook(null) to clear the current view state
-
-      get().clearActiveBook();
-
-      
-
-    } catch (error) {
-
-      throw error;
-
-    }
+    return await bookService.executeFinalDeletion(get, book, userId);
 
   },
 
@@ -556,33 +450,9 @@ export const createBookSlice = (set: any, get: any, api: any): BookState & BookA
 
   completeDeletionAndRedirect: (router: any) => {
 
-    try {
+    const bookService = BookService.getInstance();
 
-      if (typeof window !== 'undefined') {
-
-        if (router) {
-
-          // Using Next.js router for soft navigation
-
-          router.push('/?tab=books');
-
-        } else {
-
-          // 🚫 NO HARD RELOAD: Throw error instead of window.location
-
-          throw new Error('Router instance required for soft navigation');
-
-        }
-
-      }
-
-    } finally {
-
-      // Ensure UI is unlocked even if navigation fails
-
-      set({ isInteractionLocked: false });
-
-    }
+    return bookService.completeDeletionAndRedirect(set, router);
 
   },
 

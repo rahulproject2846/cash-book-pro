@@ -26,6 +26,8 @@ export interface SyncState {
 
   bootStatus: 'IDLE' | 'IDENTITY_WAIT' | 'PROFILE_SYNC' | 'DATA_HYDRATION' | 'READY';
 
+  isHydrating: boolean;
+
   conflicts: Array<{
 
     id: string; // Map from cid
@@ -122,6 +124,8 @@ export interface SyncActions {
 
   setBootStatus: (status: SyncState['bootStatus']) => void;
 
+  setIsHydrating: (status: boolean) => void;
+
   // 🎯 OVERLAY MANAGEMENT ACTIONS
 
   registerOverlay: (id: string) => void;
@@ -193,6 +197,8 @@ export const createSyncSlice: StateCreator<
     securityErrorMessage: '',
 
     bootStatus: 'IDLE',
+
+    isHydrating: false,
 
     conflicts: [],
 
@@ -618,26 +624,28 @@ export const createSyncSlice: StateCreator<
 
       window.addEventListener('offline', handleOffline);
 
+      // Store references for cleanup
       (window as any)._syncListeners = { handleOnline, handleOffline };
+
+      console.log(' [SYNC SLICE] Network listeners initialized');
 
     },
 
 
 
     cleanupNetworkListeners: () => {
-
       if (typeof window === 'undefined') return;
 
       const listeners = (window as any)._syncListeners;
-
       if (listeners) {
-
         window.removeEventListener('online', listeners.handleOnline);
-
         window.removeEventListener('offline', listeners.handleOffline);
-
+        
+        // Clean up the reference
+        delete (window as any)._syncListeners;
+        
+        console.log(' [SYNC SLICE] Network listeners cleaned up');
       }
-
     },
 
 
@@ -708,6 +716,13 @@ export const createSyncSlice: StateCreator<
 
     },
 
+
+
+    setIsHydrating: (status) => {
+      set((state) => {
+        state.isHydrating = status;
+      });
+    },
 
 
     // 🎯 OVERLAY MANAGEMENT IMPLEMENTATIONS

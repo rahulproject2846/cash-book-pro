@@ -1,7 +1,6 @@
 "use client";
 
 import { getTimestamp } from '@/lib/shared/utils';
-import { identityManager } from '../core/IdentityManager';
 import { db } from '@/lib/offlineDB';
 
 /**
@@ -29,13 +28,14 @@ export class FinanceService {
   }
 
   /**
-   * 📝 REFRESH ENTRIES - Extracted from entrySlice.ts
+   * �📝 REFRESH ENTRIES - Extracted from entrySlice.ts
    * 
    * Dependencies: identityManager, db.entries, get, set
    */
   async refreshEntries(get: any, set: any): Promise<void> {
-    // 🛡️ IDENTITY SYNC: Get userId directly from identityManager
-    const userId = identityManager.getUserId();
+    // 🛡️ IDENTITY SYNC: Get userId directly from UserManager
+    const { UserManager } = await import('../core/user/UserManager');
+    const userId = UserManager.getInstance().getUserId();
     if (!userId) {
       setTimeout(() => this.refreshEntries(get, set), 100);
       return;
@@ -87,10 +87,14 @@ export class FinanceService {
     editTarget?: any, 
     customActionId?: string
   ): Promise<{ success: boolean; entry?: any; error?: Error }> {
-    // 🔍 VALIDATION FIRST - NO LOCK YET
-    const userId = identityManager.getUserId();
+    // 🛡️ IDENTITY GATE: Ensure UserManager has ID before mutation
+    const { UserManager } = await import('../core/user/UserManager');
+    if (!UserManager.getInstance().getUserId()) {
+      await UserManager.getInstance().waitForIdentity();
+    }
+    const userId = UserManager.getInstance().getUserId();
     if (!userId) {
-      return { success: false, error: new Error('Invalid user ID') };
+      throw new Error("SOVEREIGN_IDENTITY_MISSING");
     }
 
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
@@ -198,24 +202,28 @@ export class FinanceService {
       
       normalized.checksum = checksum;
       
-      // � STEP A: CONSTRUCT BOOK SIGNAL PAYLOAD
-      let bookSignalPayload: { _id: string; cid: string; name: string; userId: string; synced: number; isDeleted: number; vKey: number; updatedAt: number } | null = null;
+      // � STEP A: CONSTRUCT BOOK SIGNAL PAYLOAD - OPTIMIZED FOR ENTRY TRIGGERS
+      // 🎯 LEAN PAYLOAD: Only send fields needed for balance/timestamp updates
+      // This prevents Entry-triggered signals from overwriting user data (name, description, phone, image)
+      let bookSignalPayload: { _id: string; cid: string; userId: string; synced: number; isDeleted: number; vKey: number; updatedAt: number; cachedBalance?: number } | null = null;
       
       const { HydrationController } = await import('../hydration/HydrationController');
       const controller = HydrationController.getInstance();
       
       const activeBook = get().activeBook;
       if (activeBook && (String(activeBook._id) === String(bookId) || String(activeBook.localId) === String(bookId))) {
-        // 🎯 LIGHTWEIGHT BOOK SIGNAL: Only send sorting fields
+        // 🎯 LEAN PAYLOAD FOR ENTRY TRIGGERS: Only send critical fields
+        // This prevents overwriting user data (name, description, phone, image)
+        const newBalance = this.getBookBalance(get, String(activeBook._id || activeBook.localId));
         bookSignalPayload = {
           _id: activeBook._id,
           cid: activeBook.cid,
-          name: activeBook.name,
-          userId: String(activeBook.userId || get().userId || ''),
+          userId: String(activeBook.userId || userId || ''),
           synced: 0,
           isDeleted: Number(activeBook.isDeleted || 0),
           vKey: Number(activeBook.vKey || 1) + 1,
-          updatedAt: getTimestamp()
+          updatedAt: getTimestamp(),
+          cachedBalance: newBalance // 🎯 CRITICAL: Send balance for Entry-triggered updates
         };
       }
       
@@ -254,36 +262,28 @@ export class FinanceService {
       get().processEntries();
       
       // 🎯 ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
+      // ✅ ATOMIC: Only update UI after successful HydrationController batch
       if (bookSignalPayload && activeBook) {
-        // Fetch fresh parent book and update timestamp
-        const parentBook = await db.books.get(String(activeBook._id || activeBook.localId));
-        if (parentBook) {
-          const updatedBook = {
-            ...parentBook,
-            updatedAt: getTimestamp(),
-            vKey: Number(parentBook.vKey || 1) + 1
-          };
-          
-          // Update parent book in Dexie
-          await db.books.update(String(parentBook.localId), {
-            updatedAt: updatedBook.updatedAt,
-            vKey: updatedBook.vKey
-          });
-          
-          // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
-          const { getVaultStore } = await import('../store/storeHelper');
-          const vaultStore = getVaultStore();
-          
-          // 1. Update memory matrix (Activity sort)
-          await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
-          
-          // 🎯 LIGHTWEIGHT REFRESH: Skip full refresh for activity updates
-          // await vaultStore.refreshBooks('DATA_CHANGE'); // ❌ REMOVED: Prevents heavy book sync
-          
-          // 3. 🛡️ ATOMIC CACHE BUSTING: Clear entry cache to show updated balance
-          const { useVaultStore } = await import('../store/index');
-          useVaultStore.setState({ prefetchedEntriesCache: new Map() });
-        }
+        // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
+        const { getVaultStore } = await import('../store/storeHelper');
+        const vaultStore = getVaultStore();
+        
+        // 1. Update memory matrix (Activity sort) - ONLY after successful batch
+        await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
+        
+        // 🔄 RE-HYDRATION SAFETY: Ensure Dexie truth is reflected FIRST
+        await vaultStore.refreshBooks('ENTRY_ADDED');
+        
+        // 🛡️ [PATHOR GUARD] Ensure dashboard is 100% ready before navigation
+        // Wait for state to settle before allowing user to navigate back
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 🎯 LIGHTWEIGHT REFRESH: Skip full refresh for activity updates
+        // await vaultStore.refreshBooks('DATA_CHANGE'); // ❌ REMOVED: Prevents heavy book sync
+        
+        // 3. 🛡️ ATOMIC CACHE BUSTING: Clear entry cache to show updated balance
+        const { useVaultStore } = await import('../store/index');
+        useVaultStore.setState({ prefetchedEntriesCache: {} });
       }
       
       // �� ATOMIC BALANCE PULSE: Update cached balance after successful batch
@@ -318,7 +318,8 @@ export class FinanceService {
     customActionId?: string
   ): Promise<{ success: boolean; error?: Error }> {
     // 🔍 VALIDATION FIRST - NO LOCK YET
-    const userId = identityManager.getUserId();
+    const { UserManager } = await import('../core/user/UserManager');
+    const userId = UserManager.getInstance().getUserId();
     if (!userId || !entry?.localId) return { success: false };
     
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
@@ -353,7 +354,7 @@ export class FinanceService {
       // 🎯 STEP A: DECLARE DELETE PAYLOAD FIRST (Fix hoisting)
       const deletePayload = {
         ...entry,
-        userId: String(userId || get().userId || entry.userId || ''),
+        userId: String(userId || entry.userId || ''),
         bookId: String(entry.bookId || get().activeBook?._id || get().activeBook?.localId || ''),
         title: entry.title || 'Unnamed Entry', // Mandatory for schema
         isDeleted: 1,
@@ -406,7 +407,7 @@ export class FinanceService {
             _id: activeBook._id,
             cid: activeBook.cid,
             name: activeBook.name, // 🛡️ ADDED: To satisfy the Iron Gate validator
-            userId: String(activeBook.userId || get().userId || ''),
+            userId: String(activeBook.userId || userId || ''),
             synced: 0,
             isDeleted: Number(activeBook.isDeleted || 0),
             vKey: Number(activeBook.vKey || 1) + 1,
@@ -434,38 +435,23 @@ export class FinanceService {
       get().processEntries();
       
       // 🆕 ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
+      // ✅ ATOMIC: Only update UI after successful HydrationController batch
       if (parentBookId) {
         const activeBook = get().activeBook;
         if (activeBook && (String(activeBook._id) === String(parentBookId) || String(activeBook.localId) === String(parentBookId))) {
-          // Fetch fresh parent book and update timestamp
-          const parentBook = await db.books.get(String(activeBook._id || activeBook.localId));
-          if (parentBook) {
-            const updatedBook = {
-              ...parentBook,
-              updatedAt: getTimestamp(),
-              vKey: Number(parentBook.vKey || 1) + 1
-            };
-            
-            // Update parent book in Dexie
-            await db.books.update(String(parentBook.localId), {
-              updatedAt: updatedBook.updatedAt,
-              vKey: updatedBook.vKey
-            });
-            
-            // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
-            const { getVaultStore } = await import('../store/storeHelper');
-            const vaultStore = getVaultStore();
-            
-            // 1. Update memory matrix (Activity sort)
-            await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
-            
-            // 🎯 LIGHTWEIGHT REFRESH: Skip full refresh for activity updates
-            // await vaultStore.refreshBooks('DATA_CHANGE'); // ❌ REMOVED: Prevents heavy book sync
-            
-            // 3. 🛡️ ATOMIC CACHE BUSTING: Clear entry cache to show updated balance
-            const { useVaultStore } = await import('../store/index');
-            useVaultStore.setState({ prefetchedEntriesCache: new Map() });
-          }
+          // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
+          const { getVaultStore } = await import('../store/storeHelper');
+          const vaultStore = getVaultStore();
+          
+          // 1. Update memory matrix (Activity sort) - ONLY after successful batch
+          await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
+          
+          // 🎯 LIGHTWEIGHT REFRESH: Skip full refresh for activity updates
+          // await vaultStore.refreshBooks('DATA_CHANGE'); // ❌ REMOVED: Prevents heavy book sync
+          
+          // 3. 🛡️ ATOMIC CACHE BUSTING: Clear entry cache to show updated balance
+          const { useVaultStore } = await import('../store/index');
+          useVaultStore.setState({ prefetchedEntriesCache: {} });
         }
       }
       
@@ -479,7 +465,10 @@ export class FinanceService {
   }
 
   /**
-   * 🔄 UPDATE ENTRY - Extracted from entrySlice.ts
+   * 🔄 UPDATE ENTRY - DEPRECATED
+   * 
+   * @deprecated This method is deprecated. Use saveEntry instead, which handles both create and update.
+   *              Calling this method will result in a console warning.
    * 
    * Dependencies: identityManager, db, get, set
    */
@@ -489,7 +478,17 @@ export class FinanceService {
     id: string, 
     entryPayload: any
   ): Promise<{ success: boolean; entry?: any; error?: string }> {
-    const userId = identityManager.getUserId();
+    // 🛡️ DEPRECATION WARNING
+    console.warn('⚠️ DEPRECATION WARNING: updateEntry() is deprecated. Use saveEntry() instead, which handles both create and update operations.');
+
+    // 🛡️ SECURITY LOCKDOWN CHECK
+    const { isSecurityLockdown } = get();
+    if (isSecurityLockdown) {
+      throw new Error('App in security lockdown');
+    }
+
+    const { UserManager } = await import('../core/user/UserManager');
+    const userId = UserManager.getInstance().getUserId();
     if (!userId) return { success: false, error: 'User not authenticated' };
 
     try {
@@ -525,7 +524,7 @@ export class FinanceService {
           _id: activeBook._id,
           cid: activeBook.cid,
           name: activeBook.name,
-          userId: String(activeBook.userId || get().userId || ''),
+          userId: String(activeBook.userId || userId || ''),
           synced: 0,
           isDeleted: Number(activeBook.isDeleted || 0),
           vKey: Number(activeBook.vKey || 1) + 1,
@@ -608,7 +607,8 @@ export class FinanceService {
     set: any, 
     entry: any
   ): Promise<{ success: boolean; error?: Error }> {
-    const userId = identityManager.getUserId();
+    const { UserManager } = await import('../core/user/UserManager');
+    const userId = UserManager.getInstance().getUserId();
     if (!userId) return { success: false, error: new Error('User not authenticated') };
 
     try {
@@ -657,7 +657,8 @@ export class FinanceService {
     set: any, 
     entry: any
   ): Promise<{ success: boolean; error?: Error }> {
-    const userId = identityManager.getUserId();
+    const { UserManager } = await import('../core/user/UserManager');
+    const userId = UserManager.getInstance().getUserId();
     if (!userId) return { success: false, error: new Error('User not authenticated') };
 
     try {
@@ -708,7 +709,8 @@ export class FinanceService {
     set: any, 
     entry: any
   ): Promise<{ success: boolean; error?: Error }> {
-    const userId = identityManager.getUserId();
+    const { UserManager } = await import('../core/user/UserManager');
+    const userId = UserManager.getInstance().getUserId();
     if (!userId) return { success: false, error: new Error('User not authenticated') };
 
     try {

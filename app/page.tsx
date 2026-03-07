@@ -2,7 +2,7 @@
 
 
 
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,11 +10,11 @@ import { Loader2 } from 'lucide-react';
 
 import { useSearchParams, useRouter } from 'next/navigation';
 
-
+import dynamic from 'next/dynamic';
 
 // Core components
 
-import AuthScreen from '@/components/Auth/AuthScreen';
+const AuthScreen = dynamic(() => import('@/components/Auth/AuthScreen'), { ssr: false });
 
 import { DashboardLayout } from '@/components/Layout/DashboardLayout';
 
@@ -32,11 +32,21 @@ import { ProfileSection } from '@/components/Sections/Profile/ProfileSection';
 
 import { useBootStatus, useVaultState } from '@/lib/vault/store/storeHelper';
 
-import { orchestrator } from '@/lib/vault/core/SyncOrchestrator';
+import { getOrchestrator } from '@/lib/vault/core/SyncOrchestrator';
+
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 
 
 
 function CashBookAppContent() {
+
+  // 🛡️ MOUNTING BARRIER: Prevent server-side HTML mismatch
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Set mounted state on client-side only
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const { isSystemReady } = useBootStatus();
 
@@ -44,11 +54,21 @@ function CashBookAppContent() {
 
     activeSection, setActiveSection, activeBook, 
 
-    userId, currentUser, loginSuccess, isCleaning // 
+    userId, currentUser, loginSuccess, isCleaning, // 
+
+    bootStatus // ✅ ADDED: Boot status state
 
   } = useVaultState();
 
   
+
+  // 🚀 BOOT: Populate memory cache once during app startup
+  useEffect(() => {
+    const userManager = UserManager.getInstance();
+    userManager.boot().catch((error: any) => {
+      console.warn('🚨 [APP] UserManager boot failed:', error);
+    });
+  }, []); // Run once on mount
 
   const searchParams = useSearchParams();
 
@@ -65,6 +85,44 @@ function CashBookAppContent() {
   
 
   const isLoggedIn = !!userId;
+  
+  // 🛡️ IDENTITY ANCHOR CHECK: Proactive session flag check
+  const hasSession = typeof window !== 'undefined' && !!localStorage.getItem('auth_token');
+
+  
+
+  // 🚀 HOLY GRAIL BINARY GATE: PENDING state with Pathor Gate
+  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated' | 'PENDING'>(
+    'PENDING' // ✅ BINARY GATE: Always start with PENDING
+  );
+
+  
+
+  // 🎯 TRIPLE-LOCK CHECK: Proactive Binary Gate - No Reactive Logic
+  useEffect(() => {
+    if (bootStatus === 'READY') {
+      // Proactive Check: If we have a hydrated ID OR even just a raw session token, assume Authenticated.
+      if (isLoggedIn || hasSession) {
+        setAuthState('authenticated');
+        console.log('🚀 [AUTH] User authenticated - showing dashboard');
+        
+        // 🔄 STEP 3: Background Verification
+        UserManager.getInstance().verifySession().then((isValid: boolean) => {
+          if (!isValid) {
+            console.log('❌ [AUTH] Background verification failed - showing login screen');
+            setAuthState('unauthenticated');
+          }
+        });
+      } else {
+        setAuthState('unauthenticated');
+        console.log('❌ [AUTH] No user - showing login');
+      }
+    } else {
+      // While booting, ALWAYS stay in loading state (Blank Screen)
+      setAuthState('loading');
+      console.log('🚀 [AUTH] System booting - blank screen');
+    }
+  }, [isLoggedIn, hasSession, bootStatus]); // ✅ Add hasSession dependency
 
 
 
@@ -89,39 +147,23 @@ function CashBookAppContent() {
 
 
   const handleLoginSuccess = (user: any) => {
+    console.log('🔐 [AUTH] Login success - storing session');
+    
+    // 🚀 Store session in UserManager
+    UserManager.getInstance().storeSession(user);
+    
+    loginSuccess(user); // 🚀 Let's store handle the heavy lifting
 
-    loginSuccess(user); // 🚀 Let the store handle the heavy lifting
-
-    orchestrator.initializeForUser(user._id).catch((err: any) => 
-
+    getOrchestrator().initializeForUser(user._id).catch((err: any) => 
       console.warn('Login hydration failed:', err)
-
     );
-
   };
 
 
 
-  // 🛡️ NATIVE THEME-AWARE LOADER
-
-  const LoadingComponent = () => (
-
-    <div className="min-h-screen bg-[var(--bg-app)] flex flex-col items-center justify-center gap-6">
-
-      <div className="flex flex-col items-center gap-4">
-
-        <Loader2 className="animate-spin text-orange-500" size={56} />
-
-        <span className="text-[10px] font-black text-[var(--text-muted)] animate-pulse  ">
-
-          Verifying Vault Node...
-
-        </span>
-
-      </div>
-
-    </div>
-
+  // 🛡️ PATHOR LOADING SCREEN - Zero-Flicker Experience
+  const PathorLoadingScreen = () => (
+    <div className="bg-[#0a0a0a] h-screen w-screen" />
   );
 
 
@@ -194,7 +236,24 @@ function CashBookAppContent() {
 
 
 
-  if (!isLoggedIn) return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
+  // 🚀 CRITICAL: Mounting Barrier - Prevent server-side HTML mismatch
+  if (!isMounted) {
+    return <div className="fixed inset-0 bg-[#0a0a0a]" />;
+  }
+
+  // 🎯 AUTH-BASED RENDERING: Use 3-step auth state with Pathor Gate
+  if (authState === 'loading') {
+    return <PathorLoadingScreen />;
+  }
+
+  if (authState === 'PENDING') {
+    // 🛡️ PATHOR GATE: Blank screen during boot phase
+    return <div className="bg-[#0a0a0a] h-screen w-screen" />;
+  }
+
+  if (authState === 'unauthenticated') {
+    return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
+  }
 
 
 

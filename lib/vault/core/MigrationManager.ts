@@ -1,5 +1,5 @@
 import { db } from '@/lib/offlineDB';
-import { identityManager } from './IdentityManager';
+import { UserManager } from '@/lib/vault/core/user/UserManager';
 
 /**
  * 🏗️ HOLLY GRILL SELF-HEALING MIGRATION ENGINE (V5.0)
@@ -110,6 +110,12 @@ export class MigrationManager {
       // Process batch in atomic transaction
       await db.transaction('rw', db.users, db.migrationCheckpoints, async () => {
         for (const user of batch) {
+          // 🛡️ USERNAME GUARD: Abort update if username is missing to prevent wiping real names
+          if (!user.username || user.username === '') {
+            console.warn('🛡️ [MIGRATION] Skipping user update - missing username would overwrite real name:', user._id);
+            continue; // Skip this record to preserve existing username
+          }
+          
           if (!user.preferences) user.preferences = {};
           
           // 23-Field Alignment: Preferences
@@ -180,7 +186,6 @@ export class MigrationManager {
         for (const book of batch) {
           book.entryCount = book.entryCount ?? 0;
           book.description = book.description ?? "";
-          book.color = book.color ?? "var(--accent)";
           book.isDeleted = Number(book.isDeleted || 0);
           book.synced = book.synced ?? 0;
           book.conflicted = book.conflicted ?? 0;
@@ -305,24 +310,34 @@ export class MigrationManager {
   }
 
   /**
-   * ⚙️ RUN ALL MIGRATIONS: Executes pending scripts in strict sequence.
+   * RUN ALL MIGRATIONS: Executes pending scripts in strict sequence.
    */
   async runMigrations(currentUserId: string): Promise<void> {
     try {
       const currentVersion = this.getCurrentVersion();
       
       if (currentVersion >= CURRENT_DB_VERSION) {
-        console.log(`✅ [MIGRATION] System is up to date (V${CURRENT_DB_VERSION})`);
+        console.log(`[MIGRATION] System is up to date (V${CURRENT_DB_VERSION})`);
         return;
       }
       
-      console.group(`🏗️ [MIGRATION ENGINE] Leveling up: V${currentVersion} -> V${CURRENT_DB_VERSION}`);
+      console.group(`[MIGRATION ENGINE] Leveling up: V${currentVersion} -> V${CURRENT_DB_VERSION}`);
+
+      // ATOMIC BACKUP: Pre-migration safety net
+      try {
+        const backup = await db.export();
+        localStorage.setItem('vault_db_backup_v33', JSON.stringify(backup));
+        console.log('[MIGRATION] Pre-migration backup secured.');
+      } catch (backupError) {
+        console.error('[MIGRATION] Backup failed, proceeding with caution:', backupError);
+        // Continue with migration but log the risk
+      }
 
       // Legacy Legacy Fixes (V1-V5)
       if (currentVersion < 1) await this.migrationV1_FixUserIds(currentUserId);
       if (currentVersion < 2) await this.migrationV2_AddNewFields();
 
-      // 🚨 THE HOLLY GRILL MASTER UPGRADE (V33)
+      // THE HOLLY GRILL MASTER UPGRADE (V33)
       if (currentVersion < 33) {
         await this.migrationV31_BatchedSchemaAlignment(currentUserId);
       }
@@ -337,16 +352,16 @@ export class MigrationManager {
         }));
       }
 
-      console.log(`🎉 [MIGRATION] System optimized to Holly Grill V${CURRENT_DB_VERSION}`);
+      console.log(`[MIGRATION] System optimized to Holly Grill V${CURRENT_DB_VERSION}`);
       console.groupEnd();
 
     } catch (error) {
-      console.error('❌ [CRITICAL] Migration Engine Failure:', error);
+      console.error('[CRITICAL] Migration Engine Failure:', error);
       // In case of failure, we don't update the version key to allow retry
     }
   }
 
-  // --- 🛠️ INTERNAL REPAIR SCRIPTS (LEGACY SUPPORT) ---
+  // --- INTERNAL REPAIR SCRIPTS (LEGACY SUPPORT) ---
 
   private async migrationV1_FixUserIds(uid: string): Promise<void> {
     await db.books.toCollection().modify((book: any) => {

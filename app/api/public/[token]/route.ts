@@ -21,7 +21,7 @@ export async function GET(
 
     // ২. বই খোঁজা (অবশ্যই isPublic: true হতে হবে)
     // সিকিউরিটির জন্য userId এবং টাইমস্ট্যাম্প বাদ দেওয়া হয়েছে
-    const book = await Book.findOne({ shareToken: token, isPublic: true })
+    const book = await Book.findOne({ shareToken: token, isPublic: 1 })
         .select('-userId -createdAt -updatedAt -__v');
     
     if (!book) {

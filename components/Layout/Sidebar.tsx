@@ -46,8 +46,8 @@ export const Sidebar = ({
     const router = useRouter();
     
     const handleLogout = () => {
-        const { orchestrator } = require('@/lib/vault/core/SyncOrchestrator');
-        orchestrator.logout();
+        const { logout } = useVaultStore.getState();
+        logout(); // 🏛️ Sovereign Exit through store
     };
     
     const handleNavClick = (section: string) => {
