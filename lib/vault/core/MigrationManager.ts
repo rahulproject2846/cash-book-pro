@@ -242,7 +242,6 @@ export class MigrationManager {
           entry.serverData = entry.serverData ?? null;
           entry.checksum = entry.checksum ?? "";
           entry.isPinned = entry.isPinned ?? 0;
-          entry.mediaId = entry.mediaId ?? null;
           entry.isDeleted = Number(entry.isDeleted || 0);
           entry.synced = entry.synced ?? 0;
           entry.userId = entry.userId && entry.userId !== 'admin' ? entry.userId : currentUserId;

@@ -248,6 +248,26 @@ export const normalizeTimestamp = (val: any): number => {
 
 /**
 
+ * 🔑 VKEY FACTORY: Unified version control for all records
+
+ * @param current - Current vKey value
+
+ * @param isMajor - If true (e.g., image change), increments by 2, otherwise +1
+
+ */
+
+export const getNextVKey = (current: number, isMajor: boolean = false): number => {
+
+    const increment = isMajor ? 2 : 1;
+
+    return Number(current || 0) + increment;
+
+};
+
+
+
+/**
+
  * 🔧 MEDIA FIELD SANITIZER: Self-healing logic for toxic image data
 
  */
@@ -571,21 +591,18 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
 
 
 
-    // 🔧 SMART FIELD CORRECTION: Fix swapped media fields before processing
+    // 🔧 MEDIA FIELD CORRECTION: Fix swapped media fields before processing
     if (isBook) {
-        // 🚨 SMART FIX: If mediaCid starts with http, move it to image
-        if (normalized.mediaCid && typeof normalized.mediaCid === 'string' && normalized.mediaCid.startsWith('http')) {
-            console.log('🔧 [NORMALIZER] Smart fix: mediaCid is HTTP URL - moving to image field');
-            normalized.image = normalized.mediaCid;
-            normalized.mediaCid = null;
+        // RULE 1: Only swap image to mediaCid if it starts with 'cid_'
+        if (normalized.image && typeof normalized.image === 'string' && normalized.image.startsWith('cid_')) {
+            console.log('🛡️ [NORMALIZER] CID detected in image - moving to mediaCid');
+            normalized.mediaCid = normalized.image;
+            normalized.image = ''; // Clear the CID reference from image
         }
         
-        // 🚨 SMART FIX: If image starts with cid_, move it to mediaCid
-        if (normalized.image && typeof normalized.image === 'string' && normalized.image.startsWith('cid_')) {
-            console.log('🛡️ [NORMALIZER] CID detected - moving to mediaCid and NULLING image');
-            normalized.mediaCid = normalized.image;
-            normalized.image = ''; // Must be empty string to satisfy DB schema
-        }
+        // RULE 2: NEVER auto-swap mediaCid back to image - only if explicitly requested
+        // This prevents bidirectional swapping chaos
+        // If mediaCid is HTTP URL, keep it as mediaCid (not swapping to image)
         
         // Apply media sanitization after smart corrections
         const mediaSanitized = sanitizeMediaFields(normalized);
@@ -700,9 +717,8 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
         normalized.updatedAt = getTimestamp();
     }
 
-    // CRITICAL FIX: Don't normalize date field - keep as ISO string for checksum consistency
-
-    // if (normalized.date) normalized.date = normalizeTimestamp(normalized.date);
+    // 🚨 DNA HARDENING: Uncommented to normalize date to Unix ms
+    if (normalized.date) normalized.date = normalizeTimestamp(normalized.date);
 
 
     // ৫. ফিল্ড এলিয়াস (Legacy Support)

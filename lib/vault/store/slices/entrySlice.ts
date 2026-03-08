@@ -25,6 +25,8 @@ export interface EntryState {
   conflicted: number;
   conflictReason: string;
   serverData: any;
+  // 🆕 7-SECOND SAFETY NET: Track pending entry deletions
+  pendingEntryDeletion: { entryId: string; entry: any; timeoutId: any; expiresAt: number } | null;
 }
 
 // 📝 ENTRY ACTIONS INTERFACE
@@ -70,6 +72,8 @@ export const createEntrySlice = (set: any, get: any, api: any): EntryState & Ent
   conflicted: 0,
   conflictReason: '',
   serverData: null,
+  // 🆕 7-SECOND SAFETY NET: Track pending entry deletions
+  pendingEntryDeletion: null,
 
   // 📝 REFRESH ENTRIES
   refreshEntries: async () => {

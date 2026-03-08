@@ -8,6 +8,7 @@ import { getVaultStore } from '../store/storeHelper';
 import { LicenseVault, RiskManager } from '../security';
 import { SecureApiClient } from '../utils/SecureApiClient';
 import { SyncGuard } from '../guards/SyncGuard';
+import { IdentityProvider } from '@/lib/utils/identityProvider';
 
 // 🛡️ API PATH MAPPING - Prevent pluralization typos
 const API_PATH_MAP: Record<string, string> = {
@@ -21,39 +22,6 @@ const API_PATH_MAP: Record<string, string> = {
  * Reused from PushService for consistency
  */
 class SmartBatchProcessor<T> {
-  private readonly DEFAULT_BATCH_SIZE = 20; // Pull batches of 20 items
-  private readonly LARGE_PAYLOAD_THRESHOLD = 10240; // 10KB in bytes
-
-  /**
-   * 📊 Create intelligent batches based on JSON payload size
-   */
-  createSmartBatches(items: T[]): T[][] {
-    const batches: T[][] = [];
-    
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      
-      // 🎯 SIZE CHECK: Calculate JSON string size
-      const jsonSize = JSON.stringify(item).length;
-      
-      if (jsonSize > this.LARGE_PAYLOAD_THRESHOLD) {
-        // 📦 SINGLE-ITEM BATCH: Large payload (likely image)
-        // console.log(`📦 [SMART BATCH] Large payload detected (${jsonSize} bytes), creating single-item batch`); // SILENT_MODE
-        batches.push([item]);
-      } else {
-        // 📦 NORMAL BATCHING: Group small items together
-        let currentBatch = batches[batches.length - 1];
-        if (!currentBatch || currentBatch.length >= this.DEFAULT_BATCH_SIZE) {
-          currentBatch = [];
-          batches.push(currentBatch);
-        }
-        currentBatch.push(item);
-      }
-    }
-    
-    return batches;
-  }
-
   /**
    * 📏 Calculate optimal delay based on server response time
    */
@@ -140,9 +108,6 @@ class SyncProgressTracker {
         percentage: progress,
         eta: estimatedRemaining / 1000
       });
-      
-      // 📊 BATCH PROGRESS: Silenced for production - only summary logged
-      // console.log(`📊 [PULL PROGRESS] Batch ${batchNumber} - ${this.processedItems}/${this.totalItems} (${progress.toFixed(1)}%) - Est. remaining: ${(estimatedRemaining/1000).toFixed(1)}s`);
     }
   }
 
@@ -289,6 +254,16 @@ export class PullService {
    * 🚀 BATCHED PULL PENDING DATA FROM SERVER
    */
   async pullPendingData(): Promise<{ success: boolean; itemsProcessed: number; errors: string[] }> {
+    // 🛡️ INTEGRATE IDENTITY PROVIDER: Get sovereign ID first
+    const sovereignId = await IdentityProvider.getSovereignId();
+    if (!sovereignId) {
+      console.error('🔒 [PULL SERVICE] No sovereign ID available - blocking data pull');
+      return { success: false, itemsProcessed: 0, errors: ['No sovereign ID available'] };
+    }
+    
+    // Set userId from sovereign ID anchor
+    this.userId = sovereignId;
+    
     // 🛡️ SECURITY INTERLOCK: Verify telemetry first
     const telemetryResult = await this.verifyTelemetryIntegrity();
     if (!telemetryResult.valid) {
@@ -445,9 +420,9 @@ export class PullService {
 
     try {
       // 🔄 CHECKPOINT RESUME: Read syncPoints to avoid full fetch
-      const { db } = await import('@/lib/offlineDB');
       const checkpoint = await db.syncPoints.where('type').equals('books').and((item: any) => item.userId === this.userId).first();
-      let lastSequence = checkpoint?.lastSequence || 0;
+      // 🎯 GUARD: Ensure lastSequence defaults to 0 using nullish coalescing
+      let lastSequence = checkpoint?.lastSequence ?? 0;
       
       let offset = 0;
       
@@ -466,8 +441,6 @@ export class PullService {
       
       while (hasMore && batchIndex < maxLoopCount) {
         batchIndex++;
-        // 🚀 BATCH PROCESSING: Silenced for production - only summary logged
-        // console.log(`🚀 [BATCH PULL SERVICE] Processing book batch ${batchIndex} from offset ${offset}`);
         
         const batchStartTime = Date.now();
         let batchSuccess = true;
@@ -524,8 +497,7 @@ export class PullService {
               break;
             }
             
-            // Continue to next batch
-            offset += 20;
+            // Continue to next batch - delta sync uses sequenceAfter
             continue;
           } else {
             consecutiveEmptyBatches = 0; // Reset counter on successful batch
@@ -534,7 +506,6 @@ export class PullService {
           // 🎯 KILL INFINITE PULL: Strict termination when books < 20
           if (books.length < 20) {
             hasMore = false;
-            // console.log(` [PULL SERVICE] Termination: books.length (${books.length}) < 20, stopping pull`); // SILENT_MODE
             break;
           }
           
@@ -542,8 +513,6 @@ export class PullService {
           const validBooks = books.filter((book: any) => 
             lastSequence === 0 ? true : book.sequenceNumber > lastSequence
           );
-          
-          // console.log(` [BATCH PULL SERVICE] Retrieved ${books.length} books, ${validBooks.length} valid after sequence check`); // SILENT_MODE
           
           // INVALID BATCH GUARD: Stop if we get valid=0 but books>0 for 3 consecutive batches
           if (validBooks.length === 0 && books.length > 0) {
@@ -574,9 +543,6 @@ export class PullService {
               for (const book of validBooks) {
                 try {
                   // SAFETY GUARD: Validate completeness before storing
-                  //  [AUDIT] Log server payload to see what we're getting
-                  console.log('📡 [PULL PAYLOAD]', { id: book._id, image: book.image, mediaCid: book.mediaCid, localId: book.localId });
-                  
                   // SOFT VALIDATION: Accept server data, fix missing fields locally
                   const validation = validateCompleteness(book, 'book');
                   if (!validation.isValid) {
@@ -603,8 +569,6 @@ export class PullService {
                       this.hydrateMissingMedia(storedRecord.image, bookLocalId).catch(error => {
                         console.warn(`⚠️ [PULL SERVICE] Background media download failed for book ${bookLocalId}:`, error);
                       });
-                    } else {
-                      console.log(`ℹ️ [PULL SERVICE] Skipping download for book ${bookLocalId}: Media already CID-mapped or no URL.`);
                     }
                   } else {
                     // 🛡️ ONLY COUNT AS FAILURE IF ACTUAL ERROR EXISTS
@@ -678,9 +642,23 @@ export class PullService {
           batchSuccess = false;
           previousFailed = true;
           
-          // Continue to next batch on failure
-          offset += 20;
+          // Continue to next batch on failure - delta sync uses sequenceAfter
           hasMore = true;
+        }
+      }
+
+      // 🎯 SAVE CHECKPOINT: Persist lastSequence for books
+      if (lastSequence > 0) {
+        try {
+          await db.syncPoints.put({
+            userId: this.userId,
+            type: 'books',
+            lastSequence: lastSequence,
+            timestamp: Date.now()
+          });
+          console.log(`✅ [PULL SERVICE] Books checkpoint saved - lastSequence: ${lastSequence}`);
+        } catch (checkpointError) {
+          console.warn('⚠️ [PULL SERVICE] Failed to save books checkpoint:', checkpointError);
         }
       }
 
@@ -702,11 +680,13 @@ export class PullService {
     let previousFailed = false;
 
     try {
-      // 🔄 START FROM BEGINNING: Simplified pull without checkpoints
+      // 🔄 CHECKPOINT RESUME: Read syncPoints to avoid full fetch
+      // 🛡️ FIXED: Now correctly reading checkpoint instead of starting from 0
+      const checkpoint = await db.syncPoints.where('type').equals('entries').and((item: any) => item.userId === this.userId).first();
+      let lastSequence = checkpoint?.lastSequence ?? 0;
       let offset = 0;
-      let lastSequence = 0;
       
-      console.log('🚀 [BATCH PULL SERVICE] Starting entries pull from offset:', offset);
+      console.log('🚀 [BATCH PULL SERVICE] Starting entries pull from sequence:', lastSequence);
       
       let hasMore = true;
       
@@ -735,6 +715,13 @@ export class PullService {
             'PullService'
           );
           
+          // 🛡️ DNA ENFORCEMENT: Handle 404 as silent "End of Stream"
+          if (response.status === 404) {
+            console.warn('⚠️ [PULL SERVICE] End of data stream (404), stopping entries pull');
+            hasMore = false;
+            break;
+          }
+
           if (!response.ok) {
             throw new Error(`Server response: ${response.status}`);
           }
@@ -776,8 +763,7 @@ export class PullService {
               break;
             }
             
-            // Continue to next batch
-            offset += 20;
+            // Continue to next batch - delta sync uses sequenceAfter
             continue;
           } else {
             consecutiveEmptyBatches = 0; // Reset counter on successful batch
@@ -891,13 +877,6 @@ export class PullService {
           
           // 🎯 PERSIST CHECKPOINT: Save checkpoint from validEntries only
           if (validEntries.length > 0) {
-            const maxSeq = Math.max(...validEntries.map((e: any) => e.sequenceNumber || 0), 0);
-            lastSequence = maxSeq;
-            console.log(`✅ [PULL SERVICE] Updated lastSequence: ${maxSeq}`);
-          }
-          
-          // 🎯 PERSIST CHECKPOINT: Save checkpoint from validEntries only
-          if (validEntries.length > 0) {
             await db.syncPoints.put({
               userId: this.userId,
               type: 'entries',
@@ -915,8 +894,7 @@ export class PullService {
           batchSuccess = false;
           previousFailed = true;
           
-          // Continue to next batch on failure
-          offset += 20;
+          // Continue to next batch on failure - delta sync uses sequenceAfter
           hasMore = true;
         }
       }
@@ -946,7 +924,7 @@ export class PullService {
         userId: String(this.userId),
         synced: 1, // Server data is synced
         isDeleted: book.isDeleted || 0,
-        updatedAt: Number(book.updatedAt) || Date.now() // �️ DNA LAW V4.0: Force Number type
+        updatedAt: Number(book.updatedAt) || Date.now() // ️ DNA LAW V4.0: Force Number type
       }, this.userId);
 
       // 2. SOFT VALIDATION: Accept server data, log warnings only
@@ -989,7 +967,7 @@ export class PullService {
         
         // 2. LOCAL NEWER CHECK: Push back to server
         if (localTime > serverTime) {
-          // � vKey CONFLICT GUARD: Use vKey as secondary conflict detection
+          //  vKey CONFLICT GUARD: Use vKey as secondary conflict detection
           if (localVKey > serverVKey) {
             console.log(`🔄 [PRECISION SYNC] Book ${book.cid} local is newer (time: ${localTime} > ${serverTime}, vKey: ${localVKey} > ${serverVKey}) - marking for push`);
           } else {
@@ -1072,7 +1050,7 @@ export class PullService {
         userId: String(this.userId),
         synced: 1, // Server data is synced
         isDeleted: entry.isDeleted || 0,
-        updatedAt: Number(entry.updatedAt) || Date.now() // �️ DNA LAW V4.0: Force Number type
+        updatedAt: Number(entry.updatedAt) || Date.now() // ️ DNA LAW V4.0: Force Number type
       }, this.userId);
 
       // 2. SOFT VALIDATION: Accept server data, log warnings only
@@ -1112,7 +1090,7 @@ export class PullService {
         
         // 2. LOCAL NEWER CHECK: Push back to server
         if (localTime > serverTime) {
-          // � DNA HARDENING: Race condition protection - only set synced: 0 if significantly newer
+          //  DNA HARDENING: Race condition protection - only set synced: 0 if significantly newer
           if (localVKey > serverVKey) {
             console.log(`🔄 [PRECISION SYNC] Entry ${entry.cid} local is newer (time: ${localTime} > ${serverTime}, vKey: ${localVKey} > ${serverVKey}) - marking for push`);
           } else {

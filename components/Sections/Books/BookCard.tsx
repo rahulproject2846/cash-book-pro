@@ -1,7 +1,7 @@
 "use client";
 import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { 
-    Plus, BookOpen, Loader2, Zap, Wallet, Clock, ShieldCheck, ImageIcon, Edit3, Trash2
+    Plus, BookOpen, Loader2, Zap, Wallet, Clock, ShieldCheck, ImageIcon, Edit3, Trash2, AlertCircle, Cloud, Check
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -166,10 +166,20 @@ const BookCard = React.memo<BookCardProps>(({
             {/* Header: Identity & Icon */}
             <div className="flex justify-between items-start relative z-10 gap-2">
                 <div className="flex flex-col gap-1 md:gap-1.5 min-w-0">
-                    <span className="text-[7.5px] md:text-[9px] font-black text-green-500 flex items-center gap-1.5 bg-green-500/5 px-2 py-1 rounded-lg border border-green-500/10 w-fit shrink-0">
-                        <Zap size={9} fill="currentColor" strokeWidth={0} className="animate-pulse" /> 
-                        ID: {toBn(String(bookId).slice(-6).toUpperCase(), language)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[7.5px] md:text-[9px] font-black text-green-500 flex items-center gap-1.5 bg-green-500/5 px-2 py-1 rounded-lg border border-green-500/10 w-fit shrink-0">
+                            <Zap size={9} fill="currentColor" strokeWidth={0} className="animate-pulse" /> 
+                            ID: {toBn(String(bookId).slice(-6).toUpperCase(), language)}
+                        </span>
+                        {/* 🆕 DYNAMIC SYNC STATUS ICON - Outside the badge */}
+                        {reactiveBook.conflicted === 1 ? (
+                            <AlertCircle size={14} className="text-red-500 shrink-0" />
+                        ) : reactiveBook.synced === 0 ? (
+                            <Cloud size={14} className="text-orange-500 shrink-0" />
+                        ) : (
+                            <Check size={14} className="text-green-500 shrink-0" />
+                        )}
+                    </div>
                     <h3 className="text-[15px] md:text-xl font-black text-[var(--text-main)] truncate group-hover:text-orange-500 transition-colors mt-0.5">
                         {reactiveBook.name || t('ledger_untitled') || 'Untitled Book'}
                     </h3>

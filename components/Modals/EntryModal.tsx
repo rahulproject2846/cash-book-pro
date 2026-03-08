@@ -130,7 +130,11 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
         setIsLoading(true);
         try {
             const res = await saveEntry({
-                ...form, amount: amt, type: activeInput,
+                ...form, 
+                amount: amt, 
+                type: activeInput,
+                // 🚨 DNA HARDENING: Convert YYYY-MM-DD string to Unix ms number (defensive)
+                date: form.date ? (typeof form.date === 'number' ? form.date : new Date(form.date).getTime()) : Date.now(),
                 bookId: initialData?.bookId || currentBook?._id || currentBook?.localId,
                 userId: finalUserId
             }, initialData, actionId);

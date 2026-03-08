@@ -5,7 +5,7 @@ import { db } from '@/lib/offlineDB';
 import { LocalEntry } from '@/lib/offlineDB';
 import { HydrationController } from '../hydration/HydrationController';
 import { financeService } from './FinanceService';
-import { SyncGuard } from '../guards/SyncGuard';
+import { conflictService } from './ConflictService';
 import { getSovereignId } from '@/lib/utils/identityProvider';
 import { generateCID } from '@/lib/offlineDB';
 import { normalizeRecord } from '../core/VaultUtils';
@@ -22,6 +22,7 @@ interface BookMatrixItem {
   isPinned: number;
   updatedAt: number;
   cachedBalance?: number;
+  synced: number; // 🆕 ADDED: Real-time sync status tracking
 }
 
 /**
@@ -56,7 +57,8 @@ export class BookService {
         mediaCid: String(book.mediaCid || ''), // ✅ RESTORED
         isPinned: Number(book.isPinned || 0),
         updatedAt: Number(book.updatedAt || 0),
-        cachedBalance: Number(book.cachedBalance || 0) // Will be calculated later
+        cachedBalance: Number(book.cachedBalance || 0), // Will be calculated later
+        synced: Number(book.synced ?? 1) // 🆕 ADDED: Sync status from Dexie
       } as BookMatrixItem));
   }
 
@@ -74,13 +76,21 @@ export class BookService {
 
   /**
    * 🔄 REFRESH BOOKS WITH LIGHTWEIGHT MATRIX
+   * @param retryCount Internal counter for retry attempts (0-3)
    */
-  async refreshBooks(get: any, set: any, source?: string): Promise<boolean> {
+  async refreshBooks(get: any, set: any, source?: string, retryCount: number = 0): Promise<boolean> {
     // 🛡️ IDENTITY SYNC: Get userId directly from UserManager
     const userId = await getSovereignId();
     if (!userId) {
-      // 🆕 SELF-HEALING RETRY: Wait for identity to load instead of giving up
-      setTimeout(() => get().refreshBooks('RETRY'), 500);
+      // 🛡️ RETRY WITH DOUBLING DELAY: Max 3 retries (500ms, 1000ms, 2000ms)
+      if (retryCount < 3) {
+        const delays = [500, 1000, 2000];
+        const delay = delays[retryCount];
+        console.warn(`⚠️ [REFRESH BOOKS] userId not found, retry ${retryCount + 1}/3 in ${delay}ms`);
+        setTimeout(() => get().refreshBooks(source, retryCount + 1), delay);
+      } else {
+        console.error('❌ [REFRESH BOOKS] Max retries (3) reached, giving up silently');
+      }
       return false;
     }
     
@@ -129,11 +139,22 @@ export class BookService {
       
       set({ allEntries }); // ✅ RESTORE ENTRIES FOR BALANCE
 
-      // ✅ MAIN STATE UPDATE: Always update store regardless of fallback path
+      // ✅ MAIN STATE UPDATE: Use .map() for partial updates to prevent UI flash
+      // If store already has data, merge new data silently
+      const existingBooks = get().books || [];
+      const hasExistingData = existingBooks.length > 0;
+      
+      const updatedBooks = hasExistingData 
+        ? existingBooks.map((b: BookMatrixItem) => {
+            const fresh = bookMatrix.find((n: BookMatrixItem) => String(n._id || n.localId) === String(b._id || b.localId));
+            return fresh ? { ...b, ...fresh } : b; // 🎯 Silently merge changes only
+          })
+        : bookMatrix;
+      
       set({ 
         allBookIds: bookMatrix,
-        books: bookMatrix,          // ✅ Update source of truth
-        filteredBooks: bookMatrix,   // ✅ Update filter results
+        books: updatedBooks,           // ✅ Use merged data
+        filteredBooks: updatedBooks,   // ✅ Use merged data
         totalBookCount: bookMatrix.length
       });
 
@@ -143,6 +164,7 @@ export class BookService {
       
       return true;
     } catch (error) {
+      console.error('❌ [BOOK SERVICE] refreshBooks failed:', error);
       return false;
     } finally {
       set({ isRefreshing: false });
@@ -287,7 +309,6 @@ export class BookService {
   async saveBook(get: any, set: any, bookData: any, editTarget?: any): Promise<{ success: boolean; book?: any; error?: Error }> {
     // 🛡️ IDENTITY GATE: Get sovereign ID from multiple sources
     const userId = await getSovereignId();
-    console.log('🔍 [MUTATION_AUDIT] Attempting save. Sovereign ID:', userId);
     if (!userId) {
       throw new Error("No user ID available for local mutation");
     }
@@ -367,7 +388,8 @@ export class BookService {
                   mediaCid: newBook.mediaCid || '',
                   isPinned: newBook.isPinned || 0, 
                   updatedAt: newBook.updatedAt,
-                  cachedBalance: newBook.cachedBalance || 0 // Update metadata
+                  cachedBalance: newBook.cachedBalance || 0, // Update metadata
+                  synced: newBook.synced ?? b.synced // 🆕 ADDED: Preserve sync status
                 } 
               : b
           );
@@ -383,7 +405,8 @@ export class BookService {
               mediaCid: newBook.mediaCid || '',
               isPinned: newBook.isPinned || 0, 
               updatedAt: newBook.updatedAt,
-              cachedBalance: newBook.cachedBalance || 0
+              cachedBalance: newBook.cachedBalance || 0,
+              synced: newBook.synced ?? 1 // 🆕 ADDED: Default synced=1 for new books
           };
           updatedMatrix = [newMatrixItem, ...currentMatrix];
       }
@@ -521,7 +544,9 @@ export class BookService {
     
     // 🆕 IDENTITY VALIDATION: Ensure userId is available
     if (!userId) {
-      // 🆕 SELF-HEALING RETRY: Wait for identity to load instead of giving up
+      // 🛡️ RETRY WITH DOUBLING DELAY: Max 3 retries (500ms, 1000ms, 2000ms)
+      // This method will retry refreshBooks which now handles retryCount internally
+      console.warn(`⚠️ [APPLY FILTERS] userId not found, retrying refreshBooks`);
       setTimeout(() => get().refreshBooks('RETRY'), 500);
       return;
     }
@@ -585,81 +610,12 @@ export class BookService {
   }
 
   /**
-   * 🛡️ RESURRECT BOOK CHAIN: Handle parent_deleted conflict resolution
+   * 🛡️ RESURRECT BOOK CHAIN: Delegate to ConflictService
+   * 
+   * This method delegates to ConflictService for centralized conflict resolution.
    */
   async resurrectBookChain(get: any, bookCid: string): Promise<{ success: boolean; error?: Error }> {
-    try {
-      
-      // 🔐 SECURITY GUARD: Validate sync access before resurrection
-      const guardResult = await SyncGuard.validateSyncAccess({
-        serviceName: 'SyncOrchestrator', // Use allowed service name
-        onError: (msg: string) => console.warn(`🔒 [BOOK SERVICE] ${msg}`),
-        returnError: (msg: string) => ({ success: false, error: new Error(msg) })
-      });
-      if (!guardResult.valid) {
-        console.warn('🔒 [BOOK SERVICE] Book resurrection blocked by security guard');
-        return { success: false, error: new Error('Security guard blocked resurrection') };
-      }
-      
-      // 🎯 STEP 1: FIND THE BOOK
-      const book = await db.books.where('cid').equals(bookCid).first();
-      if (!book) {
-        throw new Error(`Book not found: ${bookCid}`);
-      }
-      
-      // 🎯 STEP 2: CLEAR SERVER IDENTITY
-      const resurrectedBook = {
-        ...book,
-        _id: undefined, // Remove server ID
-        vKey: (book.vKey || 0) + 1, // 🎯 SMART VKEY: Increment by 1 instead of +100 hack
-        synced: 0, // Mark as unsynced
-        conflicted: 0, // Clear conflict
-        conflictReason: '', // Clear conflict reason
-        serverData: null, // Clear server data
-        updatedAt: getTimestamp()
-      };
-      
-      // 🎯 STEP 3: UPDATE BOOK AND ENTRIES IN SINGLE TRANSACTION
-      const controller = HydrationController.getInstance();
-      
-      // Update the book first
-      const bookResult = await controller.ingestLocalMutation('BOOK', [resurrectedBook]);
-      if (!bookResult.success) {
-        throw new Error(bookResult.error || 'Failed to resurrect book via HydrationController');
-      }
-      
-      // 🎯 STEP 4: FIND ALL ENTRIES
-      const allEntries = await db.entries
-        .where('bookId').equals(bookCid)
-        .and((entry: any) => entry.isDeleted === 0)
-        .toArray();
-      
-      // 🎯 STEP 5: RESET ALL ENTRIES ATOMICALLY
-      if (allEntries.length > 0) {
-        const entryUpdates = allEntries.map((entry: LocalEntry) => ({
-          ...entry,
-          synced: 0, // Mark as unsynced
-          vKey: (entry.vKey || 0) + 1, // 🎯 SMART VKEY: Increment by 1 instead of +100 hack
-          updatedAt: getTimestamp()
-        }));
-        
-        const entryResult = await controller.ingestLocalMutation('ENTRY', entryUpdates);
-        if (!entryResult.success) {
-          throw new Error(entryResult.error || 'Failed to resurrect entries via HydrationController');
-        }
-      }
-      
-      // 🎯 STEP 6: TRIGGER BATCHED SYNC
-      const { triggerManualSync } = get();
-      if (triggerManualSync) {
-        await triggerManualSync();
-      }
-      
-      return { success: true, error: undefined };
-      
-    } catch (error) {
-      return { success: false, error: error as Error };
-    }
+    return await conflictService.resurrectBookChain(get, bookCid);
   }
 
   /**
@@ -676,13 +632,24 @@ export class BookService {
     const state = get();
     const { allBookIds } = state;
     
+    // 🆕 FETCH LATEST SYNC STATUS: Get from Dexie before updating matrix
+    // 🎯 TRIPLE-LINK GUARD: Handle both numeric and string IDs
+    const isNumeric = !isNaN(Number(bookId));
+    const query = isNumeric 
+      ? db.books.where('localId').equals(Number(bookId))
+      : db.books.where('_id').equals(bookId);
+    const dexieBook = await query.or('cid').equals(bookId).first();
+    const latestSyncedStatus = dexieBook?.synced ?? 0;
+    
     // 🆕 ATOMIC MATRIX UPDATE: Get latest state to prevent race conditions
     const currentMatrix = get().allBookIds;
     const updatedMatrix = currentMatrix.map((item: BookMatrixItem) => {
       if (String(item.localId) === bookId) {
         return {
           ...item,
-          updatedAt: getTimestamp() // Update timestamp to trigger re-sort
+          updatedAt: getTimestamp(), // Update timestamp to trigger re-sort
+          synced: latestSyncedStatus, // 🆕 ADDED: Reflect latest sync status from Dexie
+          cachedBalance: dexieBook?.cachedBalance ?? item.cachedBalance // 🎯 Bring balance to memory
         };
       }
       return item;

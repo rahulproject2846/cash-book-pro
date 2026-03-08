@@ -335,7 +335,7 @@ export class PushService {
 
   private static instance: PushService;
 
-  private isSyncing = false;
+  public isSyncing = false; // 🚨 STORM SUPPRESSION: Made public for Orchestrator access
 
   private userId: string = '';
 
@@ -445,31 +445,29 @@ export class PushService {
 
   /**
    * Update user profile on server
+   * Law: Write-to-Disk first, Sync-to-Cloud later
    */
   public async updateUserProfile(userId: string, profileData: any): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
-      console.log(`👤 [PUSH SERVICE] Updating profile for user ${userId}`);
-      const response = await SecureApiClient.signedFetch('/api/user/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          ...profileData
-        })
-      }, 'PushService');
+      console.log(`👤 [PUSH SERVICE] Writing profile to Dexie first (sync will happen in background)`);
       
-      if (!response.ok) {
-        throw new Error(`Failed to update profile: ${response.statusText}`);
-      }
+      // 🛡️ WRITE-TO-DISK FIRST: Save to Dexie with synced: 0
+      const existingUser = await db.users.get(userId);
+      const updatedUser = {
+        ...existingUser,
+        ...profileData,
+        synced: 0 as const,  // 🆕 Mark as unsynced
+        updatedAt: Date.now()
+      };
       
-      const result = await response.json();
-      const data = result.data || result;
+      await db.users.put(updatedUser);
+      console.log(`✅ [PUSH SERVICE] Profile written to Dexie with synced: 0`);
       
-      console.log(`✅ [PUSH SERVICE] Profile updated successfully`);
-      return { success: true, data };
+      // Return success immediately - actual sync happens in background
+      return { success: true, data: updatedUser };
       
     } catch (error) {
-      console.error(`❌ [PUSH SERVICE] Profile update failed:`, error);
+      console.error(`❌ [PUSH SERVICE] Profile write to Dexie failed:`, error);
       return { success: false, error: String(error) };
     }
   }
@@ -829,6 +827,17 @@ export class PushService {
 
       }
 
+      // 🎯 PRIORITY 3: USER PROFILE (SYNC PENDING PROFILE UPDATES)
+      try {
+        const userProfileResult = await this.pushPendingUserProfile();
+        itemsProcessed += userProfileResult.processed;
+        if (userProfileResult.errors.length > 0) {
+          errors.push(...userProfileResult.errors);
+        }
+      } catch (userProfileError) {
+        console.warn('⚠️ [PUSH SERVICE] User profile push failed:', userProfileError);
+      }
+
       
 
       if (errors.length === 0) {
@@ -1047,6 +1056,72 @@ export class PushService {
 
    */
 
+  /**
+   * 🆕 PUSH PENDING USER PROFILE
+   * Scans Dexie for user profiles with synced: 0 and pushes to server
+   */
+  private async pushPendingUserProfile(): Promise<{ success: boolean; processed: number; errors: string[] }> {
+    const errors: string[] = [];
+    let processed = 0;
+
+    try {
+      const currentSovereignId = UserManager.getInstance().getUserId();
+      if (!currentSovereignId) {
+        return { success: false, processed: 0, errors: ['No sovereign ID available for user profile push'] };
+      }
+
+      // Find unsynced user profiles
+      const unsyncedUsers = await db.users
+        .where('synced')
+        .equals(0)
+        .and((user: any) => user._id === currentSovereignId)
+        .toArray();
+
+      if (unsyncedUsers.length === 0) {
+        return { success: true, processed: 0, errors: [] };
+      }
+
+      console.log(`👤 [PUSH SERVICE] Found ${unsyncedUsers.length} unsynced user profiles`);
+
+      for (const user of unsyncedUsers) {
+        try {
+          // Push to server
+          const response = await SecureApiClient.signedFetch('/api/user/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user._id,
+              username: user.username,
+              email: user.email,
+              image: user.image,
+              currency: user.currency,
+              categories: user.categories,
+              preferences: user.preferences
+            })
+          }, 'PushService');
+
+          if (!response.ok) {
+            throw new Error(`Failed to push profile: ${response.statusText}`);
+          }
+
+          // Update Dexie with synced: 1
+          await db.users.update(user._id, { synced: 1 });
+          processed++;
+          console.log(`✅ [PUSH SERVICE] User profile synced: ${user.username}`);
+        } catch (pushError) {
+          const errorMsg = `Failed to push user profile ${user.username}: ${String(pushError)}`;
+          console.error(`❌ [PUSH SERVICE] ${errorMsg}`);
+          errors.push(errorMsg);
+        }
+      }
+
+      return { success: errors.length === 0, processed, errors };
+    } catch (error) {
+      console.error('❌ [PUSH SERVICE] pushPendingUserProfile failed:', error);
+      return { success: false, processed, errors: [String(error)] };
+    }
+  }
+
   private async pushBatchedEntriesWithGuard(): Promise<{ success: boolean; processed: number; errors: string[] }> {
 
     const errors: string[] = [];
@@ -1092,15 +1167,48 @@ export class PushService {
 
       const safeEntries = pendingEntries.filter((entry: any) => !conflictedBookCids.has(entry.bookId));
 
-      
+      // 🛡️ PARENT CHECK: Filter out entries whose parent book doesn't have server _id yet
+      // 🎯 TRIPLE-LINK: Use localId, _id, or cid to find parent book
+      const parentCheckResults = await Promise.all(
+        safeEntries.map(async (entry: any) => {
+          const bookId = entry.bookId;
+          // Try all ID types: localId (number), _id (string), cid (string)
+          const isNumeric = !isNaN(Number(bookId));
+          let parentBook: any;
+          
+          if (isNumeric) {
+            parentBook = await db.books.where('localId').equals(Number(bookId)).first();
+          } else {
+            parentBook = await db.books.where('_id').equals(bookId).first();
+          }
+          // Fallback to cid
+          if (!parentBook) {
+            parentBook = await db.books.where('cid').equals(bookId).first();
+          }
+          
+          return {
+            entry,
+            hasValidParent: parentBook && parentBook._id && parentBook._id.length > 0
+          };
+        })
+      );
 
-      console.log('🚀 [BATCH PUSH SERVICE] Safe entries to push:', safeEntries.length, 'conflicted entries blocked:', pendingEntries.length - safeEntries.length);
+      const entriesWithSyncedParents = parentCheckResults
+        .filter(result => result.hasValidParent)
+        .map(result => result.entry);
 
-      
+      const skippedEntries = parentCheckResults
+        .filter(result => !result.hasValidParent)
+        .map(result => result.entry.cid);
+
+      if (skippedEntries.length > 0) {
+        console.warn(`🛡️ [PUSH GUARD] Skipping ${skippedEntries.length} entries - Parent book is not yet synced on server`);
+      }
+
+      console.log('🚀 [BATCH PUSH SERVICE] Safe entries to push:', entriesWithSyncedParents.length, 'conflicted entries blocked:', pendingEntries.length - safeEntries.length, 'parent not synced:', skippedEntries.length);
 
       // 🎯 SMART BATCHING: Create intelligent batches based on payload size
-
-      const batches = this.batchProcessor.createSmartBatches(safeEntries);
+      const batches = this.batchProcessor.createSmartBatches(entriesWithSyncedParents);
 
       
 
@@ -1260,31 +1368,9 @@ export class PushService {
 
       
 
-      // 🆕 LIGHTWEIGHT PATCH DETECTION: Check if this is a timestamp-only update
-
-      const isLightweightUpdate = this.isLightweightBookUpdate(cleanBook);
-
-      
-
-      if (isLightweightUpdate) {
-
-        // 🎯 STRIP HEAVY FIELDS for activity/timestamp updates
-
-        delete cleanBook.image;
-
-        delete cleanBook.mediaCid;
-
-        delete cleanBook.description;
-
-        delete cleanBook.phone;
-
-        delete cleanBook.color;
-
-        delete cleanBook.type; // Book type field
-
-        console.log(`🎯 [LIGHTWEIGHT PATCH] Stripped heavy fields for book ${book.cid} - activity update`);
-
-      }
+      // 🛡️ TRUST SERVER SMART-MERGE: Let server handle field updates
+      // Server uses SMART-MERGE to update only provided fields
+      console.log(`🎯 [LIGHTWEIGHT PATCH] Sending lightweight update for book ${book.cid} - server will merge`);
 
       
 
@@ -1369,21 +1455,22 @@ export class PushService {
         return { success: false, error: 'CRITICAL: No sovereign ID available for payload' };
       }
 
+      // 🎯 STRICT LEAN PAYLOAD: ALWAYS send minimal payload for book updates
+      // This ensures name, image, description NEVER go to server for activity updates
+      // Server uses SMART-MERGE to update only provided fields
       const payload = {
-
-        ...cleanBook,
-
-        cid: book.cid, // 🆕 CRITICAL: Include CID in creation
-
-        userId: sovereignUserId, // 🛡️ SOVEREIGN ID: Fresh from UserManager
-
-        vKey: book.vKey,
-
+        _id: book._id,
+        cid: book.cid,
+        userId: sovereignUserId,
+        vKey: Number(book.vKey),
+        updatedAt: Number(book.updatedAt),
+        cachedBalance: Number(book.cachedBalance || 0)
       };
+      
+      console.log(`🎯 [LEAN PUSH] Sending STRICT lean payload for book ${book.cid}:`, JSON.stringify(payload).length, 'bytes');
 
-      // 🟠 [FORENSIC AUDIT] Log what's being pushed to server
-
-      console.log(`🟠 [PUSH SERVICE] Pushing book to server with image:`, payload.image || 'EMPTY');
+      // 📡 [FORENSIC AUDIT] Log what's being pushed to server
+      console.log(`🎯 [LEAN PUSH] Lean book update for ${book.cid}:`, JSON.stringify(payload));
 
 
 
@@ -1420,6 +1507,14 @@ export class PushService {
         const serverBook = sData.data || sData.book || sData;
 
         const serverId = serverBook?._id || serverBook?.id;
+
+        // 🎯 ATOMIC vKey GUARD: Verify server echo back client's vKey
+        const clientVKey = sData.clientVKey;
+        if (clientVKey !== undefined && clientVKey !== book.vKey) {
+          console.warn('⚠️ [ATOMIC GUARD] Server vKey mismatch! Client:', book.vKey, 'Server echoed:', clientVKey);
+        } else {
+          console.log('🔒 [ATOMIC GUARD] vKey verified:', clientVKey);
+        }
 
         
 
@@ -1466,6 +1561,15 @@ export class PushService {
             updatedAt: book.updatedAt
 
           });
+
+          // 🎯 UI MATRIX SYNC: Update real-time sync status icon
+          try {
+            const vaultStore = getVaultStore();
+            await vaultStore.syncMatrixItem(String(serverId || book.localId));
+            console.log(`🎯 [UI MATRIX] Synced icon updated for book: ${book.cid}`);
+          } catch (e) {
+            console.warn(`⚠️ [UI MATRIX] Failed to update sync icon:`, e);
+          }
 
           
 
@@ -2133,7 +2237,30 @@ export class PushService {
 
       let method: 'POST' | 'PUT' | 'DELETE';
 
-      
+      // 🛡️ WRITE-TO-DISK FIRST: For PROFILE_UPDATE and SETTINGS_SYNC, save to Dexie first
+      if (config.type === 'PROFILE_UPDATE' || config.type === 'SETTINGS_SYNC') {
+        try {
+          const userId = this.userId || config.metadata?.userId;
+          if (userId) {
+            const existingUser = await db.users.get(userId);
+            const updateData = config.type === 'PROFILE_UPDATE' 
+              ? { name: config.data.name, image: config.data.image, password: config.data.password }
+              : { currency: config.data.currency, categories: config.data.categories, preferences: config.data.preferences };
+            
+            const updatedUser = {
+              ...existingUser,
+              ...updateData,
+              synced: 0 as const,
+              updatedAt: Date.now()
+            };
+            
+            await db.users.put(updatedUser);
+            console.log(`✅ [SYSTEM CONFIG] ${config.type} written to Dexie with synced: 0`);
+          }
+        } catch (dexieError) {
+          console.warn(`⚠️ [SYSTEM CONFIG] Failed to write to Dexie, proceeding with server call:`, dexieError);
+        }
+      }
 
       switch (config.type) {
 

@@ -40,6 +40,8 @@ export interface BookMatrixItem {
 
   cachedBalance?: number;
 
+  synced: number; // 🆕 ADDED: Real-time sync status tracking
+
 }
 
 

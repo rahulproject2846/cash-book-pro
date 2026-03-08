@@ -7,6 +7,8 @@ import { getTimestamp } from '@/lib/shared/utils';
 import toast from 'react-hot-toast';
 import { ConflictBackgroundService } from './ConflictBackgroundService';
 import { Book, FileText } from 'lucide-react';
+import { conflictService } from './services/ConflictService';
+import { getVaultStore } from './store/storeHelper';
 
 // 🚨 CONFLICT ITEM INTERFACE
 export interface ConflictItem {
@@ -186,26 +188,34 @@ export const useConflictStore = create<ConflictStore>()(
                     await get().createSafetySnapshot(item);
                 }
                 
-                const updateData = resolution === 'local' 
-                    ? {
-                        conflicted: 0,
-                        synced: 0,
-                        serverData: null,
-                        vKey: (item.record.vKey || 0) + 1,
-                        updatedAt: getTimestamp()
-                    }
-                    : {
-                        ...item.record.serverData,
-                        conflicted: 0,
-                        synced: 1,
-                        serverData: null,
-                        updatedAt: getTimestamp()
-                    };
+                // 🎯 USE CONFLICT SERVICE for atomic resolution
+                const getState = () => getVaultStore();
                 
-                if (item.type === 'book') {
-                    await db.books.update(item.localId!, updateData);
+                if (item.type === 'entry') {
+                    // For entries, use ConflictService to handle parent book sync
+                    await conflictService.resolveEntryConflict(item.cid, getState);
                 } else {
-                    await db.entries.update(item.localId!, updateData);
+                    // For books, use direct update with HydrationController
+                    const { HydrationController } = await import('./hydration/HydrationController');
+                    const controller = HydrationController.getInstance();
+                    
+                    const updateData = resolution === 'local' 
+                        ? {
+                            conflicted: 0,
+                            synced: 0,
+                            serverData: null,
+                            vKey: (item.record.vKey || 0) + 1,
+                            updatedAt: getTimestamp()
+                        }
+                        : {
+                            ...item.record.serverData,
+                            conflicted: 0,
+                            synced: 1,
+                            serverData: null,
+                            updatedAt: getTimestamp()
+                        };
+                    
+                    await controller.ingestLocalMutation('BOOK', [{ ...item.record, ...updateData }]);
                 }
                 
                 await db.auditLogs.add({

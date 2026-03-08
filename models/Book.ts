@@ -29,6 +29,7 @@ export interface IBook extends Document {
   createdAt: number;
   updatedAt: number; // 🚨 DNA HARDENING: Changed from Date to number for consistency
   mediaCid?: string; // ✅ ADDED: Cloudinary URL reference
+  cachedBalance?: number; // ✅ ADDED: Unix Number (ms) cached balance
 }
 
 const BookSchema = new Schema<IBook>({
@@ -126,6 +127,10 @@ const BookSchema = new Schema<IBook>({
   updatedAt: {
     type: Number,
     required: true
+  },
+  cachedBalance: {
+    type: Number,
+    default: 0
   }
 }, { 
   timestamps: false, // 🚨 DNA HARDENING: Disable Mongoose auto-timestamps to prevent Date injection

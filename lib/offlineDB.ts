@@ -17,6 +17,7 @@ export interface LocalUser {
   username: string;
   email: string;
   image?: string;
+  synced: 0 | 1;  // 🆕 ADDED: Sync status for user profile
   preferences: {
     language: 'en' | 'bn';
     compactMode: boolean;
@@ -193,7 +194,7 @@ export class VaultProDB extends Dexie {
     this.version(38).stores({
       books: '++localId, _id, userId, &cid, sequenceNumber, synced, conflicted, isDeleted, updatedAt, isPinned, [userId+isDeleted+updatedAt]',
       entries: '++localId, _id, &cid, bookId, userId, sequenceNumber, synced, conflicted, isDeleted, updatedAt, [userId+isDeleted+bookId], [userId+isDeleted+updatedAt]',
-      users: '_id, userId, email, plan, riskScore, vKey',
+      users: '_id, userId, email, plan, riskScore, vKey, synced',
       telemetry: '++id, type, synced, timestamp',
       audits: '++id, type, level, timestamp, sessionId, userId',
       auditLogs: '++localId, cid, userId, timestamp',

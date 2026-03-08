@@ -108,7 +108,20 @@ export class HydrationEngine {
 
    */
 
-  private validate(data: any, type: 'BOOK' | 'ENTRY' | 'USER'): { success: boolean; data?: any; error?: string } {
+  private validate(data: any, type: 'BOOK' | 'ENTRY' | 'USER', existingRecord?: any): { success: boolean; data?: any; error?: string } {
+
+    // 🎯 SEAL VALIDATION HOLE: Check for cid existence (skip for USER)
+    if (type !== 'USER' && !data.cid) {
+      console.error(`🛡️ [IRON GATE] Validation SKIPPED: Missing cid for ${type} record`);
+      return { success: false, error: 'Missing cid - cannot validate record without identity' };
+    }
+
+    // 🎯 MERGE-THEN-VALIDATE: For lean payloads, merge with existing record first
+    let recordToValidate = data;
+    
+    if (existingRecord && type !== 'USER') {
+      recordToValidate = { ...existingRecord, ...data };
+    }
 
     if (type === 'USER') {
 
@@ -130,11 +143,11 @@ export class HydrationEngine {
 
     if (type === 'BOOK') {
 
-      return validateBook(data);
+      return validateBook(recordToValidate);
 
     } else if (type === 'ENTRY') {
 
-      return validateEntry(data);
+      return validateEntry(recordToValidate);
 
     }
 
@@ -216,13 +229,63 @@ export class HydrationEngine {
 
 
 
-      // 🛡️ VALIDATION: Validate all records
+      // 🛡️ VALIDATION: Validate all records (with Merge-then-Validate for lean payloads)
 
       const validRecords: any[] = [];
 
       for (const record of uniqueRecords) {
 
-        const validation = this.validate(record, type as 'BOOK' | 'ENTRY' | 'USER');
+        // 🎯 FETCH EXISTING: Get existing record for merge-then-validate
+
+        let existingRecord: any;
+
+        try {
+
+          if (type === 'BOOK') {
+
+            // 🎯 TRIPLE-LINK: Use cid, _id, or localId to find existing record
+            const bookId = record.cid || record._id || record.localId;
+            if (bookId) {
+              const isNumeric = !isNaN(Number(bookId));
+              if (isNumeric) {
+                existingRecord = await db.books.where('localId').equals(Number(bookId)).first();
+              }
+              if (!existingRecord) {
+                existingRecord = await db.books.where('_id').equals(String(bookId)).first();
+              }
+              if (!existingRecord && record.cid) {
+                existingRecord = await db.books.where('cid').equals(record.cid).first();
+              }
+            }
+
+          } else if (type === 'ENTRY') {
+
+            // 🎯 TRIPLE-LINK: Use cid, _id, or localId to find existing record
+            const entryId = record.cid || record._id || record.localId;
+            if (entryId) {
+              const isNumeric = !isNaN(Number(entryId));
+              if (isNumeric) {
+                existingRecord = await db.entries.where('localId').equals(Number(entryId)).first();
+              }
+              if (!existingRecord) {
+                existingRecord = await db.entries.where('_id').equals(String(entryId)).first();
+              }
+              if (!existingRecord && record.cid) {
+                existingRecord = await db.entries.where('cid').equals(record.cid).first();
+              }
+            }
+
+          }
+
+        } catch (e) {
+
+          // Ignore lookup errors, proceed with validation without existing record
+
+        }
+
+
+
+        const validation = this.validate(record, type as 'BOOK' | 'ENTRY' | 'USER', existingRecord);
 
         if (validation.success && validation.data) {
 
@@ -574,13 +637,63 @@ export class HydrationEngine {
 
 
 
-        // 🛡️ VALIDATION: Validate all records in this operation
+        // 🛡️ VALIDATION: Validate all records in this operation (with Merge-then-Validate)
 
         const validRecords: any[] = [];
 
         for (const record of uniqueRecords) {
 
-          const validation = this.validate(record, type);
+          // 🎯 FETCH EXISTING: Get existing record for merge-then-validate
+
+          let existingRecord: any;
+
+          try {
+
+            if (type === 'BOOK') {
+
+              // 🎯 TRIPLE-LINK: Use cid, _id, or localId to find existing record
+              const bookId = record.cid || record._id || record.localId;
+              if (bookId) {
+                const isNumeric = !isNaN(Number(bookId));
+                if (isNumeric) {
+                  existingRecord = await db.books.where('localId').equals(Number(bookId)).first();
+                }
+                if (!existingRecord) {
+                  existingRecord = await db.books.where('_id').equals(String(bookId)).first();
+                }
+                if (!existingRecord && record.cid) {
+                  existingRecord = await db.books.where('cid').equals(record.cid).first();
+                }
+              }
+
+            } else if (type === 'ENTRY') {
+
+              // 🎯 TRIPLE-LINK: Use cid, _id, or localId to find existing record
+              const entryId = record.cid || record._id || record.localId;
+              if (entryId) {
+                const isNumeric = !isNaN(Number(entryId));
+                if (isNumeric) {
+                  existingRecord = await db.entries.where('localId').equals(Number(entryId)).first();
+                }
+                if (!existingRecord) {
+                  existingRecord = await db.entries.where('_id').equals(String(entryId)).first();
+                }
+                if (!existingRecord && record.cid) {
+                  existingRecord = await db.entries.where('cid').equals(record.cid).first();
+                }
+              }
+
+            }
+
+          } catch (e) {
+
+            // Ignore lookup errors
+
+          }
+
+
+
+          const validation = this.validate(record, type, existingRecord);
 
           if (validation.success && validation.data) {
 

@@ -28,6 +28,83 @@ export class FinanceService {
   }
 
   /**
+   * 🛠️ HELPER: Construct Book Signal Payload
+   * Generates the lightweight update object for the parent book
+   * @param entryData - Optional entry data for proactive balance calculation
+   */
+  private async createBookSignal(get: any, bookId: string, userId: string, entryData?: { type: string; amount: number }): Promise<{ signal: any | null; book: any | null }> {
+    if (!bookId) return { signal: null, book: null };
+    
+    // Try to get book from store first, then DB
+    let activeBook = get().activeBook;
+    if (!activeBook || (String(activeBook._id) !== bookId && String(activeBook.localId) !== bookId)) {
+       // Fallback to DB fetch if store doesn't match
+       const dbBook = await db.books.where('localId').equals(Number(bookId)).or('_id').equals(bookId).first();
+       if (dbBook) activeBook = dbBook;
+    }
+
+    // 🛡️ DEFENSIVE: If activeBook still has no name, try alternative DB query
+    if (activeBook && !activeBook.name) {
+      console.warn('⚠️ [FINANCE SERVICE] Book missing name field, attempting alternative fetch...');
+      const altBook = await db.books
+        .filter((book: any) => book.cid === bookId || String(book.localId) === String(bookId) || String(book._id) === String(bookId))
+        .first();
+      if (altBook?.name) {
+        activeBook = altBook;
+      }
+    }
+
+    // 🛡️ GUARD: If still no valid name, don't create invalid signal (would fail Zod validation)
+    if (!activeBook?.name) {
+      console.error('🚨 [FINANCE SERVICE] Cannot create Book Signal - book name is undefined');
+      return { signal: null, book: null };
+    }
+
+    if (activeBook) {
+      // 🎯 PROACTIVE BALANCE: Calculate based on current balance + entry adjustment
+      let newBalance: number;
+      if (entryData) {
+        // Use proactive calculation: current balance + entry adjustment
+        const currentBalance = Number(activeBook.cachedBalance) || 0;
+        const entryAdjustment = entryData.type === 'income' ? Number(entryData.amount) : -Number(entryData.amount);
+        newBalance = currentBalance + entryAdjustment;
+      } else {
+        // Fallback to getBookBalance for non-entry operations
+        newBalance = this.getBookBalance(get, String(activeBook._id || activeBook.localId));
+      }
+      
+      // 🚨 LEAN SIGNAL: For entry mutations, only send essential sync fields
+      // This minimizes payload size - server's Smart-Patch will preserve other fields
+      const isEntryMutation = true; // Always true since this is called from entry operations
+      
+      const signal = isEntryMutation ? {
+        // 🚨 LEAN PAYLOAD: Only 5 essential fields for entry-triggered updates
+        _id: activeBook._id,
+        cid: activeBook.cid,  // ✅ REQUIRED: For HydrationEngine validation
+        userId: String(activeBook.userId || userId || ''),
+        vKey: Number(activeBook.vKey || 1) + 1, // ✅ Atomic Increment
+        updatedAt: getTimestamp(),
+        cachedBalance: newBalance,
+        synced: 0  // ✅ REQUIRED: For proper sync status
+      } : {
+        // Full payload for other operations
+        _id: activeBook._id,
+        cid: activeBook.cid,
+        name: activeBook.name, // 🎯 CRITICAL: Must be present for Zod validation
+        userId: String(activeBook.userId || userId || ''),
+        synced: 0,
+        isDeleted: Number(activeBook.isDeleted || 0),
+        vKey: Number(activeBook.vKey || 1) + 1, // ✅ Atomic Increment
+        updatedAt: getTimestamp(),
+        cachedBalance: newBalance
+      };
+      
+      return { signal, book: activeBook };
+    }
+    return { signal: null, book: null };
+  }
+
+  /**
    * �📝 REFRESH ENTRIES - Extracted from entrySlice.ts
    * 
    * Dependencies: identityManager, db.entries, get, set
@@ -70,6 +147,7 @@ export class FinanceService {
       get().processEntries();
       
     } catch (error) {
+      console.error('❌ [FINANCE SERVICE] refreshEntries failed:', error);
     } finally {
       set({ isRefreshing: false });
     }
@@ -135,7 +213,10 @@ export class FinanceService {
       const existingEntry = existingRecord; // ✅ Fix vKey reference
       
       const finalAmount = Number(entryData.amount) || 0;
-      const finalDate = entryData.date || new Date().toISOString().split('T')[0];
+      // 🚨 DNA HARDENING: Ensure date is always a Unix ms number
+      const finalDate = typeof entryData.date === 'number' 
+        ? entryData.date 
+        : (entryData.date ? new Date(entryData.date).getTime() : Date.now());
       const finalTitle = entryData.title?.trim() || (entryData.category ? `${entryData.category?.toUpperCase()} RECORD` : 'GENERAL RECORD');
 
       // 🎯 SAFE VKEY LOGIC: Handle NEW vs EXISTING records
@@ -155,6 +236,7 @@ export class FinanceService {
             const dbRecord = await db.entries.get(recordId);
             currentVKey = dbRecord?.vKey || currentVKey || 0;
           } catch (error) {
+            console.warn('⚠️ [FINANCE SERVICE] Failed to get vKey from DB, using default:', error);
           }
         }
         
@@ -203,29 +285,11 @@ export class FinanceService {
       normalized.checksum = checksum;
       
       // � STEP A: CONSTRUCT BOOK SIGNAL PAYLOAD - OPTIMIZED FOR ENTRY TRIGGERS
-      // 🎯 LEAN PAYLOAD: Only send fields needed for balance/timestamp updates
-      // This prevents Entry-triggered signals from overwriting user data (name, description, phone, image)
-      let bookSignalPayload: { _id: string; cid: string; userId: string; synced: number; isDeleted: number; vKey: number; updatedAt: number; cachedBalance?: number } | null = null;
+      // 🎯 PROACTIVE: Pass entry data for balance calculation
+      const { signal: bookSignalPayload, book: activeBook } = await this.createBookSignal(get, bookId, userId, { type: normalized.type, amount: normalized.amount });
       
       const { HydrationController } = await import('../hydration/HydrationController');
       const controller = HydrationController.getInstance();
-      
-      const activeBook = get().activeBook;
-      if (activeBook && (String(activeBook._id) === String(bookId) || String(activeBook.localId) === String(bookId))) {
-        // 🎯 LEAN PAYLOAD FOR ENTRY TRIGGERS: Only send critical fields
-        // This prevents overwriting user data (name, description, phone, image)
-        const newBalance = this.getBookBalance(get, String(activeBook._id || activeBook.localId));
-        bookSignalPayload = {
-          _id: activeBook._id,
-          cid: activeBook.cid,
-          userId: String(activeBook.userId || userId || ''),
-          synced: 0,
-          isDeleted: Number(activeBook.isDeleted || 0),
-          vKey: Number(activeBook.vKey || 1) + 1,
-          updatedAt: getTimestamp(),
-          cachedBalance: newBalance // 🎯 CRITICAL: Send balance for Entry-triggered updates
-        };
-      }
       
       // 🎯 STEP B: CONSTRUCT ATOMIC OPERATIONS
       const atomicOperations: Array<{ type: 'ENTRY' | 'BOOK'; records: any[] }> = [
@@ -263,13 +327,15 @@ export class FinanceService {
       
       // 🎯 ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
       // ✅ ATOMIC: Only update UI after successful HydrationController batch
-      if (bookSignalPayload && activeBook) {
+      if (bookSignalPayload) {
         // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
         const { getVaultStore } = await import('../store/storeHelper');
         const vaultStore = getVaultStore();
         
         // 1. Update memory matrix (Activity sort) - ONLY after successful batch
-        await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
+        if (bookSignalPayload) {
+          await vaultStore.syncMatrixItem(String(bookSignalPayload._id || bookId));
+        }
         
         // 🔄 RE-HYDRATION SAFETY: Ensure Dexie truth is reflected FIRST
         await vaultStore.refreshBooks('ENTRY_ADDED');
@@ -290,7 +356,7 @@ export class FinanceService {
       if (bookSignalPayload && activeBook) {
         const newBalance = this.getBookBalance(get, String(activeBook._id || activeBook.localId));
         set((state: any) => ({
-          activeBook: { ...state.activeBook, cachedBalance: newBalance }
+          activeBook: { ...state.activeBook, cachedBalance: bookSignalPayload.cachedBalance }
         }));
       }
       
@@ -307,9 +373,10 @@ export class FinanceService {
   }
 
   /**
-   * 🗑️ DELETE ENTRY - Extracted from entrySlice.ts
+   * 🗑️ DELETE ENTRY - 7-SECOND SAFETY NET
    * 
    * Dependencies: identityManager, db, get, set
+   * Implements undo functionality like deleteBook
    */
   async deleteEntry(
     get: any, 
@@ -323,7 +390,7 @@ export class FinanceService {
     if (!userId || !entry?.localId) return { success: false };
     
     // 🛡️ LOCKDOWN GUARD: Block local writes during security breach
-    const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction } = get();
+    const { isSecurityLockdown, isGlobalAnimating, activeActions, registerAction, unregisterAction, pendingEntryDeletion } = get();
     if (isSecurityLockdown) {
       return { success: false, error: new Error('App in security lockdown') };
     }
@@ -342,6 +409,13 @@ export class FinanceService {
     registerAction(actionId);
 
     try {
+      // Check if there's already a pending deletion - if so, clear it first
+      if (pendingEntryDeletion?.timeoutId) {
+        clearTimeout(pendingEntryDeletion.timeoutId);
+      }
+
+      const entryId = String(entry.localId);
+      const expiresAt = Date.now() + 7000; // 7 seconds total
       const { HydrationController } = await import('../hydration/HydrationController');
       const controller = HydrationController.getInstance();
       
@@ -351,7 +425,86 @@ export class FinanceService {
         return { success: false, error: new Error('Entry localId is required for deletion') };
       }
       
-      // 🎯 STEP A: DECLARE DELETE PAYLOAD FIRST (Fix hoisting)
+      // 🎯 STEP 1: OPTIMISTIC UI - Hide entry from UI immediately
+      set((state: any) => ({
+        entries: state.entries.filter((e: any) => e.cid !== entry.cid),
+        allEntries: state.allEntries.filter((e: any) => e.cid !== entry.cid)
+      }));
+      
+      // Trigger processing to update processedEntries
+      get().processEntries();
+      
+      // 🎯 STEP 2: SHOW UNDO TOAST
+      const activeToastId = get().showToast({
+        type: 'undo',
+        message: `Deleting "${entry.title || 'Entry'}" in 6 seconds...`,
+        countdown: 6,
+        onUndo: () => {
+          const { pendingEntryDeletion } = get();
+          if (pendingEntryDeletion?.timeoutId) {
+            clearTimeout(pendingEntryDeletion.timeoutId);
+          }
+          
+          // 🎯 RESTORE ENTRY TO UI
+          set((state: any) => ({
+            entries: [...(state.entries || []), entry],
+            allEntries: [...(state.allEntries || []), entry],
+            pendingEntryDeletion: null
+          }));
+          
+          get().processEntries();
+          get().hideToast(activeToastId);
+        }
+      });
+      
+      // 🎯 STEP 3: SET 7-SECOND DELAYED COMMIT
+      const timeoutId = setTimeout(async () => {
+        try {
+          // FIRST: Execute final deletion
+          await this.executeFinalEntryDeletion(get, set, entry, userId);
+          // SECOND: Hide toast
+          get().hideToast(activeToastId);
+        } catch (err) {
+          // THIRD: On error, restore entry to UI
+          set((state: any) => ({
+            entries: [...(state.entries || []), entry],
+            allEntries: [...(state.allEntries || []), entry],
+            pendingEntryDeletion: null
+          }));
+          get().processEntries();
+        }
+      }, 7000);
+      
+      // Store pending deletion with entry data for undo
+      set({ 
+        pendingEntryDeletion: { 
+          entryId, 
+          entry, // Store full entry for restoration
+          timeoutId, 
+          expiresAt 
+        } 
+      });
+      
+      return { success: true };
+      
+    } catch (error) {
+      return { success: false, error: error as Error };
+    } finally {
+      unregisterAction(actionId);
+    }
+  }
+
+  /**
+   * 🗑️ EXECUTE FINAL ENTRY DELETION
+   * 
+   * Called after 7-second undo window expires
+   */
+  async executeFinalEntryDeletion(get: any, set: any, entry: any, userId: string): Promise<void> {
+    const { HydrationController } = await import('../hydration/HydrationController');
+    const controller = HydrationController.getInstance();
+    
+    try {
+      // 🎯 STEP A: DECLARE DELETE PAYLOAD FIRST
       const deletePayload = {
         ...entry,
         userId: String(userId || entry.userId || ''),
@@ -363,33 +516,38 @@ export class FinanceService {
         updatedAt: getTimestamp()
       };
       
-      // 🎯 STEP B: DECLARE BOOK SIGNAL PAYLOAD
-      let bookSignalPayload: { _id: string; cid: string; name: string; userId: string; synced: number; isDeleted: number; vKey: number; updatedAt: number } | null = null;
+      // 🛡️ ID GUARD: Ensure localId is defined before Number conversion
+      const safeLocalId = entry?.localId;
+      if (!safeLocalId) {
+        console.error('❌ [FINANCE SERVICE] Cannot process entry - missing localId');
+        return;
+      }
       
-      const existingEntry = await db.entries.get(Number(entryLocalId));
+      const existingEntry = await db.entries.get(Number(safeLocalId));
       
       // 🎯 SAFE VKEY LOGIC: Increment existing vKey safely
       let currentVKey = existingEntry?.vKey || 0;
       
-      if (entryLocalId) {
-        // Only search if recordId is valid (NOT undefined/null)
+      if (entry.localId) {
         try {
-          const dbRecord = await db.entries.get(entryLocalId);
+          const dbRecord = await db.entries.get(entry.localId);
           currentVKey = dbRecord?.vKey || currentVKey || 0;
         } catch (error) {
+          console.warn('⚠️ [FINANCE SERVICE] Failed to get vKey from DB, using default:', error);
         }
       }
       
       const finalVKey = Number(currentVKey) + 1;
       
-      // Update vKey in deletePayload now that we have it
+      // Update vKey in deletePayload
       deletePayload.vKey = finalVKey;
       
-      // 🛡️ UNSYNCED HARD-DELETE: If entry is not on server yet, delete permanently to avoid 409 conflicts
+      // 🛡️ UNSYNCED HARD-DELETE: If entry is not on server yet, delete permanently
       if (!entry._id || entry.synced === 0) {
           await db.entries.delete(entry.localId);
           await this.refreshEntries(get, set);
-          return { success: true };
+          set({ pendingEntryDeletion: null });
+          return;
       }
       
       // 🎯 ATOMIC BATCH: Entry delete + Book signal in SINGLE transaction
@@ -399,24 +557,9 @@ export class FinanceService {
       
       // Add Book update only if needed
       const parentBookId = entry.bookId;
-      if (parentBookId) {
-        const activeBook = get().activeBook;
-        if (activeBook && (String(activeBook._id) === String(parentBookId) || String(activeBook.localId) === String(parentBookId))) {
-          // 🎯 LIGHTWEIGHT BOOK SIGNAL: Only send sorting fields
-          bookSignalPayload = {
-            _id: activeBook._id,
-            cid: activeBook.cid,
-            name: activeBook.name, // 🛡️ ADDED: To satisfy the Iron Gate validator
-            userId: String(activeBook.userId || userId || ''),
-            synced: 0,
-            isDeleted: Number(activeBook.isDeleted || 0),
-            vKey: Number(activeBook.vKey || 1) + 1,
-            updatedAt: getTimestamp()
-            // 🚨 INTENTIONALLY OMITTED: description, image, mediaCid, isPinned
-          };
-          
-          atomicOperations.push({ type: 'BOOK' as const, records: [bookSignalPayload] });
-        }
+      const { signal: bookSignalPayload } = await this.createBookSignal(get, parentBookId, userId);
+      if (bookSignalPayload) {
+        atomicOperations.push({ type: 'BOOK' as const, records: [bookSignalPayload] });
       }
       
       // 🎯 SINGLE BATCH CALL: Process Entry delete + Book signal atomically
@@ -425,42 +568,30 @@ export class FinanceService {
         throw new Error(batchResult.error || 'Failed to perform atomic batch mutation');
       }
       
-      // 🆕 UI REACTIVITY GUARD: Instant UI update
-      set((state: any) => ({
-        allEntries: state.allEntries.filter((e: any) => e.cid !== entry.cid),
-        entries: state.entries.filter((e: any) => e.cid !== entry.cid)
-      }));
+      // 🆕 UI REACTIVITY GUARD: Already updated optimistically, just refresh
+      await this.refreshEntries(get, set);
       
       // ✅ CRITICAL: Trigger processing engine to update processedEntries
       get().processEntries();
       
       // 🆕 ACTIVITY HEARTBEAT: Update parent book timestamp for Activity sort
-      // ✅ ATOMIC: Only update UI after successful HydrationController batch
-      if (parentBookId) {
-        const activeBook = get().activeBook;
-        if (activeBook && (String(activeBook._id) === String(parentBookId) || String(activeBook.localId) === String(parentBookId))) {
-          // 🛡️ UNIFIED PIPELINE TRIGGER: Update matrix first, then refresh
+      if (bookSignalPayload) {
           const { getVaultStore } = await import('../store/storeHelper');
           const vaultStore = getVaultStore();
           
-          // 1. Update memory matrix (Activity sort) - ONLY after successful batch
-          await vaultStore.syncMatrixItem(String(activeBook._id || activeBook.localId));
+          if (bookSignalPayload) {
+            await vaultStore.syncMatrixItem(String(bookSignalPayload._id || parentBookId));
+          }
           
-          // 🎯 LIGHTWEIGHT REFRESH: Skip full refresh for activity updates
-          // await vaultStore.refreshBooks('DATA_CHANGE'); // ❌ REMOVED: Prevents heavy book sync
-          
-          // 3. 🛡️ ATOMIC CACHE BUSTING: Clear entry cache to show updated balance
-          const { useVaultStore } = await import('../store/index');
-          useVaultStore.setState({ prefetchedEntriesCache: {} });
-        }
+          // 2. Refresh books to reflect changes
+          get().refreshBooks();
       }
       
-      return { success: true };
+      // Clear pending deletion state
+      set({ pendingEntryDeletion: null });
+      
     } catch (error) {
-      return { success: false, error: error as Error };
-    } finally {
-      // 🛡️ SAFE ACTION SHIELD: ALWAYS UNREGISTER ACTION
-      unregisterAction(actionId);
+      throw error;
     }
   }
 
@@ -549,10 +680,10 @@ export class FinanceService {
       }
       
       // 🎯 ATOMIC BALANCE PULSE: Update cached balance after successful batch
-      if (bookSignalPayload && activeBook) {
-        const newBalance = this.getBookBalance(get, String(activeBook._id || activeBook.localId));
+      const signalPayload = bookSignalPayload as any;
+      if (signalPayload && typeof signalPayload.cachedBalance === 'number') {
         set((state: any) => ({
-          activeBook: { ...state.activeBook, cachedBalance: newBalance }
+          activeBook: { ...state.activeBook, cachedBalance: signalPayload.cachedBalance }
         }));
       }
       
@@ -607,44 +738,7 @@ export class FinanceService {
     set: any, 
     entry: any
   ): Promise<{ success: boolean; error?: Error }> {
-    const { UserManager } = await import('../core/user/UserManager');
-    const userId = UserManager.getInstance().getUserId();
-    if (!userId) return { success: false, error: new Error('User not authenticated') };
-
-    try {
-      const { HydrationController } = await import('../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      const existingEntry = await db.entries.get(Number(entry.localId));
-      let currentVKey = existingEntry?.vKey || 0;
-      
-      // 🎯 HIGH-PRECISION SEQUENTIAL VKEY: Current + 1 Rule
-      if (!currentVKey || isNaN(currentVKey) || currentVKey === 0) {
-        const dbEntry = await db.entries.get(Number(entry.localId));
-        currentVKey = dbEntry?.vKey || 0;
-      }
-      
-      const finalVKey = Number(currentVKey) + 1;
-      
-      const restorePayload = {
-        ...entry,
-        isDeleted: 0,
-        synced: 0,
-        vKey: finalVKey,
-        updatedAt: getTimestamp()
-      };
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [restorePayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to restore entry');
-      }
-      
-      await this.refreshEntries(get, set);
-      
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error as Error };
-    }
+    return this.performStatusUpdate(get, set, entry, { isDeleted: 0 });
   }
 
   /**
@@ -657,46 +751,8 @@ export class FinanceService {
     set: any, 
     entry: any
   ): Promise<{ success: boolean; error?: Error }> {
-    const { UserManager } = await import('../core/user/UserManager');
-    const userId = UserManager.getInstance().getUserId();
-    if (!userId) return { success: false, error: new Error('User not authenticated') };
-
-    try {
-      const { HydrationController } = await import('../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
-      
-      const existingEntry = await db.entries.get(Number(entry.localId));
-      let currentVKey = existingEntry?.vKey || 0;
-      
-      const newStatus = entry.status === 'completed' ? 'pending' : 'completed';
-      
-      // 🎯 HIGH-PRECISION SEQUENTIAL VKEY: Current + 1 Rule
-      if (!currentVKey || isNaN(currentVKey) || currentVKey === 0) {
-        const dbEntry = await db.entries.get(Number(entry.localId));
-        currentVKey = dbEntry?.vKey || 0;
-      }
-      
-      const finalVKey = Number(currentVKey) + 1;
-      
-      const statusPayload = {
-        ...entry,
-        status: newStatus,
-        synced: 0,
-        vKey: finalVKey,
-        updatedAt: getTimestamp()
-      };
-      
-      const result = await controller.ingestLocalMutation('ENTRY', [statusPayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update entry status');
-      }
-      
-      await this.refreshEntries(get, set);
-      
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error as Error };
-    }
+    const newStatus = entry.status === 'completed' ? 'pending' : 'completed';
+    return this.performStatusUpdate(get, set, entry, { status: newStatus });
   }
 
   /**
@@ -709,41 +765,52 @@ export class FinanceService {
     set: any, 
     entry: any
   ): Promise<{ success: boolean; error?: Error }> {
+    return this.performStatusUpdate(get, set, entry, { isPinned: !entry.isPinned });
+  }
+
+  /**
+   * 🛠️ GENERIC STATUS UPDATE HELPER
+   * Handles vKey increment, Book signaling, and batch execution for small updates
+   */
+  private async performStatusUpdate(get: any, set: any, entry: any, changes: any): Promise<{ success: boolean; error?: Error }> {
     const { UserManager } = await import('../core/user/UserManager');
     const userId = UserManager.getInstance().getUserId();
     if (!userId) return { success: false, error: new Error('User not authenticated') };
 
     try {
       const { HydrationController } = await import('../hydration/HydrationController');
-      const controller = HydrationController.getInstance();
       
       const existingEntry = await db.entries.get(Number(entry.localId));
-      let currentVKey = existingEntry?.vKey || 0;
+      const finalVKey = Number(existingEntry?.vKey || entry.vKey || 0) + 1;
       
-      const newPinStatus = !entry.isPinned;
-      
-      // 🎯 HIGH-PRECISION SEQUENTIAL VKEY: Current + 1 Rule
-      if (!currentVKey || isNaN(currentVKey) || currentVKey === 0) {
-        const dbEntry = await db.entries.get(Number(entry.localId));
-        currentVKey = dbEntry?.vKey || 0;
-      }
-      
-      const finalVKey = Number(currentVKey) + 1;
-      
-      const pinPayload = {
+      const payload = {
         ...entry,
-        isPinned: newPinStatus,
+        ...changes,
         synced: 0,
         vKey: finalVKey,
         updatedAt: getTimestamp()
       };
       
-      const result = await controller.ingestLocalMutation('ENTRY', [pinPayload]);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update entry pin status');
+      const atomicOperations: Array<{ type: 'ENTRY' | 'BOOK'; records: any[] }> = [
+        { type: 'ENTRY' as const, records: [payload] }
+      ];
+      
+      // Add Book Signal to ensure list sorting and sync
+      const { signal: bookSignal } = await this.createBookSignal(get, entry.bookId, userId);
+      if (bookSignal) {
+        atomicOperations.push({ type: 'BOOK' as const, records: [bookSignal] });
       }
       
+      const result = await HydrationController.getInstance().ingestBatchMutation(atomicOperations);
+      if (!result.success) throw new Error(result.error);
+      
       await this.refreshEntries(get, set);
+      
+      // Update Matrix
+      if (bookSignal?.signal) {
+        const { getVaultStore } = await import('../store/storeHelper');
+        getVaultStore().syncMatrixItem(String(bookSignal.signal._id || bookSignal.signal.localId || entry.bookId));
+      }
       
       return { success: true };
     } catch (error) {

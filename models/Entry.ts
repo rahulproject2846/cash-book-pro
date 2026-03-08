@@ -18,14 +18,12 @@ export interface IEntry extends Document {
   category: string;
   paymentMethod: string;
   note?: string;
-  date: Date;
+  date: number; // 🚨 DNA HARDENING: Changed from Date to Number (Unix ms)
   time?: string;
   status: 'completed' | 'pending';
   isDeleted: number; 
   vKey: number; 
   checksum: string; 
-  synced: 0 | 1;
-  syncAttempts: number; 
   lastAttempt?: number; 
   conflictReason?: string;
   serverData?: any; 
@@ -85,7 +83,7 @@ const EntrySchema = new Schema<IEntry>({
     default: "" 
   },
   date: { 
-    type: Date, 
+    type: Number, 
     required: true, 
     index: true 
   },
@@ -114,15 +112,6 @@ const EntrySchema = new Schema<IEntry>({
     type: String,
     required: [true, "Data checksum is required for solidarity"],
     index: true
-  },
-  synced: {
-    type: Number,
-    enum: [0, 1],
-    default: 0
-  },
-  syncAttempts: {
-    type: Number,
-    default: 0
   },
   lastAttempt: {
     type: Number

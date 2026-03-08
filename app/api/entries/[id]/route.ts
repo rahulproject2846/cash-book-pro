@@ -78,7 +78,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                 $set: { 
                     isDeleted: 1, 
                     vKey: data.vKey || Date.now(),
-                    updatedAt: new Date() 
+                    updatedAt: Number(data.updatedAt) || Date.now() 
                 } 
             },
             { new: true }
@@ -119,13 +119,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     // 🔧 SERVER AUTHORITY: Strict data parsing for conflict resolution
     const strictAmount = Number(data.amount) || 0;
     const strictIsDeleted = data.isDeleted ? 1 : 0; // Force Number type
-    const strictDate = String(data.date);  // 🚨 RAW STRING: Keep as string for hashing
+    const strictDateString = String(data.date);  // For checksum calculation
+    const strictDateNumber = Number(data.date) || Date.now();  // For DB storage
     const strictTitle = String(data.title || '').trim();  // Respect user's case
     const strictTime = String(data.time || "");  // 🚨 ADD TIME FIELD
     
     const serverCalculatedChecksum = generateServerChecksum({
         amount: strictAmount,
-        date: strictDate,
+        date: strictDateString,
         time: strictTime,
         title: strictTitle
     });
@@ -143,7 +144,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         // Generate server-authoritative checksum from strictly parsed data
         const serverAuthorityChecksum = generateServerChecksum({
             amount: strictAmount,
-            date: strictDate,  // 🚨 RAW STRING: Pass string, not Date object
+            date: strictDateString,  // Use string for checksum
             time: strictTime,
             title: strictTitle
         });
@@ -157,12 +158,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             category: String(data.category || 'general'),
             paymentMethod: String(data.paymentMethod || 'cash'),
             note: String(data.note || '').trim(),
-            date: strictDate,  // 🚨 RAW STRING: Store as string, let Mongoose handle conversion
+            date: strictDateNumber,  // 🚨 DNA HARDENING: Store as Number
             time: strictTime,
             vKey: Number(data.vKey || 0) + 1, // 🔧 FORCE VKEY INCREMENT
             checksum: serverAuthorityChecksum, // 🚨 SERVER AUTHORITY CHECKSUM
             isDeleted: strictIsDeleted, // 🔥 BOOLEAN NORMALIZATION
-            updatedAt: new Date() // 🔧 NORMALIZED TIMESTAMP
+            updatedAt: Number(data.updatedAt) || Date.now() // 🔧 NORMALIZED TIMESTAMP
         };
         
         const updatedEntry = await Entry.findByIdAndUpdate(
@@ -186,7 +187,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     // Normal checksum validation for non-conflict updates
     console.log('🔍 [CHECKSUM DEBUG] Server payload for hashing:', {
         amount: strictAmount,
-        date: strictDate,
+        date: strictDateString,
         time: strictTime,
         title: strictTitle,
         note: data.note,
@@ -231,7 +232,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         vKey: Number(data.vKey || 0) + 1, // 🔧 FORCE VKEY INCREMENT: Always increment
         checksum: data.checksum,
         isDeleted: false,
-        updatedAt: new Date() // 🔧 NORMALIZED TIMESTAMP: Fresh timestamp
+        updatedAt: Number(data.updatedAt) || Date.now() // 🔧 NORMALIZED TIMESTAMP: Use client timestamp
     };
 
     const updatedEntry = await Entry.findByIdAndUpdate(

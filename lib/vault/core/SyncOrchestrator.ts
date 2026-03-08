@@ -118,6 +118,18 @@ export class SyncOrchestratorRefactored {
             clearTimeout(this.syncDebounceTimeout);
           }
 
+          // 🚨 STORM SUPPRESSION: Check if push is already in-flight before scheduling
+          if (this.pushService?.isSyncing) {
+            console.log('🛡️ [ORCHESTRATOR] Push already in-flight, queueing for later');
+            // Queue the operation but don't trigger immediate push
+            this.pendingSyncOperations.push({ 
+              timestamp: Date.now(), 
+              source: 'batch-mutation-queued',
+              changedCid 
+            });
+            return;
+          }
+
           this.syncDebounceTimeout = setTimeout(() => {
             console.log(`[ORCHESTRATOR] Local mutation detected. Triggering PUSH only.`);
             this.pendingSyncOperations = []; 
@@ -127,7 +139,7 @@ export class SyncOrchestratorRefactored {
             } else {
               console.error('🚨 [ORCHESTRATOR_FATAL] PushService object is missing during event dispatch!');
             }
-          }, 500);
+          }, 800);
         }
       });
     }

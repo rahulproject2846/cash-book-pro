@@ -162,7 +162,7 @@ export async function POST(req: Request) {
           $set: bookData,
           $setOnInsert: { 
             createdAt: Number(data.createdAt) || Date.now(),
-            isPublic: Number(data.isPublic) || 1,
+            // ❌ REMOVED: isPublic is already in bookData via $set - no conflict
             syncAttempts: 0,
             isPinned: 0
           }
@@ -293,27 +293,47 @@ export async function PUT(req: Request) {
         return NextResponse.json({ message: "Another vault has this name", isActive: true }, { status: 400 });
     }
 
-    // ৪. আপডেট এক্সিকিউশন
-    const imageToSave = (image && image !== "") ? image : undefined; // SERVER GUARD: Reject empty strings
+    
+    // 🎯 SERVER AUDIT: Log incoming vKey for debugging
+    console.log('📡 [SERVER_AUDIT] Incoming vKey:', data.vKey, 'Current DB vKey:', existingBook.vKey);
+    
+    
+    // 🎯 SMART-MERGE: Only update fields that are actually in the payload
+    // This prevents overwriting existing data with undefined/null values
+    const updateData: any = {};
+    const allowedFields = ['name', 'description', 'type', 'phone', 'image', 'mediaCid', 'vKey', 'updatedAt', 'isPublic', 'cachedBalance'];
+    
+    allowedFields.forEach(field => {
+      if (data[field] !== undefined) {
+        if (field === 'name') {
+          updateData.name = data.name.trim();
+        } else if (field === 'updatedAt') {
+          updateData.updatedAt = Number(data.updatedAt) || Date.now();
+        } else if (field === 'isPublic') {
+          updateData.isPublic = Number(data.isPublic);
+        } else if (field === 'cachedBalance') {
+          updateData.cachedBalance = Number(data.cachedBalance) || 0; // 🚨 DNA HARDENING: Force Number
+        } else if (field === 'vKey') {
+          updateData.vKey = Number(data.vKey); // 🎯 Force Number for vKey
+        } else {
+          updateData[field] = data[field];
+        }
+      }
+    });
+    
+    // 🛡️ SOVEREIGN ENFORCEMENT: Force versioning data from client
+    if (data.vKey !== undefined) updateData.vKey = Number(data.vKey);
+    if (data.updatedAt !== undefined) updateData.updatedAt = Number(data.updatedAt);
+    
+    // Always update timestamp if not provided
+    if (!updateData.updatedAt) {
+      updateData.updatedAt = Date.now();
+    }
+    
     const updatedBook = await Book.findOneAndUpdate(
       { _id, userId: userId },
-      { 
-        $set: { 
-            name: name.trim(), 
-            description, 
-            type: String(type).toLowerCase(), 
-            phone, 
-            image: imageToSave, 
-            mediaCid: mediaCid || undefined, // ✅ ADDED: Store mediaCid
-            vKey: vKey, // লেটেস্ট ভার্সন কি আপডেট করা
-            // 🚨 DNA HARDENING: Force Number casting to prevent Mongoose auto-conversion
-            updatedAt: Number(data.updatedAt) || Date.now(),
-            // 🚨 DNA HARDENING: Force Number casting for isPublic
-            ...(data.isPublic !== undefined && { isPublic: Number(data.isPublic) })
-            // 🛡️ INTERNAL FIELDS: Excluding syncAttempts from client updates
-        } 
-      },
-      { new: true }
+      { $set: updateData },
+      { new: true, runValidators: true } // 🎯 Ensure new: true is present
     );
 
     // সিগন্যাল ট্রিগার
@@ -330,7 +350,16 @@ export async function PUT(req: Request) {
         }
     } catch (e) {}
 
-    return NextResponse.json({ success: true, book: updatedBook, isActive: true }, { status: 200 });
+    // 🎯 ATOMIC vKey GUARD: Return client's vKey for verification
+    // This ensures the client knows what vKey was used
+    const clientVKey = data.vKey;
+    
+    return NextResponse.json({ 
+      success: true, 
+      book: updatedBook, 
+      clientVKey: clientVKey, // 🔒 ATOMIC GUARD: Echo back client's vKey
+      isActive: true 
+    }, { status: 200 });
   } catch (error: any) {
     return NextResponse.json({ message: "Update failed" }, { status: 500 });
   }

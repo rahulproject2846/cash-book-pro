@@ -36,13 +36,8 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 
-git add .
-git commit -m "fix: update saveBook signature to accept editTarget"
-git push origin main
-
 Validation:
 - Run: npx tsc --noEmit
-- Verify that only ONE instance of the user identity exists in the entire app.
 
 
 

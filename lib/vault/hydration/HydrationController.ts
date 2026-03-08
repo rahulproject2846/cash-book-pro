@@ -47,6 +47,9 @@ export class HydrationController {
 
   private sniperSlice: SniperSlice;
 
+  // 🚨 DUPLICATE EVENT GUARD: Prevent multiple vault-updated events
+  private isMutationInProgress = false;
+
 
 
   private constructor() {
@@ -719,7 +722,9 @@ export class HydrationController {
         
 
         // 🆕 DISPATCH GLOBAL UPDATE EVENT
-        if (typeof window !== 'undefined') {
+        // 🚨 DUPLICATE EVENT GUARD: Skip if already in progress
+        if (typeof window !== 'undefined' && !this.isMutationInProgress) {
+          this.isMutationInProgress = true;
           // 🚨 SYNC TSUNAMI GUARD: Extract CID from first record for targeted sync
           const changedCid = records[0]?.cid || null;
           
@@ -730,6 +735,8 @@ export class HydrationController {
               changedCid // 🚨 SYNC TSUNAMI GUARD: Pass specific CID
             } 
           }));
+          // 🚨 RESET GUARD: Allow next event after debounce completes
+          setTimeout(() => { this.isMutationInProgress = false; }, 800);
         }
 
         
@@ -847,14 +854,19 @@ export class HydrationController {
         
 
         // 🚨 SINGLE EVENT: Fire vault-updated ONLY ONCE for entire batch
+        // 🚨 DUPLICATE EVENT GUARD: Skip if already in progress
+        if (typeof window !== 'undefined' && !this.isMutationInProgress) {
 
-        if (typeof window !== 'undefined') {
+          this.isMutationInProgress = true;
 
           window.dispatchEvent(new CustomEvent('vault-updated', { 
 
             detail: { source: 'HydrationController', origin: 'batch-mutation' } 
 
           }));
+
+          // 🚨 RESET GUARD: Allow next event after debounce completes
+          setTimeout(() => { this.isMutationInProgress = false; }, 800);
 
         }
 

@@ -25,15 +25,6 @@ export class SyncGuard {
    */
   static async validateSyncAccess(context: GuardContext): Promise<GuardResult> {
     try {
-      // 🚨 GLOBAL DEVELOPMENT BYPASS: Force ONLINE for development
-      if (process.env.NODE_ENV === 'development') {
-        console.log('⚠️ [DEBUG] GLOBAL DEVELOPMENT BYPASS: Forcing ONLINE mode');
-        return {
-          valid: true,
-          userId: UserManager.getInstance().getUserId() || ''
-        };
-      }
-      
       // 🆕 VERBATIM: userId check from all 3 services
       const userId = await UserManager.getInstance().getUserId() || '';
       
@@ -176,14 +167,7 @@ export class SyncGuard {
     //   };
     // }
     
-    // 🚨 EMERGENCY BYPASS: Force success for testing
-    console.log('⚠️ [DEBUG] NETWORK GUARD BYPASSED: Forcing sync for testing.');
-    return {
-      allowed: true,
-      mode: 'ONLINE',
-      isSecurityLockdown: false
-    };
-    
+    // Return normal validation result
     return {
       allowed: true,
       mode: networkMode,

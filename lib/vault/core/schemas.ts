@@ -32,7 +32,7 @@ export const BookSchema = z.object({
 
   name: z.string().min(1, "Book name is required"),
 
-  description: z.string().nullable().optional().transform(val => val ?? ''),
+  description: z.string().nullable().optional(),  // 🛡️ REMOVED: transform to prevent data loss
 
   updatedAt: z.preprocess((val) => {
 
@@ -126,7 +126,7 @@ export const EntrySchema = z.object({
 
   note: z.string().optional(),
 
-  date: z.string().min(1, "Date is required"),
+  date: z.number().min(1, "Date is required"), // 🚨 DNA HARDENING: Changed from z.string() to z.number() (Unix ms)
 
   time: z.string().min(1, "Time is required"),
 
@@ -171,8 +171,6 @@ export const EntrySchema = z.object({
   conflictReason: z.string().optional(),
 
   serverData: z.any().optional(),
-
-  mediaId: z.string().nullable().optional(),
 
 });
 
