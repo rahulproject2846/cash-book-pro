@@ -34,7 +34,7 @@ export class ModeController {
 
 
 
-  private static lastKnownState: 'OFFLINE' | 'DEGRADED' | 'SYNCING' | 'ONLINE' | 'RESTRICTED' = 'OFFLINE';
+  private static lastKnownState: 'OFFLINE' | 'DEGRADED' | 'SYNCING' | 'ONLINE' | 'RESTRICTED' = 'ONLINE'; // 🚀 OPTIMISTIC START
 
 
 
@@ -106,7 +106,8 @@ export class ModeController {
 
 
 
-    ModeController.lastKnownState = 'OFFLINE';
+    // 🚀 OPTIMISTIC START: Assume online after authentication
+    ModeController.lastKnownState = 'ONLINE';
 
 
 

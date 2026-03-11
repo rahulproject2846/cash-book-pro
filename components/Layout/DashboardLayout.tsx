@@ -261,16 +261,10 @@ export const DashboardLayout = (props: any) => {
 
     return (
         <div 
-            className="h-screen bg-[var(--bg-app)]" 
-            style={{ 
-                display: 'grid', 
-                gridTemplateColumns: collapsed ? '90px 1fr' : '280px 1fr',
-                gridTemplateRows: 'auto 1fr',
-                gridTemplateAreas: '"sidebar header" "sidebar main"' 
-            }}
+            className="h-screen bg-[var(--bg-app)] flex flex-col md:grid md:grid-cols-[280px_1fr] md:grid-rows-[auto_1fr] md:grid-areas-layout"
         >
-            {/* Sidebar Column */}
-            <div style={{ gridArea: 'sidebar' }}>
+            {/* Sidebar Column - Hidden on mobile, shown on desktop with grid-area */}
+            <div className="hidden md:block" style={{ gridArea: 'sidebar' }}>
                 <Sidebar 
                     active={activeSection} 
                     setActive={setActiveSection} 
@@ -282,16 +276,16 @@ export const DashboardLayout = (props: any) => {
                 />
             </div>
             
-            {/* Header Area */}
-            <div style={{ gridArea: 'header' }}>
+            {/* Header Area - Full width on mobile, grid-area on desktop */}
+            <div className="w-full" style={{ gridArea: 'header' }}>
                 <DynamicHeader />
             </div>
             
-            {/* Main Content Area */}
+            {/* Main Content Area - Full width on mobile, grid-area on desktop */}
             <main 
                 ref={mainContainerRef}
-                style={{ gridArea: 'main' }} 
-                className="overflow-y-auto custom-scrollbar h-full relative bg-[var(--bg-app)]"
+                className="w-full overflow-y-auto custom-scrollbar h-full relative bg-[var(--bg-app)]"
+                style={{ gridArea: 'main' }}
             >
                 {/* Mobile Bottom Nav */}
                 <BottomNav 

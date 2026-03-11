@@ -11,6 +11,7 @@ import { AppleToastContainer } from '@/src/components/ui/AppleToastContainer';
 import { useMediaStore } from '@/lib/vault/MediaStore'; 
 import { useVaultStore } from '@/lib/vault/store';
 import { getVaultStore } from '@/lib/vault/store/storeHelper';
+import { ThemeOverlay } from '@/components/UI/ThemeOverlay';
 
 /**
  * INTERNAL COMPONENT: THEME SYNCHRONIZER
@@ -74,8 +75,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider 
         attribute="class" 
         defaultTheme="dark" 
-        enableSystem={true} 
-        disableTransitionOnChange
+        enableSystem={true}
       >
         <PusherProvider currentUser={currentUser}>
             <TranslationProvider currentUser={currentUser}>
@@ -122,6 +122,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 
                 {mounted && <ModalRegistry />}
                 <AppleToastContainer />
+                
+                {/* Theme Transition Overlay - Telegram-Style Circular Reveal */}
+                {mounted && <ThemeOverlay />}
                 
             </TranslationProvider>
         </PusherProvider>

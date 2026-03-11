@@ -2,6 +2,7 @@
 
 import { getTimestamp } from '@/lib/shared/utils';
 import { db } from '@/lib/offlineDB';
+import { getNextVKey } from '@/lib/vault/core/VaultUtils';
 
 /**
  * 🎯 FINANCE SERVICE (V1.0) - Extracted Entry Logic
@@ -35,12 +36,20 @@ export class FinanceService {
   private async createBookSignal(get: any, bookId: string, userId: string, entryData?: { type: string; amount: number }): Promise<{ signal: any | null; book: any | null }> {
     if (!bookId) return { signal: null, book: null };
     
-    // Try to get book from store first, then DB
-    let activeBook = get().activeBook;
-    if (!activeBook || (String(activeBook._id) !== bookId && String(activeBook.localId) !== bookId)) {
-       // Fallback to DB fetch if store doesn't match
-       const dbBook = await db.books.where('localId').equals(Number(bookId)).or('_id').equals(bookId).first();
-       if (dbBook) activeBook = dbBook;
+    // 🎯 DEXIE-FIRST: Fetch latest book record from Dexie for absolute truth
+    // First get the store's activeBook to find its localId/_id
+    const storeBook = get().activeBook;
+    const lookupId = storeBook?.localId || storeBook?._id || bookId;
+    let activeBook = await db.books.get(lookupId);
+    
+    // Fallback to store if Dexie doesn't have it
+    if (!activeBook) {
+      if (!storeBook || (String(storeBook._id) !== bookId && String(storeBook.localId) !== bookId)) {
+        const dbBook = await db.books.where('localId').equals(Number(bookId)).or('_id').equals(bookId).first();
+        if (dbBook) activeBook = dbBook;
+      } else {
+        activeBook = storeBook;
+      }
     }
 
     // 🛡️ DEFENSIVE: If activeBook still has no name, try alternative DB query
@@ -61,42 +70,37 @@ export class FinanceService {
     }
 
     if (activeBook) {
-      // 🎯 PROACTIVE BALANCE: Calculate based on current balance + entry adjustment
-      let newBalance: number;
-      if (entryData) {
-        // Use proactive calculation: current balance + entry adjustment
-        const currentBalance = Number(activeBook.cachedBalance) || 0;
-        const entryAdjustment = entryData.type === 'income' ? Number(entryData.amount) : -Number(entryData.amount);
-        newBalance = currentBalance + entryAdjustment;
-      } else {
-        // Fallback to getBookBalance for non-entry operations
-        newBalance = this.getBookBalance(get, String(activeBook._id || activeBook.localId));
-      }
+      // 🎯 TOTAL RECALL: Use getBookBalance (same as UI) for 100% accuracy
+      // This reads from state.allEntries and calculates absolute sum
+      const lookupBookId = String(activeBook._id || activeBook.localId);
+      const finalBalance = this.getBookBalance(get, lookupBookId);
+      
+      console.log("🎯 [TOTAL RECALL] Calculated from all entries:", finalBalance);
       
       // 🚨 LEAN SIGNAL: For entry mutations, only send essential sync fields
-      // This minimizes payload size - server's Smart-Patch will preserve other fields
-      const isEntryMutation = true; // Always true since this is called from entry operations
+      const isEntryMutation = !!entryData;
       
       const signal = isEntryMutation ? {
-        // 🚨 LEAN PAYLOAD: Only 5 essential fields for entry-triggered updates
+        // 🚨 LEAN PAYLOAD: Include localId for proper Dexie merge
+        localId: activeBook.localId,
         _id: activeBook._id,
-        cid: activeBook.cid,  // ✅ REQUIRED: For HydrationEngine validation
+        cid: activeBook.cid,
         userId: String(activeBook.userId || userId || ''),
-        vKey: Number(activeBook.vKey || 1) + 1, // ✅ Atomic Increment
+        vKey: getNextVKey(Number(activeBook.vKey || 1), false),
         updatedAt: getTimestamp(),
-        cachedBalance: newBalance,
-        synced: 0  // ✅ REQUIRED: For proper sync status
+        cachedBalance: Number(finalBalance),
+        synced: 0
       } : {
         // Full payload for other operations
         _id: activeBook._id,
         cid: activeBook.cid,
-        name: activeBook.name, // 🎯 CRITICAL: Must be present for Zod validation
+        name: activeBook.name,
         userId: String(activeBook.userId || userId || ''),
         synced: 0,
         isDeleted: Number(activeBook.isDeleted || 0),
-        vKey: Number(activeBook.vKey || 1) + 1, // ✅ Atomic Increment
+        vKey: getNextVKey(Number(activeBook.vKey || 1), false),
         updatedAt: getTimestamp(),
-        cachedBalance: newBalance
+        cachedBalance: Number(finalBalance)
       };
       
       return { signal, book: activeBook };
@@ -386,6 +390,10 @@ export class FinanceService {
   ): Promise<{ success: boolean; error?: Error }> {
     // 🔍 VALIDATION FIRST - NO LOCK YET
     const { UserManager } = await import('../core/user/UserManager');
+    // 🛡️ IDENTITY GATE: Ensure UserManager has ID before mutation (like saveEntry)
+    if (!UserManager.getInstance().getUserId()) {
+      await UserManager.getInstance().waitForIdentity();
+    }
     const userId = UserManager.getInstance().getUserId();
     if (!userId || !entry?.localId) return { success: false };
     
@@ -440,17 +448,19 @@ export class FinanceService {
         message: `Deleting "${entry.title || 'Entry'}" in 6 seconds...`,
         countdown: 6,
         onUndo: () => {
-          const { pendingEntryDeletion } = get();
-          if (pendingEntryDeletion?.timeoutId) {
-            clearTimeout(pendingEntryDeletion.timeoutId);
-          }
-          
-          // 🎯 RESTORE ENTRY TO UI
-          set((state: any) => ({
-            entries: [...(state.entries || []), entry],
-            allEntries: [...(state.allEntries || []), entry],
-            pendingEntryDeletion: null
-          }));
+          // 🛡️ UNDO GUARD: Check if entry already exists before adding (prevents duplicates)
+          set((state: any) => {
+            const exists = state.allEntries?.some((e: any) => e.cid === entry.cid);
+            if (exists) {
+              console.log('🛡️ [UNDO] Entry already exists, skipping restore');
+              return state;
+            }
+            return {
+              allEntries: [entry, ...(state.allEntries || [])],
+              entries: [entry, ...(state.entries || [])],
+              pendingEntryDeletion: null
+            };
+          });
           
           get().processEntries();
           get().hideToast(activeToastId);
@@ -459,19 +469,30 @@ export class FinanceService {
       
       // 🎯 STEP 3: SET 7-SECOND DELAYED COMMIT
       const timeoutId = setTimeout(async () => {
+        // 🛡️ HARDENED: Try-catch with proper error logging
         try {
+          console.log('⏰ [DELETE] Timeout reached, executing final deletion...');
           // FIRST: Execute final deletion
           await this.executeFinalEntryDeletion(get, set, entry, userId);
-          // SECOND: Hide toast
-          get().hideToast(activeToastId);
+          console.log('✅ [DELETE] Final deletion completed');
         } catch (err) {
           // THIRD: On error, restore entry to UI
-          set((state: any) => ({
-            entries: [...(state.entries || []), entry],
-            allEntries: [...(state.allEntries || []), entry],
-            pendingEntryDeletion: null
-          }));
+          console.error('❌ [FINANCE SERVICE] Final deletion failed:', err);
+          set((state: any) => {
+            // 🛡️ GUARD: Check if entry already exists before adding
+            const exists = state.allEntries?.some((e: any) => e.cid === entry.cid);
+            if (exists) return state;
+            return {
+              entries: [...(state.entries || []), entry],
+              allEntries: [...(state.allEntries || []), entry],
+              pendingEntryDeletion: null
+            };
+          });
           get().processEntries();
+        } finally {
+          // 🎯 ALWAYS: Hide toast regardless of success or error
+          console.log('🏁 [DELETE] Hiding toast, deletion process complete');
+          get().hideToast(activeToastId);
         }
       }, 7000);
       
@@ -543,11 +564,45 @@ export class FinanceService {
       deletePayload.vKey = finalVKey;
       
       // 🛡️ UNSYNCED HARD-DELETE: If entry is not on server yet, delete permanently
+      // BUT always update book balance first, AND continue to sync!
       if (!entry._id || entry.synced === 0) {
-          await db.entries.delete(entry.localId);
-          await this.refreshEntries(get, set);
-          set({ pendingEntryDeletion: null });
-          return;
+        // 🎯 MUST: Recalculate and update parent book balance BEFORE deleting entry
+        // Pass entry data with INVERTED type for delete (remove entry's effect from balance)
+        const deleteEntryData = { 
+          type: entry.type === 'income' ? 'expense' : 'income', // Invert: removing income = expense, removing expense = income
+          amount: entry.amount 
+        };
+        const { signal: bookSignal } = await this.createBookSignal(get, entry.bookId, userId, deleteEntryData);
+        let bookUpdated = false;
+        if (bookSignal && bookSignal.localId) {
+          await db.books.update(bookSignal.localId, {
+            cachedBalance: bookSignal.cachedBalance,
+            updatedAt: getTimestamp(),
+            synced: 0
+          });
+          bookUpdated = true;
+        }
+        
+        // Now delete the entry
+        await db.entries.delete(entry.localId);
+        await this.refreshEntries(get, set);
+        
+        // 🚨 CRITICAL: Continue to syncMatrixItem instead of returning early!
+        console.log('🎯 [HARD DELETE] Entry deleted, triggering sync...');
+        
+        // Set parentBookId for sync below
+        const parentBookId = entry.bookId;
+        
+        // Continue to sync code below instead of returning!
+        if (bookSignal && bookUpdated) {
+          const { getVaultStore } = await import('../store/storeHelper');
+          const vaultStore = getVaultStore();
+          await vaultStore.syncMatrixItem(String(bookSignal._id || parentBookId));
+          get().refreshBooks();
+        }
+        
+        set({ pendingEntryDeletion: null });
+        return;
       }
       
       // 🎯 ATOMIC BATCH: Entry delete + Book signal in SINGLE transaction
@@ -556,11 +611,19 @@ export class FinanceService {
       ];
       
       // Add Book update only if needed
+      // Pass entry data with INVERTED type for delete (remove entry's effect from balance)
       const parentBookId = entry.bookId;
-      const { signal: bookSignalPayload } = await this.createBookSignal(get, parentBookId, userId);
+      const deleteEntryData = { 
+        type: entry.type === 'income' ? 'expense' : 'income', // Invert: removing income = expense, removing expense = income
+        amount: entry.amount 
+      };
+      const { signal: bookSignalPayload } = await this.createBookSignal(get, parentBookId, userId, deleteEntryData);
       if (bookSignalPayload) {
         atomicOperations.push({ type: 'BOOK' as const, records: [bookSignalPayload] });
       }
+      
+      // 🔗 SYNC ENGINE STATE: Ensure HydrationEngine has userId before batch mutation
+      controller.setUserId(userId);
       
       // 🎯 SINGLE BATCH CALL: Process Entry delete + Book signal atomically
       const batchResult = await controller.ingestBatchMutation(atomicOperations);
@@ -722,6 +785,51 @@ export class FinanceService {
               eBookId === String(book.localId) || 
               eBookId === String(book.cid)) && entry.isDeleted === 0;
     }) || [];
+    
+    const income = bookEntries.filter((e: any) => e.type === 'income').reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
+    const expense = bookEntries.filter((e: any) => e.type === 'expense').reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
+    return income - expense;
+  }
+
+  /**
+   * 🎯 SIGNAL BALANCE: Async version for createBookSignal - reads from Dexie
+   * Use this for creating book signals to ensure 100% accuracy with new entries
+   */
+  async getBookBalanceForSignal(get: any, id: string): Promise<number> {
+    const state = get();
+    const bookId = String(id);
+    
+    // 🆕 MATRIX SEARCH: Find the book
+    const book = state.allBookIds?.find((b: any) => 
+      String(b._id) === bookId || String(b.localId) === bookId || String(b.cid) === bookId
+    ) || state.books?.find((b: any) => 
+      String(b._id) === bookId || String(b.localId) === bookId || String(b.cid) === bookId
+    );
+    
+    if (!book) {
+      return 0;
+    }
+    
+    // Triple-Link Protocol: Match entries with ANY of the book's possible IDs
+    // 🎯 DEXIE-FIRST: Read directly from Dexie for 100% accuracy
+    const lookupId = book.localId || book._id || book.cid;
+    let bookEntries: any[] = [];
+    
+    try {
+      // Query Dexie directly - this ensures we get the latest entries including newly saved ones
+      bookEntries = await db.entries.where('bookId').equals(String(lookupId)).toArray();
+      // Filter: exclude deleted entries
+      bookEntries = bookEntries.filter((e: any) => e.isDeleted !== 1);
+    } catch (dexieError) {
+      // Fallback to state if Dexie fails
+      console.warn("⚠️ [DEXIE FALLBACK] Could not query Dexie, using state:", dexieError);
+      bookEntries = (state.allEntries || []).filter((entry: any) => {
+        const eBookId = String(entry.bookId || "");
+        return (eBookId === String(book._id) || 
+                eBookId === String(book.localId) || 
+                eBookId === String(book.cid)) && entry.isDeleted === 0;
+      });
+    }
     
     const income = bookEntries.filter((e: any) => e.type === 'income').reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
     const expense = bookEntries.filter((e: any) => e.type === 'expense').reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);

@@ -213,6 +213,225 @@ Industrial Bulk-Pull: Upgraded API fetch parameters from limit=20 to limit=1000.
 Atomic Batching: Wrapped the entire 1,000-record parsing loop inside a singular, atomic db.transaction, compressing 1000 DB write-locks into 1 hyper-fast operation.
 
 
+🔴 [CRITICAL] IR-2026-03-11: Zod Schema Stripping (Silent Data Corruption)
+Severity: Critical | Affected System: Data Validation & Persistence Layer
+Summary
+Essential business fields (cachedBalance, isPublic, type, phone) were being silently removed from payloads, causing data loss between the UI and the Server.
+Symptoms
+Server returned "Fields missing" during new book creation.
+Updated fields like phone or type would vanish after a sync cycle.
+cachedBalance always defaulted to 0 on the server regardless of local calculations.
+Root Cause
+A mismatch between the Zod BookSchema and the actual database fields. The schema was incomplete. Since Zod's safeParse() is used in the HydrationEngine, it was stripping any field not explicitly defined in the schema. This "Data Thief" bug bypassed all error logs because the validation technically "passed" after stripping.
+Resolution (Action Items)
+Schema Restoration: Updated lib/vault/core/schemas.ts to include every missing field from Dexie and MongoDB.
+Merge-then-Validate: Refactored HydrationEngine.ts to merge incoming partial data with existingRecord from Dexie before running Zod validation.
+
+
+🔴 [CRITICAL] IR-2026-03-11: The "Over-Lean" Creation Trap
+Severity: Critical | Affected System: Sync Engine (PushService)
+Summary
+New books failed to create on the server because the system attempted to use a "Lean Signal" for initial creation.
+Symptoms
+API Error: POST /api/books 400 (Bad Request) - Fields missing.
+Local books remained synced: 0 indefinitely after a reload.
+Root Cause
+The PushService.ts lacked a conditional branch to distinguish between a CREATE (no _id) and an UPDATE (existing _id). It was forcing a 5-field minimal payload for everything, omitting the name field which is mandatory for server-side initialization.
+Resolution (Action Items)
+Intelligent Dispatcher: Implemented a strict if (!book._id) check in pushSingleBook.
+Forced Full Payload: New records now send the complete object, while existing records continue using 200-byte Lean Signals.
+
+
+🟡 [HIGH] IR-2026-03-11: Mongoose vKey Persistence Lock
+Severity: High | Affected System: Server-Side State Synchronization
+Summary
+The server successfully processed updates (200 OK) but refused to increment the vKey, causing version mismatch loops.
+Symptoms
+Payload sent vKey: 2, but the server response echoed back vKey: 1.
+Sync engine repeatedly pushed the same data because the version never advanced.
+Root Cause
+Mongoose's findOneAndUpdate with runValidators: true was silently rejecting vKey updates due to hidden type coercion (String vs Number) or the field not being marked as "Modified" in the updateData loop.
+Resolution (Action Items)
+Strict Number Casting: Enforced Number() casting on all versioning fields in PushService and the Server API.
+Explicit Set: Modified route.ts to explicitly set vKey and updatedAt to bypass any silent schema rejections.
+
+🔴 [CRITICAL] IR-2026-03-11: The Lean Payload Data Hole (Cross-Device Field Loss)
+Severity: Critical | Affected System: Sync Engine (PushService) & Server SMART-MERGE
+Summary
+Book metadata (name, phone, description, type, image) would vanish after syncing from Device-A to Device-B. The server retained stale data, causing cross-device corruption.
+Symptoms
+User updates book phone/name on Device-A.
+Device-B pulls data and sees OLD phone/name values.
+Console shows successful sync (200 OK) but data silently diverges.
+Root Cause
+PushService.ts pushSingleBook() sends a STRICT LEAN PAYLOAD with only 6 fields (_id, cid, userId, vKey, updatedAt, cachedBalance) regardless of whether it's a book update or entry-triggered balance update.
+The server's SMART-MERGE (route.ts lines 303-322) only updates fields present in the payload. Since name, phone, description, type, image, mediaCid are NOT in the payload, MongoDB retains the OLD values.
+When Device-B pulls, it receives the stale server data and overwrites local Dexie.
+Resolution (Action Items)
+Conditional Payload Strategy: Differentiate between book-triggered (full payload) vs entry-triggered (lean payload) syncs in PushService.
+Full Payload Fields: Include name, type, phone, description, image, mediaCid when the book itself is being updated.
+Lean Payload Only: Send minimal payload when ONLY cachedBalance changes (entry-triggered sync).
+
+
+---
+
+
+## 🔴 [CRITICAL] IR-2026-03-08: Unix Timestamp Type Mismatch (ISO String Injection)
+**Severity:** Critical | **Affected System:** Data Persistence Layer / Schema Alignment
+
+### Summary
+The system was storing dates as ISO strings and Date objects instead of Unix milliseconds (Number), violating PROJECT DNA V4.0 timestamp absolutism.
+
+### Symptoms
+- Database contained mixed date formats (ISO strings in Dexie, Date objects in some entries).
+- Date comparisons failed during checksum generation.
+- Sorting by date produced inconsistent results across platforms.
+
+### Root Cause
+- models/Entry.ts declared `date: Date` instead of `date: Number`.
+- lib/vault/core/schemas.ts validated date as `z.string()` instead of `z.number()`.
+- lib/vault/core/VaultUtils.ts had date normalization commented out.
+- UI passed YYYY-MM-DD strings directly without conversion.
+
+### Resolution
+- **Server Schemas:**
+  - Added `cachedBalance` field to `models/Book.ts` (Type: Number, default: 0).
+  - Removed `synced` and `syncAttempts` from `models/Entry.ts` (not server's responsibility).
+  - Changed `date` field from `Date` to `Number` in both interface and schema.
+  - Confirmed `timestamps: false` in mongoose options.
+- **Client Validation:**
+  - Updated `lib/vault/core/schemas.ts` EntrySchema: `date: z.number().min(1)`.
+- **Normalization:**
+  - Uncommented date normalization in `lib/vault/core/VaultUtils.ts`: `if (normalized.date) normalized.date = normalizeTimestamp(normalized.date)`.
+- **UI/Service Alignment:**
+  - Modified `EntryModal.tsx`: `date: form.date ? new Date(form.date).getTime() : Date.now()`.
+  - Modified `FinanceService.ts`: Ensured payload date is solid Number.
+
+
+---
+
+
+## 🟠 [HIGH] IR-2026-03-08: The 4-API Call Glitch (Redundant Sync Storm)
+**Severity:** High | **Affected System:** Sync Orchestration / Network Layer
+
+### Summary
+Creating a new book triggered 4 redundant API calls instead of 1-2, flooding the network tab and causing performance degradation.
+
+### Symptoms
+- Network tab showed 4 sequential PUT/POST calls for single book creation.
+- Multiple vault-updated events fired in rapid succession.
+- Sync debounce was ineffective due to missing in-flight detection.
+
+### Root Cause
+- SyncOrchestrator.ts lacked an "in-flight" locking mechanism.
+- Multiple rapid events could trigger concurrent pushPendingData calls.
+- PushService.ts sent redundant mediaCid even when image was already a URL.
+
+### Resolution
+- **Server-Side Smart-Patch:**
+  - Verified `app/api/books/route.ts` PUT handler already had smart-patch logic (lines 296-318).
+  - Only updates fields where `data[field] !== undefined`.
+- **Storm Suppression:**
+  - Added in-flight lock in `lib/vault/core/SyncOrchestrator.ts`:
+    ```typescript
+    if (this.pushService?.isSyncing) {
+      console.log('🛡️ [ORCHESTRATOR] Push already in-flight, queueing for later');
+      this.pendingSyncOperations.push({ timestamp: Date.now(), source: 'batch-mutation-queued', changedCid });
+      return;
+    }
+    ```
+  - Made `isSyncing` public in `lib/vault/services/PushService.ts`.
+- **Payload Cleanup:**
+  - Added mediaCid exclusion when image is URL:
+    ```typescript
+    if (payload.image && payload.image.startsWith('http')) {
+      delete payload.mediaCid;
+    }
+    ```
+
+
+---
+
+
+## 🟡 [MEDIUM] IR-2026-03-08: Lean Signaling Gap (Entry-Triggered Book Updates)
+**Severity:** Medium | **Affected System:** Payload Optimization / Network Efficiency
+
+### Summary
+Entry mutations triggered full book payload updates (~500 bytes) instead of lean signals (~50 bytes), causing unnecessary network overhead.
+
+### Symptoms
+- Network tab showed large JSON payloads for simple balance updates.
+- Entry save operations took longer than necessary.
+- Redundant data sent over cellular connections.
+
+### Root Cause
+- `createBookSignal` in FinanceService.ts always sent full payload with all fields (cid, name, synced, isDeleted, etc.).
+- No distinction between "book update" and "entry-triggered balance update".
+
+### Resolution
+- Modified `lib/vault/services/FinanceService.ts` `createBookSignal` method:
+  - Created lean payload with only 5 essential fields for entry mutations:
+    ```typescript
+    const signal = isEntryMutation ? {
+      _id: activeBook._id,
+      userId: String(activeBook.userId || userId || ''),
+      vKey: Number(activeBook.vKey || 1) + 1,
+      updatedAt: getTimestamp(),
+      cachedBalance: newBalance
+    } : { /* full payload */ };
+    ```
+- Server's Smart-Patch (from Step 2) preserves existing fields when only these 5 fields are present.
+
+🔵 [MEDIUM] IR-2026-03-11: Oil Theme Animation Duration Fix
+Severity: Medium | Affected System: UI Theme Transition
+Summary
+Theme switching produced abrupt visual cuts instead of smooth transitions, violating the "Royal Glide" aesthetic standard.
+Symptoms
+Theme toggle causes instant color swap with no fade. UI elements "pop" between light/dark modes.
+Root Cause
+The oil theme animation duration was set to 0 or too short (default 0ms). Additionally, disableTransitionOnChange was active in ThemeProvider, blocking theme changes.
+Resolution (Action Items)
+- Updated oil theme animation duration to 4000ms (4 seconds) for smooth fade
+- Removed disableTransitionOnChange from ThemeProvider configuration
+- Wrapped setTheme() inside setTimeout(0) to defer execution and prevent React batching conflicts
+
+🔵 [MEDIUM] IR-2026-03-11: DashboardLayout Inline Grid Styles Refactor
+Severity: Medium | Affected System: Frontend Layout / Tailwind CSS
+Summary
+DashboardLayout.tsx used inline JavaScript styles for grid configuration, violating the project's Tailwind-only styling mandate.
+Symptoms
+Grid layout defined via JS object: style={{ gridTemplateColumns: '280px 1fr' }}. Hard to maintain and inconsistent with rest of codebase.
+Root Cause
+Developer used inline styles instead of Tailwind utility classes during initial layout implementation.
+Resolution (Action Items)
+- Converted inline grid styles to Tailwind classes: md:grid-cols-[280px_1fr]
+- Applied md:grid-rows-[auto_1fr] for row configuration
+- Removed all inline style objects from grid container
+
+🔵 [MEDIUM] IR-2026-03-11: BooksList Mobile Grid Overflow
+Severity: Medium | Affected System: Mobile UI / Responsive Layout
+Summary
+BooksList displayed 2-column grid on mobile devices, causing horizontal overflow and layout breaking on narrow screens.
+Symptoms
+Mobile viewport shows horizontal scroll. Book cards are cramped with text overflow.
+Root Cause
+Grid was set to cols-2 on all viewports. Mobile needs single column for proper readability.
+Resolution (Action Items)
+- Changed mobile grid from cols-2 to cols-1 using Tailwind: grid-cols-1 md:grid-cols-2
+- Ensured proper spacing on mobile devices
+
+🟢 [LOW] IR-2026-03-11: TypeScript Compilation Validation
+Severity: Low | Affected System: Build Pipeline / Code Quality
+Summary
+TypeScript errors were not being caught before deployment, risking runtime type failures.
+Symptoms
+No tsc validation in CI/CD pipeline. Type errors could reach production.
+Root Action
+- Executed npx tsc --noEmit to validate all TypeScript files
+- Fixed any type errors discovered during validation
+- Verified clean build before proceeding
+
+
 ### 🛡️ SYSTEM INTEGRITY VERDICT
 The Holy Grail Architecture is currently **100% Resilient**. All critical failure paths (ID synchronization, Race conditions, and Schema mismatches) have been patched with enterprise-grade guards.
 

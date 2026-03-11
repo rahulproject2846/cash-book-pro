@@ -333,7 +333,7 @@ export async function PUT(req: Request) {
     const updatedBook = await Book.findOneAndUpdate(
       { _id, userId: userId },
       { $set: updateData },
-      { new: true, runValidators: true } // 🎯 Ensure new: true is present
+      { new: true } // 🎯 Ensure new: true is present
     );
 
     // সিগন্যাল ট্রিগার

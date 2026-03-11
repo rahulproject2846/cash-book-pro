@@ -444,6 +444,89 @@ Immediate Action (The Pathor Protocol)
 Never Double-Query: Instead of saving and then re-querying the DB to find the ID, modify the commit function to return { success: true, localId: newId }. Pass this localId directly in memory to the next function.
 
 
+22. IDENTITY GATE TIMEOUT (10s Wait Failure)
+Symptoms:
+Console Error: IDENTITY_GATE_TIMEOUT: No user data available after 10 seconds.
+App redirects to /login even though the user is logged in.
+Root Cause (Identity Paradox):
+The boot() sequence recovered the ID from storage but failed to set the isReady flag to true atomically. The UI Gate (waitForIdentity) waited for the flag, but because the flag never flipped, the 10-second timer expired.
+Immediate Action (Console Command):
+To bypass the identity gate and force the app into an authenticated state:
+code
+JavaScript
+await (async () => {
+  const { useVaultStore } = await import('/lib/vault/store/index.js');
+  useVaultStore.setState({ 
+    userId: localStorage.getItem('vault_user_profile') ? JSON.parse(localStorage.getItem('vault_user_profile'))._id : '',
+    isAuthenticated: true,
+    bootStatus: 'READY' 
+  });
+  console.log('✅ [RECOVERY] Identity forced. Access granted.');
+})();
+
+
+23. THE SILENT DATA THIEF (Zod Schema Stripping)
+Symptoms:
+Data like phone, type, or cachedBalance vanishes after saving.
+Server returns 200 OK but the database remains unchanged.
+Root Cause (Validation Leak):
+Zod schemas were missing these specific fields. Using schema.safeParse() resulted in "stripping" unknown fields. The payload reaching the database was "naked," missing the actual user data.
+Immediate Action (The Pathor Protocol):
+Audit the Gate: Open lib/vault/core/schemas.ts and ensure EVERY field in the Dexie/MongoDB schema is present in the Zod object.
+Verify Transmission: Check the Network tab. If the payload size is unusually small (e.g., < 100 bytes), Zod is likely stripping your data.
+
+
+24. SHADOW MODULES (Singleton Module Duplication)
+Symptoms:
+UserManager logs an ID, but Services (Book/Finance) report userId: null.
+Infinite loop of login/logout.
+Root Cause (Import Mismatch):
+A mix of relative imports (../../) and absolute imports (@/lib/) caused the bundler to load the same file twice in memory. Result: Two separate instances of the "Singleton" existed simultaneously—one active, one empty.
+Immediate Action (The Pathor Protocol):
+Purge Cache: Run rm -rf .next and npm run dev.
+Force Absolute: Use a global search and replace to ensure all UserManager imports use the @/lib/vault/core/user/UserManager path.
+
+
+25. UNIX TIMESTAMP TYPE MISMATCH (ISO String Injection)
+Scenario
+Database contains mixed date formats (ISO strings in Dexie, Date objects). Date comparisons fail during checksum generation. Sorting produces inconsistent results.
+Root Cause
+models/Entry.ts declared date: Date instead of date: Number. Zod validated as z.string() instead of z.number(). VaultUtils had date normalization commented out. UI passed YYYY-MM-DD strings without conversion.
+Immediate Action
+Server: Change date field to Number in models/Entry.ts.
+Validation: Update EntrySchema to z.number().min(1) in schemas.ts.
+Normalization: Uncomment: if (normalized.date) normalized.date = normalizeTimestamp(normalized.date).
+UI: Convert: date: form.date ? new Date(form.date).getTime() : Date.now().
+
+
+26. THE 4-API CALL GLITCH (Redundant Sync Storm)
+Scenario
+Creating a new book triggers 4 sequential API calls instead of 1-2. Network tab floods with redundant requests.
+Root Cause
+SyncOrchestrator lacked in-flight locking. Multiple rapid events triggered concurrent pushPendingData calls. PushService sent redundant mediaCid when image was already a URL.
+Immediate Action
+Storm Suppression: Add in SyncOrchestrator.ts:
+if (this.pushService?.isSyncing) { queue operation; return; }
+Publicize: Change private isSyncing to public in PushService.ts.
+Payload: If image?.startsWith('http') delete payload.mediaCid;
+
+
+27. LEAN PAYLOAD DATA HOLE (Cross-Device Field Loss)
+Scenario
+Book metadata (name, phone, description, type, image) vanishes after syncing from Device-A to Device-B. Server retains stale data.
+Symptoms
+User updates book phone/name on Device-A.
+Device-B pulls and sees OLD phone/name values.
+Console shows 200 OK but data silently diverges.
+Root Cause
+PushService pushSingleBook ALWAYS sends lean payload (6 fields: _id, cid, userId, vKey, updatedAt, cachedBalance) regardless of whether it's a book update or entry-triggered balance update.
+Server SMART-MERGE only updates fields present in payload. Since name, phone, description, type, image are NOT in payload, MongoDB retains OLD values.
+Device-B pulls stale server data and overwrites local Dexie.
+Immediate Action
+Conditional Payload Strategy: Differentiate book-triggered (full payload) vs entry-triggered (lean payload) in PushService.
+Full Payload for Metadata: Include name, type, phone, description, image, mediaCid when book itself is updated.
+Lean Only for Balance: Send minimal payload when ONLY cachedBalance changes.
+
 Manual by: Senior Systems Architect
 Project: The Holy Grail (Unbreakable Ledger)
 

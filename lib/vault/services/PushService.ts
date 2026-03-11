@@ -1348,7 +1348,10 @@ export class PushService {
 
 
 
-      const url = book._id ? `/api/books/${book._id}` : '/api/books';
+      // 🛠️ SURGICAL FIX: Properly detect new vs existing books
+      // Empty string _id means new book, valid _id means existing book
+      const isNewBook = !book._id || book._id.trim() === '';
+      const url = isNewBook ? '/api/books' : `/api/books/${book._id}`;
 
       
 
@@ -1368,9 +1371,7 @@ export class PushService {
 
       
 
-      // 🛡️ TRUST SERVER SMART-MERGE: Let server handle field updates
-      // Server uses SMART-MERGE to update only provided fields
-      console.log(`🎯 [LIGHTWEIGHT PATCH] Sending lightweight update for book ${book.cid} - server will merge`);
+      // 🛡️ SMART-MERGE: Server will merge based on provided fields
 
       
 
@@ -1455,28 +1456,46 @@ export class PushService {
         return { success: false, error: 'CRITICAL: No sovereign ID available for payload' };
       }
 
-      // 🎯 STRICT LEAN PAYLOAD: ALWAYS send minimal payload for book updates
-      // This ensures name, image, description NEVER go to server for activity updates
-      // Server uses SMART-MERGE to update only provided fields
-      const payload = {
-        _id: book._id,
-        cid: book.cid,
-        userId: sovereignUserId,
-        vKey: Number(book.vKey),
-        updatedAt: Number(book.updatedAt),
-        cachedBalance: Number(book.cachedBalance || 0)
-      };
+      // 🎯 SURGICAL FIX: Send FULL payload for NEW books, LEAN for updates
+      let payload: any;
       
-      console.log(`🎯 [LEAN PUSH] Sending STRICT lean payload for book ${book.cid}:`, JSON.stringify(payload).length, 'bytes');
+      if (isNewBook) {
+        // 🆕 FULL PAYLOAD for new book
+        payload = {
+          cid: book.cid,
+          userId: sovereignUserId,
+          name: book.name,
+          description: book.description || '',
+          type: book.type || 'general',
+          phone: book.phone || '',
+          image: cleanBook.image || undefined,
+          mediaCid: cleanBook.mediaCid || undefined,
+          vKey: Number(book.vKey) || 1,
+          updatedAt: Number(book.updatedAt) || Date.now(),
+          cachedBalance: Number(book.cachedBalance || 0),
+          isPublic: Number(book.isPublic ?? 1)
+        };
+        console.log(`📦 [FULL PUSH] NEW book ${book.cid}:`, JSON.stringify(payload).length, 'bytes');
+      } else {
+        // ✏️ LEAN PAYLOAD for updates
+        payload = {
+          _id: book._id,
+          cid: book.cid,
+          userId: sovereignUserId,
+          vKey: Number(book.vKey),
+          updatedAt: Number(book.updatedAt),
+          cachedBalance: Number(book.cachedBalance || 0)
+        };
+        console.log(`🎯 [LEAN PUSH] UPDATE book ${book.cid}:`, JSON.stringify(payload).length, 'bytes');
+      }
 
-      // 📡 [FORENSIC AUDIT] Log what's being pushed to server
-      console.log(`🎯 [LEAN PUSH] Lean book update for ${book.cid}:`, JSON.stringify(payload));
+      // 📡 [AUDIT] Payload ready for sync
 
 
 
       const res = await fetch(url, {
 
-        method: book._id ? 'PUT' : 'POST',
+        method: isNewBook ? 'POST' : 'PUT',
 
         headers: { 'Content-Type': 'application/json' },
 

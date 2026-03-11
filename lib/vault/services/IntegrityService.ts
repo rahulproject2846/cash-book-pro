@@ -896,6 +896,208 @@ export class IntegrityService {
 
   /**
 
+   * 👻 PATHOR V2: DETECT GHOST RECORDS
+
+   * Uses /api/books/verify API to find books that exist locally but were deleted from server.
+
+   * For each ghost book: Set conflicted: 1 and conflictReason: 'PARENT_DELETED_CHILDREN_EXIST'
+
+   */
+
+  async detectGhostRecords(): Promise<{ ghostsFound: number; ghostsMarked: number; error?: string }> {
+
+    try {
+
+      console.log('👻 [INTEGRITY SERVICE] Starting ghost record detection...');
+
+      
+
+      const userId = this.getUserId();
+
+      if (!userId) {
+
+        return { ghostsFound: 0, ghostsMarked: 0, error: 'No user ID available' };
+
+      }
+
+
+
+      // Get all local book IDs (_id field contains MongoDB ObjectId)
+
+      const localBooks = await db.books
+
+        .where('userId')
+
+        .equals(userId)
+
+        .and((book: LocalBook) => book.isDeleted === 0)
+
+        .toArray();
+
+
+
+      if (localBooks.length === 0) {
+
+        console.log('👻 [INTEGRITY SERVICE] No local books to verify');
+
+        return { ghostsFound: 0, ghostsMarked: 0 };
+
+      }
+
+
+
+      // Extract MongoDB _id values as strings
+
+      const localBookIds = localBooks
+
+        .map((book: LocalBook) => String(book._id))
+
+        .filter((id: string) => id && id.length > 0);
+
+
+
+      if (localBookIds.length === 0) {
+
+        console.log('👻 [INTEGRITY SERVICE] No valid local book IDs to verify');
+
+        return { ghostsFound: 0, ghostsMarked: 0 };
+
+      }
+
+
+
+      // Call /api/books/verify to find missing IDs
+
+      const response = await fetch('/api/books/verify', {
+
+        method: 'POST',
+
+        headers: { 'Content-Type': 'application/json' },
+
+        body: JSON.stringify({ bookIds: localBookIds, userId })
+
+      });
+
+
+
+      if (!response.ok) {
+
+        const errorText = await response.text();
+
+        console.error('👻 [INTEGRITY SERVICE] Verify API failed:', response.status, errorText);
+
+        return { ghostsFound: 0, ghostsMarked: 0, error: `Verify API failed: ${response.status}` };
+
+      }
+
+
+
+      const result = await response.json();
+
+      const missingIds: string[] = result.missingIds || [];
+
+
+
+      console.log(`👻 [INTEGRITY SERVICE] Ghost detection: ${missingIds.length} missing out of ${localBookIds.length} checked`);
+
+
+
+      if (missingIds.length === 0) {
+
+        return { ghostsFound: 0, ghostsMarked: 0 };
+
+      }
+
+
+
+      // Mark each ghost book as conflicted with PARENT_DELETED_CHILDREN_EXIST
+
+      let ghostsMarked = 0;
+
+      const timestamp = getTimestamp();
+
+
+
+      for (const missingId of missingIds) {
+
+        // Find local book with this _id
+
+        const ghostBook = localBooks.find((book: LocalBook) => String(book._id) === missingId);
+
+
+
+        if (ghostBook && ghostBook.localId) {
+
+          // Update as conflicted per PATHOR V2 protocol
+
+          await db.books.update(ghostBook.localId, {
+
+            conflicted: 1,
+
+            conflictReason: 'PARENT_DELETED_CHILDREN_EXIST',
+
+            synced: 0,
+
+            updatedAt: timestamp,
+
+            vKey: timestamp
+
+          });
+
+
+
+          // Also register in syncSlice (single source of truth)
+
+          const store = getVaultStore();
+
+          store.registerConflict({
+
+            id: ghostBook.cid,
+
+            type: 'book',
+
+            cid: ghostBook.cid,
+
+            localId: ghostBook.localId,
+
+            record: ghostBook,
+
+            conflictType: 'parent_deleted',
+
+          });
+
+
+
+          ghostsMarked++;
+
+          console.log(`👻 [INTEGRITY SERVICE] Marked ghost book ${ghostBook.cid} (localId: ${ghostBook.localId}) as PARENT_DELETED_CHILDREN_EXIST`);
+
+        }
+
+      }
+
+
+
+      console.log(`👻 [INTEGRITY SERVICE] Ghost detection complete: ${ghostsMarked} ghosts marked as conflicts`);
+
+      return { ghostsFound: missingIds.length, ghostsMarked };
+
+
+
+    } catch (error) {
+
+      console.error('👻 [INTEGRITY SERVICE] Ghost detection failed:', error);
+
+      return { ghostsFound: 0, ghostsMarked: 0, error: String(error) };
+
+    }
+
+  }
+
+
+
+  /**
+
    * 🕐 SCHEDULE DELETION BUFFER
 
    */

@@ -68,7 +68,7 @@ export const HubHeader = ({
     return (
         <div 
             className={cn(
-                "sticky z-[400] bg-(--bg-app)/80 backdrop-blur-xl transition-all duration-300 w-auto mb-4",
+                "sticky px-5 z-[400] bg-(--bg-app)/80 backdrop-blur-xl transition-all duration-300 w-auto mb-4",
                 "mx-[-1.25rem] md:mx-[-2.5rem]", // Negative margins
                 isScrolled && "shadow-xl border-b border-(--border)"
             )}

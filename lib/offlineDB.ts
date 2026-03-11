@@ -68,10 +68,12 @@ export interface LocalBook {
   serverData?: any;        
   image?: string;         
   mediaCid?: string;       
-  isPublic?: boolean;     
+  isPublic?: number;     
   shareToken?: string | null;    
   localStatus?: 'pending_media' | 'ready'; 
-  lastSniperFetch?: number;  
+  lastSniperFetch?: number;
+  cachedBalance?: number;
+  mutationType?: 'CREATE' | 'UPDATE' | 'PATCH';
 }
 
 export interface LocalEntry {
@@ -105,6 +107,8 @@ export interface LocalEntry {
   conflictReason?: string;    
   serverData?: any;        
   mediaId?: string;        
+  // 🎯 METADATA HARDENING: Track mutation type for intelligent dispatch
+  mutationType?: 'CREATE' | 'UPDATE' | 'PATCH';
 }
 
 export interface LocalTelemetry {

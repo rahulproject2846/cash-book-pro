@@ -1,3 +1,17 @@
+/**
+ * 🚨 CONFLICT STORE - DEPRECATED (PATHOR V2)
+ * 
+ * ⚠️ DEPRECATION NOTICE (2026-03-11):
+ * This store is DEPRECATED. All conflict tracking has been centralized to syncSlice.ts (Zustand).
+ * 
+ * MIGRATION GUIDE:
+ * - Use getVaultStore().registerConflict() to register conflicts
+ * - Use getVaultStore().conflicts for reading conflicts
+ * - This file is kept for backward compatibility only
+ * 
+ * @deprecated Use syncSlice from lib/vault/store/slices/syncSlice.ts instead
+ */
+
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { db } from '@/lib/offlineDB';
@@ -57,7 +71,25 @@ export const useConflictStore = create<ConflictStore>()(
         pendingResolutions: {},
         isProcessing: false,
 
-        setConflicts: (conflicts: ConflictItem[]) => set({ conflicts }),
+        setConflicts: (conflicts: ConflictItem[]) => {
+            // 🛡️ PATHOR V2: Sync with single source of truth (syncSlice)
+            const store = getVaultStore();
+            
+            // Clear existing conflicts in syncSlice and add new ones
+            conflicts.forEach(conflict => {
+                store.registerConflict({
+                    id: conflict.cid,
+                    type: conflict.type,
+                    cid: conflict.cid,
+                    localId: conflict.localId,
+                    record: conflict.record,
+                    conflictType: conflict.conflictType
+                });
+            });
+            
+            // Also keep local state for backward compatibility
+            set({ conflicts });
+        },
 
         addPendingResolution: (item: ConflictItem, resolution: 'local' | 'server') => {
             const key = `${item.type}:${item.cid}`;

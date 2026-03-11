@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import Pusher from 'pusher-js';
 import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import type { VaultStore } from '@/lib/vault/store';
@@ -12,6 +12,10 @@ export const PusherProvider = ({ children, currentUser }: { children: React.Reac
     const isSecurityLockdown = store.isSecurityLockdown;
     const bootStatus = store.bootStatus;
     const networkMode = store.networkMode;
+    
+    // 🛡️ PUSHER GRACE PERIOD: Track consecutive OFFLINE seconds
+    const offlineTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const consecutiveOfflineSeconds = useRef<number>(0);
 
     useEffect(() => {
         if (!currentUser?._id || bootStatus !== 'READY') return;
@@ -31,26 +35,65 @@ export const PusherProvider = ({ children, currentUser }: { children: React.Reac
     }, [currentUser?._id, bootStatus]);
 
     // 🧠 MODE CONTROLLER INTEGRATION - Manage Pusher based on network state
+    // 🛡️ GRACE PERIOD: Only disconnect after 5 consecutive seconds of OFFLINE
     useEffect(() => {
         if (!pusher) return;
 
+        // Clear any existing timer
+        if (offlineTimerRef.current) {
+            clearInterval(offlineTimerRef.current);
+        }
+
         if (networkMode === 'OFFLINE') {
-            console.log('🔴 [PUSHER] State: OFFLINE - Disconnecting');
-            pusher.disconnect();
+            // Start counting consecutive OFFLINE seconds
+            consecutiveOfflineSeconds.current = 0;
+            
+            offlineTimerRef.current = setInterval(() => {
+                consecutiveOfflineSeconds.current += 1;
+                
+                // 🛡️ GRACE PERIOD: Only disconnect after 5 seconds of OFFLINE
+                if (consecutiveOfflineSeconds.current >= 5) {
+                    console.log('🔴 [PUSHER] State: OFFLINE for 5+ seconds - Disconnecting');
+                    pusher.disconnect();
+                    if (offlineTimerRef.current) {
+                        clearInterval(offlineTimerRef.current);
+                        offlineTimerRef.current = null;
+                    }
+                } else {
+                    console.log(`⏳ [PUSHER] OFFLINE grace period: ${consecutiveOfflineSeconds.current}/5 seconds`);
+                }
+            }, 1000);
         } else if (networkMode === 'DEGRADED') {
+            // Clear the timer and reset counter
+            if (offlineTimerRef.current) {
+                clearInterval(offlineTimerRef.current);
+                offlineTimerRef.current = null;
+            }
+            consecutiveOfflineSeconds.current = 0;
             // 🚨 DEVELOPMENT BYPASS: Keep Pusher connected during DEGRADED mode
             console.log('⚠️ [PUSHER] State: DEGRADED - Keeping connection for development');
-            // pusher.disconnect(); // DISABLED for development
         } else if (networkMode === 'SYNCING') {
+            if (offlineTimerRef.current) {
+                clearInterval(offlineTimerRef.current);
+                offlineTimerRef.current = null;
+            }
+            consecutiveOfflineSeconds.current = 0;
             console.log(' [PUSHER] State: SYNCING - Disconnecting to prevent race conditions');
             pusher.disconnect();
-        } else if (networkMode === 'ONLINE' && !isSecurityLockdown && ['IDENTITY_WAIT', 'PROFILE_SYNC', 'DATA_HYDRATION', 'READY'].includes(bootStatus)) {
+        } else if (networkMode === 'ONLINE' && !isSecurityLockdown && bootStatus === 'READY') {
+            if (offlineTimerRef.current) {
+                clearInterval(offlineTimerRef.current);
+                offlineTimerRef.current = null;
+            }
+            consecutiveOfflineSeconds.current = 0;
             console.log('🟢 [PUSHER] State: ONLINE - Connecting');
             pusher.connect();
-        } else if (['IDENTITY_WAIT', 'PROFILE_SYNC', 'DATA_HYDRATION'].includes(bootStatus)) {
-            console.log('⏳ [PUSHER] Boot Phase - Keeping connection');
-            // Don't disconnect during boot phases
         } else {
+            if (offlineTimerRef.current) {
+                clearInterval(offlineTimerRef.current);
+                offlineTimerRef.current = null;
+            }
+            consecutiveOfflineSeconds.current = 0;
             console.log('🔒 [PUSHER] Boot Status Guard - Disconnecting');
             pusher.disconnect();
         }
@@ -76,6 +119,9 @@ export const PusherProvider = ({ children, currentUser }: { children: React.Reac
 
         // Cleanup on unmount
         return () => {
+            if (offlineTimerRef.current) {
+                clearInterval(offlineTimerRef.current);
+            }
             pusher.connection.unbind('failed');
             pusher.connection.unbind('unavailable');
             pusher.connection.unbind('disconnected');

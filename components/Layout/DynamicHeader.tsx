@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ChevronLeft, Plus, Sun, Moon, MoreVertical, 
-    Share2, Download, Edit2, Trash2, User, Zap, ShieldCheck, BarChart3
+    Share2, Download, Edit2, Trash2, User, Zap, ShieldCheck, BarChart3, SlidersHorizontal
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -17,6 +17,7 @@ import { useVaultStore } from '@/lib/vault/store/index';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { SafeButton } from '@/components/UI/SafeButton';
 import { useModal } from '@/context/ModalContext';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 
 /**
  * 🏆 DYNAMIC HEADER V16.0 (PRODUCTION READY)
@@ -30,8 +31,11 @@ export const DynamicHeader = () => {
     const router = useRouter();
     const searchParams = useSearchParams();
     const headerRef = useRef<HTMLElement | null>(null);
-    const { theme, setTheme } = useTheme();
+    const { theme } = useTheme();
     const { openModal } = useModal();
+    
+    // 🎨 Theme Transition Hook - Telegram-style circular reveal
+    const { executeThemeTransition } = useThemeTransition();
 
     // 🚀 STABLE STORE ACCESS
     const {
@@ -122,7 +126,7 @@ export const DynamicHeader = () => {
                                         router.push('?tab=books');
                                     }}
                                     variant="ghost"
-                                    className="p-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all"
+                                    className="p-4 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all"
                                 >
                                     <ChevronLeft size={20} strokeWidth={3}/>
                                 </SafeButton>
@@ -166,32 +170,70 @@ export const DynamicHeader = () => {
             {/* --- RIGHT SECTION: OS CONTROLS --- */}
             <div className="flex items-center gap-3 md:gap-4 shrink-0">
                 
-                {/* ➕ PRIMARY FAB (Desktop Only) */}
-                <Tooltip text={isBookActive ? t('tt_add_entry') : t('tt_initialize_ledger')} position="bottom">
-                    <SafeButton
-                        actionId="header-add-entry"
-                        onAction={handleFabClick}
-                        variant="primary"
-                        className="hidden md:flex items-center gap-3 px-6 py-4 rounded-2xl shadow-lg shadow-orange-500/20"
-                    >
-                        <Plus size={18} strokeWidth={3.5} /> 
-                        <span className="text-[11px] font-black  ">
-                            {isBookActive ? t('btn_new_entry') : t('btn_create_vault')}
-                        </span>
-                    </SafeButton>
-                </Tooltip>
+                {/* ➕ PRIMARY FAB (Desktop Only) - HIDDEN FOR AI STUDIO LOOK */}
+                <div className="hidden">
+                    <Tooltip text={isBookActive ? t('tt_add_entry') : t('tt_initialize_ledger')} position="bottom">
+                        <SafeButton
+                            actionId="header-add-entry"
+                            onAction={handleFabClick}
+                            variant="primary"
+                            className="hidden md:flex items-center gap-3 px-6 py-4 rounded-2xl shadow-lg shadow-orange-500/20"
+                        >
+                            <Plus size={18} strokeWidth={3.5} /> 
+                            <span className="text-[11px] font-black  ">
+                                {isBookActive ? t('btn_new_entry') : t('btn_create_vault')}
+                            </span>
+                        </SafeButton>
+                    </Tooltip>
+                </div>
 
-                {/* 🌓 THEME TOGGLE */}
+                {/* 🌓 THEME TOGGLE - Clean Apple Style */}
                 <Tooltip text={t('tt_toggle_theme')} position="bottom">
                     <button
-                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-orange-500 shadow-sm transition-all active:scale-90"
+                        onClick={(e) => executeThemeTransition(e)}
+                        className="p-4 rounded-2xl text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 transition-all active:scale-90"
                     >
                         {theme === 'dark' ? <Sun size={20} strokeWidth={2.5} /> : <Moon size={20} strokeWidth={2.5} />}
                     </button>
                 </Tooltip>
 
-                {/* 🍔 CONTEXTUAL MENUS */}
+                {/* 📊 REPORTS ICON - Desktop Only - Book Details Only */}
+                {isBookActive && (
+                    <Tooltip text={t('nav_analytics')} position="bottom">
+                        <button
+                            onClick={() => openModal('analytics', { currentBook: activeBook })}
+                            className="hidden lg:flex p-4 rounded-2xl text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10 transition-all active:scale-90"
+                        >
+                            <BarChart3 size={20} strokeWidth={2.5} />
+                        </button>
+                    </Tooltip>
+                )}
+
+                {/* 🔗 SHARE ICON - Desktop Only - Book Details Only */}
+                {isBookActive && (
+                    <Tooltip text={t('action_share_access')} position="bottom">
+                        <button
+                            onClick={() => openModal('share', { currentBook: activeBook })}
+                            className="hidden lg:flex p-4 rounded-2xl text-[var(--text-muted)] hover:text-purple-500 hover:bg-purple-500/10 transition-all active:scale-90"
+                        >
+                            <Share2 size={20} strokeWidth={2.5} />
+                        </button>
+                    </Tooltip>
+                )}
+
+                {/* 📥 EXPORT ICON - Desktop Only - Book Details Only */}
+                {isBookActive && (
+                    <Tooltip text={t('action_export_report')} position="bottom">
+                        <button
+                            onClick={() => openModal('export', { currentBook: activeBook })}
+                            className="hidden lg:flex p-4 rounded-2xl text-[var(--text-muted)] hover:text-green-500 hover:bg-green-500/10 transition-all active:scale-90"
+                        >
+                            <Download size={20} strokeWidth={2.5} />
+                        </button>
+                    </Tooltip>
+                )}
+
+                {/* ⚙️ SETTINGS ICON - Triggers SuperMenu */}
                 {isBookActive ? (
                     <div className="relative">
                         <button 
@@ -203,7 +245,7 @@ export const DynamicHeader = () => {
                                     : "bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-muted)] hover:text-orange-500"
                             )}
                         >
-                            <MoreVertical size={20} strokeWidth={2.5} />
+                            <SlidersHorizontal size={20} strokeWidth={2.5} />
                         </button>
                         
                         <AnimatePresence>
@@ -217,12 +259,12 @@ export const DynamicHeader = () => {
                                         className="absolute right-0 top-16 w-72 bg-[var(--bg-card)]/95 backdrop-blur-3xl border border-[var(--border)] rounded-[32px] shadow-2xl z-[500] p-2 overflow-hidden"
                                     >
                                         {[
-                                            { label: 'nav_analytics', icon: BarChart3, color: 'text-blue-500', bg: 'hover:bg-blue-500/10', action: () => openModal('analytics', { currentBook: activeBook }) },
-                                            { label: 'action_share_access', icon: Share2, color: 'text-purple-500', bg: 'hover:bg-purple-500/10', action: () => openModal('share', { currentBook: activeBook }) },
-                                            { label: 'action_export_report', icon: Download, color: 'text-green-500', bg: 'hover:bg-green-500/10', action: () => openModal('export', { currentBook: activeBook }) },
-                                            { label: 'action_edit_ledger', icon: Edit2, color: 'text-yellow-500', bg: 'hover:bg-yellow-500/10', action: () => openModal('editBook', { currentBook: activeBook }) },
+                                            { label: 'nav_analytics', icon: BarChart3, color: 'text-blue-500', bg: 'hover:bg-blue-500/10', action: () => openModal('analytics', { currentBook: activeBook }), hiddenLg: true },
+                                            { label: 'action_share_access', icon: Share2, color: 'text-purple-500', bg: 'hover:bg-purple-500/10', action: () => openModal('share', { currentBook: activeBook }), hiddenLg: true },
+                                            { label: 'action_export_report', icon: Download, color: 'text-green-500', bg: 'hover:bg-green-500/10', action: () => openModal('export', { currentBook: activeBook }), hiddenLg: true },
+                                            { label: 'action_edit_ledger', icon: Edit2, color: 'text-yellow-500', bg: 'hover:bg-yellow-500/10', action: () => openModal('editBook', { currentBook: activeBook }), hiddenLg: false },
                                         ].map((item) => (
-                                            <button key={item.label} onClick={() => handleAction(item.action)} className={cn("w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black   rounded-2xl transition-all text-left text-[var(--text-muted)] group", item.bg)}>
+                                            <button key={item.label} onClick={() => handleAction(item.action)} className={cn("w-full flex items-center gap-4 px-5 py-4 text-[10px] font-black rounded-2xl transition-all text-left text-[var(--text-muted)] group", item.bg, item.hiddenLg && "lg:hidden")}>
                                                 <item.icon size={18} className={`${item.color} group-hover:scale-110 transition-transform`} strokeWidth={2.5} /> 
                                                 <span className="group-hover:text-[var(--text-main)]">{t(item.label)}</span>
                                             </button>

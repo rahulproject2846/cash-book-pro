@@ -768,6 +768,9 @@ export const normalizeRecord = (data: any, currentUserId?: string): any => {
     // RULE: FORCE Boolean to Number conversion
     normalized.isDeleted = (data.isDeleted === true || data.isDeleted === 1) ? 1 : 0;
 
+    // 🛡️ ISPUBLIC NORMALIZATION: Convert boolean to Number (0 | 1)
+    normalized.isPublic = (data.isPublic === true || data.isPublic === 1) ? 1 : 0;
+
     // CONFLICT SANITIZATION: Handle conflicts on client side
     normalized.conflicted = (data.conflicted === 1) ? 1 : 0;
     normalized.conflictReason = data.conflictReason || "";

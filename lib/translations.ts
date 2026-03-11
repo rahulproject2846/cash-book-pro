@@ -177,6 +177,256 @@ export interface TranslationKeys {
   internal_relay_pending: string;
   system_integrity_ok: string;
   network_heartbeat: string;
+
+  // --- Report & Analytics ---
+  awaiting_intel: string;
+  total_expense: string;
+  flow_velocity: string;
+  capital_split: string;
+  liquidity_protocol: string;
+  syncing_intel: string;
+  records_analyzed: string;
+  execute_report_title: string;
+  execute_report_desc: string;
+  btn_execute_archive: string;
+  range_7d: string;
+  range_30d: string;
+  range_90d: string;
+  tt_flow_velocity: string;
+  tt_analytics_node: string;
+  tt_change_range: string;
+  label_days_short: string;
+
+  // --- Export Modal ---
+  export_title: string;
+  range_selector: string;
+  filter_class: string;
+  format_selection: string;
+  format_pdf: string;
+  format_excel: string;
+  status_ready: string;
+  protocols_label: string;
+  extracting_status: string;
+  btn_extract: string;
+  err_no_archive_records: string;
+  success_archive_exported: string;
+  err_protocol_export: string;
+
+  // --- Quick Actions Modal ---
+  action_menu_title: string;
+  create_new_book: string;
+  create_book_desc: string;
+  quick_entry: string;
+  quick_entry_desc: string;
+  config_vault: string;
+  classification: string;
+  sort_order: string;
+  action_toggle_sort: string;
+  label_export: string;
+  units_secured: string;
+  ledger_live_feed: string;
+  ledger_untitled: string;
+  empty_ledger: string;
+  protocol_archive: string;
+
+  // --- Share Modal ---
+  share_vault_title: string;
+  status_live: string;
+  status_private: string;
+  desc_public: string;
+  desc_private: string;
+  btn_disable: string;
+  btn_enable: string;
+  label_access_url: string;
+  share_info_footer: string;
+  link_copied: string;
+
+  // --- Book & Entry Forms ---
+  title_vault_upgrade: string;
+  sync_ready: string;
+  close_modal: string;
+  select_image: string;
+  add_image: string;
+  label_visual_id: string;
+  type_general: string;
+  placeholder_identity_name: string;
+  placeholder_vault_memo: string;
+  btn_upgrade: string;
+  duplicate_warning: string;
+  save_entry: string;
+
+  // --- Auth Views ---
+  placeholder_name: string;
+  placeholder_email: string;
+  placeholder_key: string;
+  placeholder_command: string;
+  title_protocol_init: string;
+  auth_secure_transaction: string;
+  btn_request_code: string;
+  tt_auth_request_code: string;
+  auth_syncing_id: string;
+  auth_id_verified: string;
+  auth_failed: string;
+  auth_net_error: string;
+  auth_denied: string;
+  auth_verifying: string;
+  auth_establishing_link: string;
+  auth_authorized: string;
+  auth_generating_proto: string;
+  auth_proto_sent: string;
+  auth_invalid_code: string;
+  auth_verifying_id: string;
+  auth_init_success: string;
+  auth_sys_error: string;
+  title_protocol_verify: string;
+  label_entry_key: string;
+  tt_auth_confirm_id: string;
+  btn_adjust_detail: string;
+  btn_resend_protocol: string;
+  auth_sending_recovery: string;
+  auth_recovery_sent: string;
+  auth_email_not_found: string;
+  auth_conn_failed: string;
+  tt_send_recovery: string;
+
+  // --- Danger Zone & Termination ---
+  term_confirm_title: string;
+  term_warning: string;
+  placeholder_identity_confirm: string;
+  cancel: string;
+  warn_ledger_loss: string;
+  warn_backup_loss: string;
+  warn_irreversible: string;
+  critical_auth: string;
+  tt_execute_purge: string;
+  tt_match_identity: string;
+  action_auth_termination: string;
+  protocol_locked: string;
+
+  // --- Entry Card & Actions ---
+  untitled_entry: string;
+  note: string;
+  btn_edit: string;
+  btn_delete: string;
+  edit_book: string;
+  delete_book: string;
+  edit_entry: string;
+  delete_entry: string;
+  tt_quick_add: string;
+  label_note: string;
+  no_memo: string;
+
+  // --- Table Headers ---
+  label_date: string;
+  label_time: string;
+  label_ref_id: string;
+  label_protocol: string;
+  label_options: string;
+  label_ref: string;
+  ledger_end: string;
+
+  // --- Timeline & Records ---
+  no_timeline_records: string;
+  records_found: string;
+  protocol_index: string;
+  tt_verified_node: string;
+  tt_classification: string;
+  tt_toggle_status: string;
+  tt_edit_record: string;
+  tt_delete_record: string;
+  tt_close: string;
+  tt_more: string;
+
+  // --- Pagination ---
+  showing: string;
+  items_per_page: string;
+  page: string;
+  tt_prev_page: string;
+  tt_next_page: string;
+
+  // --- Settings & Registry ---
+  interface_engine: string;
+  registry_tags: string;
+  placeholder_new_tag: string;
+  expense_threshold: string;
+  label_monthly_cap: string;
+  tt_save_limit: string;
+  tt_turbo: string;
+  tt_midnight: string;
+  tt_compact: string;
+  tt_autolock: string;
+  tt_reminders: string;
+  tt_tooltips_global: string;
+  governance_active: string;
+  system_version: string;
+  hardware_health: string;
+  data_weight: string;
+  local_registry: string;
+  recovery_protocol: string;
+  recovery_desc: string;
+  tt_generate_hash: string;
+  generate_key: string;
+  purge_desc: string;
+  tt_purge_warning: string;
+
+  // --- Profile & Security ---
+  identity_hub_title: string;
+  master_profile_protocol: string;
+  security_protocol_title: string;
+  status_master: string;
+  identity_name_label: string;
+  current_key_label: string;
+  new_key_label: string;
+  google_locked_label: string;
+  tt_google_pass_locked: string;
+  tt_save_google: string;
+  tt_save_security: string;
+  tt_master_rank: string;
+  tt_security_node: string;
+  label_integrity: string;
+  tt_integrity_score: string;
+  tt_display_identity: string;
+  tt_profile_secured: string;
+  tt_google_auth: string;
+  label_google_verified: string;
+  tt_vault_auth: string;
+  tt_network_status: string;
+  tt_access_rank: string;
+  tt_node_serial: string;
+  label_type_email: string;
+
+  // --- Data Sovereignty ---
+  tt_sovereignty_node: string;
+  tt_archive_status: string;
+  tt_sovereignty_desc: string;
+  tt_restore_identity: string;
+  tt_backup_identity: string;
+
+  // --- Modals & Shortcuts ---
+  modal_analytics_title: string;
+  modal_shortcut_title: string;
+  tt_shortcut_initialize: string;
+  shortcut_desc: string;
+
+  // --- Stats Grid ---
+  desc_inflow: string;
+  desc_outflow: string;
+  desc_pending: string;
+  desc_surplus: string;
+  status_secured: string;
+
+  // --- Dashboard & Header ---
+  financial_dashboard: string;
+  tt_back_dashboard: string;
+  tt_toggle_theme: string;
+  tt_add_entry: string;
+  tt_initialize_ledger: string;
+  action_share_access: string;
+  action_export_report: string;
+  action_terminate_vault: string;
+  action_account_settings: string;
+  action_manage_profile: string;
+  tt_import_ledger: string;
 }
 
 // 🌍 ENGLISH TRANSLATIONS
@@ -344,7 +594,257 @@ const englishTranslations: Omit<TranslationKeys, 'engine_warmup' | 'hot_module_a
   cloud_relay: "Secure Cloud Relay",
   sync_status_stable: "Sync Status: Stable",
   low_latency_mode: "Ultra-Low Latency",
-  last_sync_time: "Last synced: Just Now"
+  last_sync_time: "Last synced: Just Now",
+
+  // --- Report & Analytics ---
+  awaiting_intel: "No Analytics Data",
+  total_expense: "TOTAL",
+  flow_velocity: "Flow Velocity Trend",
+  capital_split: "Capital Split",
+  liquidity_protocol: "Liquidity Analysis",
+  syncing_intel: "Syncing Reports...",
+  records_analyzed: "Records Analyzed",
+  execute_report_title: "Generate Report",
+  execute_report_desc: "Create a detailed report of all your financial data.",
+  btn_execute_archive: "Generate Archive",
+  range_7d: "7 Days Protocol",
+  range_30d: "30 Days Cycle",
+  range_90d: "90 Days Archive",
+  tt_flow_velocity: "Monitors transaction speed",
+  tt_analytics_node: "Analytics Engine Active",
+  tt_change_range: "Change Time Cycle",
+  label_days_short: "D",
+
+  // --- Export Modal ---
+  export_title: "Export Data",
+  range_selector: "Date Range",
+  filter_class: "Category Filter",
+  format_selection: "Format Selection",
+  format_pdf: "PDF",
+  format_excel: "Excel",
+  status_ready: "Ready",
+  protocols_label: "Records",
+  extracting_status: "Extracting Data...",
+  btn_extract: "Extract Data",
+  err_no_archive_records: "No records to export",
+  success_archive_exported: "Data exported successfully!",
+  err_protocol_export: "Export failed. Please try again.",
+
+  // --- Quick Actions Modal ---
+  action_menu_title: "Quick Actions",
+  create_new_book: "Create New Book",
+  create_book_desc: "Start a new ledger",
+  quick_entry: "Quick Entry",
+  quick_entry_desc: "Fast transaction entry",
+  config_vault: "Protocol Config",
+  classification: "Category",
+  sort_order: "Sorting",
+  action_toggle_sort: "Toggle Sort",
+  label_export: "Export",
+  units_secured: "Records",
+  ledger_live_feed: "Live Feed",
+  ledger_untitled: "Untitled Book",
+  empty_ledger: "No entries yet",
+  protocol_archive: "Transaction Archive",
+
+  // --- Share Modal ---
+  share_vault_title: "Access Protocol",
+  status_live: "Public",
+  status_private: "Private",
+  desc_public: "Anyone with the link can view",
+  desc_private: "Only you can access",
+  btn_disable: "Make Private",
+  btn_enable: "Make Public",
+  label_access_url: "Public URL",
+  share_info_footer: "Share this link to give others access to your ledger.",
+  link_copied: "Link Copied!",
+
+  // --- Book & Entry Forms ---
+  title_vault_upgrade: "Edit Book",
+  sync_ready: "Sync Ready",
+  close_modal: "Close",
+  select_image: "Select Image",
+  add_image: "Add Image",
+  label_visual_id: "Book Cover",
+  type_general: "General",
+  placeholder_identity_name: "Enter book name",
+  placeholder_vault_memo: "Add a note (optional)",
+  btn_upgrade: "Update Book",
+  duplicate_warning: "Similar entry exists",
+  save_entry: "Save Entry",
+
+  // --- Auth Views ---
+  placeholder_name: "Your Name",
+  placeholder_email: "Email Address",
+  placeholder_key: "Password",
+  placeholder_command: "Search protocols...",
+  title_protocol_init: "Initial Setup",
+  auth_secure_transaction: "Secure Transaction",
+  btn_request_code: "Send Code",
+  tt_auth_request_code: "Request verification code",
+  auth_syncing_id: "Syncing Identity...",
+  auth_id_verified: "Identity Verified",
+  auth_failed: "Authentication Failed",
+  auth_net_error: "Network Error",
+  auth_denied: "Access Denied",
+  auth_verifying: "Verifying...",
+  auth_establishing_link: "Establishing Connection...",
+  auth_authorized: "Authorized Successfully",
+  auth_generating_proto: "Generating Protocol...",
+  auth_proto_sent: "Code Sent Successfully",
+  auth_invalid_code: "Enter 6-digit code",
+  auth_verifying_id: "Verifying Identity...",
+  auth_init_success: "Identity Authorized",
+  auth_sys_error: "System Error",
+  title_protocol_verify: "Verification",
+  label_entry_key: "Verification Code",
+  tt_auth_confirm_id: "Confirm your identity",
+  btn_adjust_detail: "Change Details",
+  btn_resend_protocol: "Resend Code",
+  auth_sending_recovery: "Sending Recovery Link...",
+  auth_recovery_sent: "Recovery Link Sent",
+  auth_email_not_found: "Email not found",
+  auth_conn_failed: "Connection Failed",
+  tt_send_recovery: "Request recovery link",
+
+  // --- Danger Zone & Termination ---
+  term_confirm_title: "Termination Protocol",
+  term_warning: "This will permanently delete",
+  placeholder_identity_confirm: "Type account name to confirm",
+  cancel: "Cancel",
+  warn_ledger_loss: "All ledger data will be lost",
+  warn_backup_loss: "Cloud backups will be deleted",
+  warn_irreversible: "This action cannot be undone",
+  critical_auth: "Security Authentication",
+  tt_execute_purge: "Execute system purge",
+  tt_match_identity: "Type name to confirm",
+  action_auth_termination: "Execute System Purge",
+  protocol_locked: "Session Locked",
+
+  // --- Entry Card & Actions ---
+  untitled_entry: "Untitled Entry",
+  note: "Note",
+  btn_edit: "Edit",
+  btn_delete: "Delete",
+  edit_book: "Edit Book",
+  delete_book: "Delete Book",
+  edit_entry: "Edit Entry",
+  delete_entry: "Delete Entry",
+  tt_quick_add: "Quick Add",
+  label_note: "Note",
+  no_memo: "No Note",
+
+  // --- Table Headers ---
+  label_date: "Date",
+  label_time: "Time",
+  label_ref_id: "Ref ID",
+  label_protocol: "Type",
+  label_options: "Options",
+  label_ref: "Ref",
+  ledger_end: "Ledger End",
+
+  // --- Timeline & Records ---
+  no_timeline_records: "No Records Found",
+  records_found: "Records Found",
+  protocol_index: "Index",
+  tt_verified_node: "Registry Verified",
+  tt_classification: "Category",
+  tt_toggle_status: "Toggle Status",
+  tt_edit_record: "Edit Record",
+  tt_delete_record: "Delete Record",
+  tt_close: "Close",
+  tt_more: "More Options",
+
+  // --- Pagination ---
+  showing: "Showing",
+  items_per_page: "per page",
+  page: "Page",
+  tt_prev_page: "Previous Page",
+  tt_next_page: "Next Page",
+
+  // --- Settings & Registry ---
+  interface_engine: "Interface Engine",
+  registry_tags: "Registry Tags",
+  placeholder_new_tag: "New category name",
+  expense_threshold: "Expense Threshold",
+  label_monthly_cap: "Monthly Limit",
+  tt_save_limit: "Save Changes",
+  tt_turbo: "Enable turbo mode for faster sync",
+  tt_midnight: "Use dark AMOLED theme",
+  tt_compact: "Show more content on screen",
+  tt_autolock: "Auto-lock after inactivity",
+  tt_reminders: "Show system reminders",
+  tt_tooltips_global: "Show helpful tooltips",
+  governance_active: "System Registry Secured",
+  system_version: "Build V18.0 Stable",
+  hardware_health: "Hardware Health",
+  data_weight: "Data Weight",
+  local_registry: "Local Registry",
+  recovery_protocol: "Recovery Protocol",
+  recovery_desc: "Generate a secure hash key to restore your vault across devices.",
+  tt_generate_hash: "Create secure migration key",
+  generate_key: "Generate Hash Key",
+  purge_desc: "Permanently wipe all local data. This cannot be undone.",
+  tt_purge_warning: "Wipe all local data immediately",
+
+  // --- Profile & Security ---
+  identity_hub_title: "Identity Hub",
+  master_profile_protocol: "Encryption Active",
+  security_protocol_title: "Security Protocol",
+  status_master: "Master Level",
+  identity_name_label: "Display Name",
+  current_key_label: "Current Password",
+  new_key_label: "New Password",
+  google_locked_label: "Managed by Google",
+  tt_google_pass_locked: "Password managed by Google",
+  tt_save_google: "Save via Google",
+  tt_save_security: "Save security settings",
+  tt_master_rank: "Highest privilege access",
+  tt_security_node: "Security protocol active",
+  label_integrity: "Integrity",
+  tt_integrity_score: "System integrity measurement",
+  tt_display_identity: "Display name",
+  tt_profile_secured: "Profile secured",
+  tt_google_auth: "Authenticated via Google",
+  label_google_verified: "Google Verified",
+  tt_vault_auth: "Standard vault identity",
+  tt_network_status: "Live connection monitor",
+  tt_access_rank: "Permission tier level",
+  tt_node_serial: "Unique node identity",
+  label_type_email: "Type your email to confirm",
+
+  // --- Data Sovereignty ---
+  tt_sovereignty_node: "Data ownership protocol active",
+  tt_archive_status: "Verified JSON architecture",
+  tt_sovereignty_desc: "Your data, your control",
+  tt_restore_identity: "Import external protocol",
+  tt_backup_identity: "Secure local snapshot",
+
+  // --- Modals & Shortcuts ---
+  modal_analytics_title: "Analytics Intelligence",
+  modal_shortcut_title: "System Shortcuts",
+  tt_shortcut_initialize: "Initialize new ledger",
+  shortcut_desc: "Quick access commands",
+
+  // --- Stats Grid ---
+  desc_inflow: "Total income this period",
+  desc_outflow: "Total expenses this period",
+  desc_pending: "Pending amounts due",
+  desc_surplus: "Remaining balance",
+  status_secured: "Protocol Secured",
+
+  // --- Dashboard & Header ---
+  financial_dashboard: "Financial Dashboard",
+  tt_back_dashboard: "Back to Dashboard",
+  tt_toggle_theme: "Toggle Theme",
+  tt_add_entry: "Add Entry",
+  tt_initialize_ledger: "Initialize Ledger",
+  action_share_access: "Share Access",
+  action_export_report: "Export Report",
+  action_terminate_vault: "Terminate Vault",
+  action_account_settings: "Account Settings",
+  action_manage_profile: "Manage Profile",
+  tt_import_ledger: "Import Ledger",
 };
 
 // 🇧🇩 BENGALI TRANSLATIONS
@@ -509,7 +1009,257 @@ const bengaliTranslations: Omit<TranslationKeys, 'engine_warmup' | 'hot_module_a
   cloud_relay: "নিরাপদ ক্লাউড রিলে",
   sync_status_stable: "সিংক অবস্থা: স্থিতিশীল",
   low_latency_mode: "আল্ট্রা-লো লেটেন্সি",
-  last_sync_time: "সর্বশেষ সিংক: এইমাত্র"
+  last_sync_time: "সর্বশেষ সিংক: এইমাত্র",
+
+  // --- Report & Analytics ---
+  awaiting_intel: "কোনো ডেটা নেই",
+  total_expense: "মোট",
+  flow_velocity: "লেনদেন গতি",
+  capital_split: "মূলধন বিভাজন",
+  liquidity_protocol: "লিকুইডিটি বিশ্লেষণ",
+  syncing_intel: "রিপোর্ট সিংক হচ্ছে...",
+  records_analyzed: "রেকর্ড বিশ্লেষিত",
+  execute_report_title: "রিপোর্ট তৈরি",
+  execute_report_desc: "আপনার সব আর্থিক ডেটার বিস্তারিত রিপোর্ট তৈরি করুন।",
+  btn_execute_archive: "আর্কাইভ তৈরি",
+  range_7d: "৭ দিন প্রোটোকল",
+  range_30d: "৩০ দিন চক্র",
+  range_90d: "৯০ দিন আর্কাইভ",
+  tt_flow_velocity: "লেনদেনের গতি পর্যবেক্ষণ",
+  tt_analytics_node: "অ্যানালিটিক্স চালু",
+  tt_change_range: "সময় পরিবর্তন",
+  label_days_short: "দিন",
+
+  // --- Export Modal ---
+  export_title: "ডেটা এক্সপোর্ট",
+  range_selector: "তারিখ পরিসর",
+  filter_class: "বিভাগ ফিল্টার",
+  format_selection: "ফরম্যাট নির্বাচন",
+  format_pdf: "পিডিএফ",
+  format_excel: "এক্সেল",
+  status_ready: "প্রস্তুত",
+  protocols_label: "রেকর্ড",
+  extracting_status: "ডেটা বের করা হচ্ছে...",
+  btn_extract: "ডেটা বের করুন",
+  err_no_archive_records: "এক্সপোর্ট করার মতো রেকর্ড নেই",
+  success_archive_exported: "ডেটা সফলভাবে এক্সপোর্ট হয়েছে!",
+  err_protocol_export: "এক্সপোর্ট ব্যর্থ। আবার চেষ্টা করুন।",
+
+  // --- Quick Actions Modal ---
+  action_menu_title: "দ্রুত অ্যাকশন",
+  create_new_book: "নতুন খাতা তৈরি",
+  create_book_desc: "নতুন লেজার শুরু করুন",
+  quick_entry: "দ্রুত এন্ট্রি",
+  quick_entry_desc: "দ্রুত লেনদেন এন্ট্রি",
+  config_vault: "প্রোটোকল সেটিংস",
+  classification: "বিভাগ",
+  sort_order: "সাজানোর নিয়ম",
+  action_toggle_sort: "সাজানো টগল",
+  label_export: "এক্সপোর্ট",
+  units_secured: "রেকর্ড",
+  ledger_live_feed: "লাইভ ফিড",
+  ledger_untitled: "শিরোনামহীন খাতা",
+  empty_ledger: "কোনো এন্ট্রি নেই",
+  protocol_archive: "লেনদেন আর্কাইভ",
+
+  // --- Share Modal ---
+  share_vault_title: "অ্যাক্সেস প্রোটোকল",
+  status_live: "সার্বজনীন",
+  status_private: "ব্যক্তিগত",
+  desc_public: "লিংক যেকেউ দেখতে পারবে",
+  desc_private: "শুধু আপনি দেখতে পারবেন",
+  btn_disable: "ব্যক্তিগত করুন",
+  btn_enable: "সার্বজনীন করুন",
+  label_access_url: "পাবলিক লিংক",
+  share_info_footer: "এই লিংক শেয়ার করে অন্যদের আপনার খাতা দেখার অনুমতি দিন।",
+  link_copied: "লিংক কপি হয়েছে!",
+
+  // --- Book & Entry Forms ---
+  title_vault_upgrade: "খাতা সম্পাদনা",
+  sync_ready: "সিংক প্রস্তুত",
+  close_modal: "বন্ধ করুন",
+  select_image: "ছবি নির্বাচন",
+  add_image: "ছবি যোগ",
+  label_visual_id: "খাতা কভার",
+  type_general: "সাধারণ",
+  placeholder_identity_name: "খাতার নাম লিখুন",
+  placeholder_vault_memo: "নোট যোগ করুন (ঐচ্ছিক)",
+  btn_upgrade: "আপডেট খাতা",
+  duplicate_warning: "অনুরূপ এন্ট্রি আছে",
+  save_entry: "এন্ট্রি সংরক্ষণ",
+
+  // --- Auth Views ---
+  placeholder_name: "আপনার নাম",
+  placeholder_email: "ইমেইল অ্যাড্রেস",
+  placeholder_key: "পাসওয়ার্ড",
+  placeholder_command: "প্রোটোকল খুঁজুন...",
+  title_protocol_init: "প্রাথমিক সেটআপ",
+  auth_secure_transaction: "নিরাপদ লেনদেন",
+  btn_request_code: "কোড পাঠান",
+  tt_auth_request_code: "ভেরিফিকেশন কোড চান",
+  auth_syncing_id: "আইডেন্টিটি সিংক হচ্ছে...",
+  auth_id_verified: "আইডেন্টিটি যাচাই হয়েছে",
+  auth_failed: "অথেনটিকেশন ব্যর্থ",
+  auth_net_error: "নেটওয়ার্ক ত্রুটি",
+  auth_denied: "অ্যাক্সেস প্রত্যাখ্যান",
+  auth_verifying: "যাচাই হচ্ছে...",
+  auth_establishing_link: "সংযোগ স্থাপন...",
+  auth_authorized: "অনুমোদিত",
+  auth_generating_proto: "প্রোটোকল তৈরি...",
+  auth_proto_sent: "কোড পাঠানো হয়েছে",
+  auth_invalid_code: "৬ সংখ্যার কোড লিখুন",
+  auth_verifying_id: "আইডেন্টিটি যাচাই...",
+  auth_init_success: "আইডেন্টিটি অনুমোদিত",
+  auth_sys_error: "সিস্টেম ত্রুটি",
+  title_protocol_verify: "ভেরিফিকেশন",
+  label_entry_key: "ভেরিফিকেশন কোড",
+  tt_auth_confirm_id: "আইডেন্টিটি নিশ্চিত করুন",
+  btn_adjust_detail: "বিবরণ পরিবর্তন",
+  btn_resend_protocol: "কোড আবার পাঠান",
+  auth_sending_recovery: "রিকভারি লিংক পাঠানো হচ্ছে...",
+  auth_recovery_sent: "রিকভারি লিংক পাঠানো হয়েছে",
+  auth_email_not_found: "ইমেইল পাওয়া যায়নি",
+  auth_conn_failed: "সংযোগ ব্যর্থ",
+  tt_send_recovery: "রিকভারি লিংক চান",
+
+  // --- Danger Zone & Termination ---
+  term_confirm_title: "সমাপ্তি প্রোটোকল",
+  term_warning: "এটি স্থায়ীভাবে মুছে দেবে",
+  placeholder_identity_confirm: "নিশ্চিত করতে অ্যাকাউন্ট নাম লিখুন",
+  cancel: "বাতিল",
+  warn_ledger_loss: "সব লেজার ডেটা হারাবেন",
+  warn_backup_loss: "ক্লাউড ব্যাকআপ মুছে যাবে",
+  warn_irreversible: "এই কাজ ফিরিয়ে আনা যাবে না",
+  critical_auth: "নিরাপত্তা অথেনটিকেশন",
+  tt_execute_purge: "সিস্টেম পার্জ এক্সিকিউট",
+  tt_match_identity: "নাম দিয়ে নিশ্চিত করুন",
+  action_auth_termination: "সিস্টেম পার্জ এক্সিকিউট",
+  protocol_locked: "সেশন লক",
+
+  // --- Entry Card & Actions ---
+  untitled_entry: "শিরোনামহীন এন্ট্রি",
+  note: "নোট",
+  btn_edit: "সম্পাদনা",
+  btn_delete: "মুছুন",
+  edit_book: "খাতা সম্পাদনা",
+  delete_book: "খাতা মুছুন",
+  edit_entry: "এন্ট্রি সম্পাদনা",
+  delete_entry: "এন্ট্রি মুছুন",
+  tt_quick_add: "দ্রুত যোগ",
+  label_note: "নোট",
+  no_memo: "কোনো নোট নেই",
+
+  // --- Table Headers ---
+  label_date: "তারিখ",
+  label_time: "সময়",
+  label_ref_id: "রেফ আইডি",
+  label_protocol: "ধরন",
+  label_options: "অপশন",
+  label_ref: "রেফ",
+  ledger_end: "লেজার শেষ",
+
+  // --- Timeline & Records ---
+  no_timeline_records: "কোনো রেকর্ড পাওয়া যায়নি",
+  records_found: "রেকর্ড পাওয়া গেছে",
+  protocol_index: "ইনডেক্স",
+  tt_verified_node: "রেজিস্ট্রি যাচাই",
+  tt_classification: "বিভাগ",
+  tt_toggle_status: "স্ট্যাটাস পরিবর্তন",
+  tt_edit_record: "রেকর্ড সম্পাদনা",
+  tt_delete_record: "রেকর্ড মুছুন",
+  tt_close: "বন্ধ",
+  tt_more: "আরো অপশন",
+
+  // --- Pagination ---
+  showing: "দেখাচ্ছে",
+  items_per_page: "প্রতি পেজ",
+  page: "পেজ",
+  tt_prev_page: "আগের পেজ",
+  tt_next_page: "পরের পেজ",
+
+  // --- Settings & Registry ---
+  interface_engine: "ইন্টারফেস ইঞ্জিন",
+  registry_tags: "রেজিস্ট্রি ট্যাগ",
+  placeholder_new_tag: "নতুন বিভাগের নাম",
+  expense_threshold: "খরচের সীমা",
+  label_monthly_cap: "মাসিক সীমা",
+  tt_save_limit: "পরিবর্তন সংরক্ষণ",
+  tt_turbo: "দ্রুত সিংকের জন্য টার্বো মোড",
+  tt_midnight: "ডার্ক অ্যামোলেড থিম ব্যবহার",
+  tt_compact: "পর্দায় বেশি কন্টেন্ট দেখান",
+  tt_autolock: "নিষ্ক্রিয়তার পর অটো-লক",
+  tt_reminders: "সিস্টেম রিমাইন্ডার দেখান",
+  tt_tooltips_global: "সহায়ক টুলটিপ দেখান",
+  governance_active: "সিস্টেম রেজিস্ট্রি নিরাপদ",
+  system_version: "বিল্ড V18.0 স্টেবল",
+  hardware_health: "হার্ডওয়্যার স্বাস্থ্য",
+  data_weight: "ডেটা ওজন",
+  local_registry: "লোকাল রেজিস্ট্রি",
+  recovery_protocol: "রিকভারি প্রোটোকল",
+  recovery_desc: "জরুরি অবস্থায় আপনার ভল্ট পুনরুদ্ধারের জন্য একটি সুরক্ষিত হ্যাশ কী তৈরি করুন।",
+  tt_generate_hash: "নিরাপদ মাইগ্রেশন কী তৈরি",
+  generate_key: "হ্যাশ কী তৈরি",
+  purge_desc: "সব স্থানীয় ডেটা স্থায়ীভাবে মুছুন। এটি ফিরিয়ে আনা যাবে না।",
+  tt_purge_warning: "সব স্থানীয় ডেটা এখনই মুছুন",
+
+  // --- Profile & Security ---
+  identity_hub_title: "আইডেন্টিটি হাব",
+  master_profile_protocol: "এনক্রিপশন সক্রিয়",
+  security_protocol_title: "নিরাপত্তা প্রোটোকল",
+  status_master: "মাস্টার লেভেল",
+  identity_name_label: "ডিসপ্লে নাম",
+  current_key_label: "বর্তমান পাসওয়ার্ড",
+  new_key_label: "নতুন পাসওয়ার্ড",
+  google_locked_label: "গুগল দ্বারা পরিচালিত",
+  tt_google_pass_locked: "গুগল দ্বারা পাসওয়ার্ড পরিচালিত",
+  tt_save_google: "গুগল দিয়ে সংরক্ষণ",
+  tt_save_security: "নিরাপত্তা সেটিংস সংরক্ষণ",
+  tt_master_rank: "সর্বোচ্চ অ্যাক্সেস",
+  tt_security_node: "নিরাপত্তা প্রোটোকল সক্রিয়",
+  label_integrity: "ইন্টিগ্রিটি",
+  tt_integrity_score: "সিস্টেম ইন্টিগ্রিটি পরিমাপ",
+  tt_display_identity: "ডিসপ্লে নাম",
+  tt_profile_secured: "প্রোফাইল সুরক্ষিত",
+  tt_google_auth: "গুগল দ্বারা অথেনটিকেটেড",
+  label_google_verified: "গুগল যাচাইকৃত",
+  tt_vault_auth: "স্ট্যান্ডার্ড ভল্ট আইডেন্টিটি",
+  tt_network_status: "লাইভ সংযোগ পর্যবেক্ষণ",
+  tt_access_rank: "পারমিশন টায়ার লেভেল",
+  tt_node_serial: "ইউনিক নোড আইডেন্টিটি",
+  label_type_email: "নিশ্চিত করতে ইমেইল লিখুন",
+
+  // --- Data Sovereignty ---
+  tt_sovereignty_node: "ডেটা মালিকানা প্রোটোকল সক্রিয়",
+  tt_archive_status: "ভেরিফাইড জেসন আর্কিটেকচার",
+  tt_sovereignty_desc: "আপনার ডেটা, আপনার নিয়ন্ত্রণ",
+  tt_restore_identity: "বাহ্যিক প্রোটোকল ইম্পোর্ট",
+  tt_backup_identity: "স্থানীয় স্ন্যাপশট সুরক্ষিত",
+
+  // --- Modals & Shortcuts ---
+  modal_analytics_title: "অ্যানালিটিক্স ইন্টেলিজেন্স",
+  modal_shortcut_title: "সিস্টেম শর্টকাট",
+  tt_shortcut_initialize: "নতুন লেজার শুরু",
+  shortcut_desc: "দ্রুত অ্যাক্সেস কমান্ড",
+
+  // --- Stats Grid ---
+  desc_inflow: "এই সময়ে মোট আয়",
+  desc_outflow: "এই সময়ে মোট খরচ",
+  desc_pending: "বকেয়া পরিমাণ",
+  desc_surplus: "অবশিষ্ট ব্যালেন্স",
+  status_secured: "প্রোটোকল সুরক্ষিত",
+
+  // --- Dashboard & Header ---
+  financial_dashboard: "আর্থিক ড্যাশবোর্ড",
+  tt_back_dashboard: "ড্যাশবোর্ডে ফিরুন",
+  tt_toggle_theme: "থিম পরিবর্তন",
+  tt_add_entry: "এন্ট্রি যোগ",
+  tt_initialize_ledger: "লেজার শুরু করুন",
+  action_share_access: "শেয়ার অ্যাক্সেস",
+  action_export_report: "রিপোর্ট এক্সপোর্ট",
+  action_terminate_vault: "ভল্ট মুছুন",
+  action_account_settings: "অ্যাকাউন্ট সেটিংস",
+  action_manage_profile: "প্রোফাইল পরিচালনা",
+  tt_import_ledger: "লেজার ইম্পোর্ট",
 };
 
 // 🚀 TYPE-SAFE TRANSLATIONS OBJECT

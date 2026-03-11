@@ -89,11 +89,14 @@ export const useSettings = () => {
         if (patch.currency) setCurrency(updatedCurr);
 
         // 3. PERSISTENCE: Save to IndexedDB
+        // 🆕 API EXODUS: Mark as unsynced for background push
         try {
             await db.users.update(currentUser._id, {
                 preferences: updatedPrefs,
                 categories: updatedCats,
-                currency: updatedCurr
+                currency: updatedCurr,
+                synced: 0 as const,  // 🆕 Queue for background sync
+                updatedAt: Date.now() // 🆕 Timestamp for vKey calculation
             });
             // 4. SYNC TRIGGER: Notify server via handshake
             dispatchHandshake();

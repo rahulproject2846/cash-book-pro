@@ -135,6 +135,23 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (updateData.phone !== undefined) updatePayload.phone = updateData.phone.trim();
     if (updateData.image !== undefined) updatePayload.image = updateData.image;
     
+    // 🎯 LEAN PAYLOAD FIELDS: Handle vKey, cachedBalance, updatedAt from client
+    if (updateData.vKey !== undefined) {
+        updatePayload.vKey = Number(updateData.vKey);
+        console.log("🎯 [LEAN SYNC] vKey updated:", updatePayload.vKey);
+    }
+    if (updateData.cachedBalance !== undefined) {
+        updatePayload.cachedBalance = Number(updateData.cachedBalance);
+        console.log("🎯 [LEAN SYNC] cachedBalance updated:", updatePayload.cachedBalance);
+    }
+    if (updateData.updatedAt !== undefined) {
+        updatePayload.updatedAt = Number(updateData.updatedAt);
+        console.log("🎯 [LEAN SYNC] updatedAt updated:", updatePayload.updatedAt);
+    }
+    if (updateData.isPublic !== undefined) {
+        updatePayload.isPublic = Number(updateData.isPublic);
+    }
+    
     // 🛡️ SHARETOKEN GUARD: Never allow empty strings - convert to null
     if (updateData.shareToken !== undefined) {
       updatePayload.shareToken = updateData.shareToken === "" ? null : updateData.shareToken;

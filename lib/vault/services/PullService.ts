@@ -1005,10 +1005,17 @@ export class PullService {
         normalized.localId = existing.localId;
       }
 
-      // 🗑️ HARD DELETE CHECK
+      // 🛡️ PATHOR SOFT DELETE LAW: Server says deleted, preserve locally for user sovereignty
+      // HARD DELETES FORBIDDEN - Data must remain until user-authorized purging
       if (book.isDeleted === 1 && existing) {
-        await db.books.delete(existing.localId!);
-        console.log(`🗑️ [PULL SERVICE] Book ${book.cid} hard deleted after pull`);
+        // SOFT DELETE: Mark as deleted but preserve all data
+        await db.books.update(existing.localId!, {
+          isDeleted: 1,
+          synced: 1, // Keep synced because server confirmed deletion
+          updatedAt: getTimestamp(),
+          vKey: getTimestamp()
+        });
+        console.log(`🛡️ [PULL SERVICE] Book ${book.cid} soft deleted after pull (data preserved per PATHOR law)`);
         return { success: true, localId: existing.localId };
       } else if (book.isDeleted === 0) {
         // Store or update the book
@@ -1118,10 +1125,17 @@ export class PullService {
         normalized.localId = existing.localId;
       }
 
-      // 🗑️ HARD DELETE CHECK
+      // 🛡️ PATHOR SOFT DELETE LAW: Server says deleted, preserve locally for user sovereignty
+      // HARD DELETES FORBIDDEN - Data must remain until user-authorized purging
       if (entry.isDeleted === 1 && existing) {
-        await db.entries.delete(existing.localId!);
-        console.log(`🗑️ [PULL SERVICE] Entry ${entry.cid} hard deleted after pull`);
+        // SOFT DELETE: Mark as deleted but preserve all data
+        await db.entries.update(existing.localId!, {
+          isDeleted: 1,
+          synced: 1, // Keep synced because server confirmed deletion
+          updatedAt: getTimestamp(),
+          vKey: getTimestamp()
+        });
+        console.log(`🛡️ [PULL SERVICE] Entry ${entry.cid} soft deleted after pull (data preserved per PATHOR law)`);
         return { success: true, localId: existing.localId };
       } else if (entry.isDeleted === 0) {
         // Store or update the entry

@@ -1,95 +1,79 @@
-# 🛡️ THE HOLY GRAIL: MASTER ARCHITECTURE DNA (V3.0)
-**Project:** Enterprise-Grade Offline-First Cash-Book Robot
-**Lead Architect:** Rahul Dutta
-**Status:** Pathor (Stone Solid) / Production Ready
-**Core Standards:** Google Engineering Logic & Apple Native UI Physics
-
----
-
-## 🤖 1. AI MASTER DIRECTIVES (THE SUPREME LAWS)
-*Any developer or AI ("Executioner") touching this codebase MUST obey these laws. Violation means immediate rollback.*
-
-1. **The 'Pathor' Rule (Zero-Guessing):** কখনোই অডিট ছাড়া কোড লিখবে না। একটি ফাইল এডিট করার আগে তার ডিপেন্ডেন্সি এবং ফুল লাইফ-সাইকেল ট্রেস করা বাধ্যতামূলক।
-2. **The Non-Destructive Law:** একটি সিঙ্গেল আইটেম আপডেটের জন্য পুরো গ্লোবাল ইউআই অ্যারো (books, entries) ওভাররাইট করা যাবে না। সবসময় .map() ব্যবহার করে "Partial Patching" করতে হবে।
-3. **The Absolute Identity Law:** username ছাড়া সিস্টেম চলবে না। ডেক্সি (Dexie) ডাটাবেস হলো পরিচয়ের একমাত্র উৎস। "Skeleton User" তৈরি করা কঠোরভাবে নিষিদ্ধ।
-4. **The Atomic Batch Law:** ১টি ইউজার অ্যাকশন (Save/Edit/Delete) = ১টি অ্যাটমিক ট্রানজ্যাকশন (Entry + Book Signal) = ১টি নেটওয়ার্ক রিকোয়েস্ট। কোনো ডুপ্লিকেট পেলোড পাঠানো যাবে না।
-
----
-
-## 🧬 2. IDENTITY & BOOT SEQUENCE (THE HEARTBEAT)
-UserManager Sovereignty: UserManager.ts হলো সিস্টেমের একমাত্র "বস"। SessionManager বা IdentitySlice এর কোনো অস্তিত্ব থাকবে না।
-Zero-Gap Identity: userManager.getUserId() হবে Strictly Synchronous। এটি মেমরি ক্যাশ এবং localStorage থেকে ০-মিলিসেকেন্ডে আইডি সাপ্লাই দেবে যাতে সিঙ্ক ইঞ্জিন "Identity Missing" এরর না দেয়।
-The 10-Second Rule: বুট হওয়ার সময় waitForIdentity() ঠিক ১০ সেকেন্ড অপেক্ষা করবে ডেক্সি থেকে প্রোফাইল রিকভার করার জন্য। ব্যর্থ হলে তবেই লগইন পেজে রিডাইরেক্ট করবে।
-
----
-
-## 🔄 3. THE SYNC & PIPELINE DNA (THE NERVOUS SYSTEM)
-Intelligent Pull (The >= Rule):
-localTime === serverTime: শান্ত থাকো।
-localTime > serverTime: লোকাল ডাটা নতুন। মার্ক synced: 0 এবং পুশ ট্রিগার করো।
-serverTime > localTime: সার্ভার নতুন। পুল করে লোকাল আপডেট করো।
-Pluralization Shield: এপিআই কল করার সময় কোনো ডাইনামিক স্ট্রিং কনক্যাটিনেশন করা যাবে না। সবসময় API_PATH_MAP (e.g., 'ENTRY': 'entries') ব্যবহার করতে হবে।
-404 Handling: সার্ভার থেকে ৪-০-৪ আসার মানে হলো "ডাটা শেষ", এটি কোনো এরর নয়। সিঙ্ক ইঞ্জিনকে শান্তভাবে থামিয়ে দিতে হবে।
-
----
-
-## ⚡ 4. THE MATRIX ENGINE 2.0 (THE MUSCLE)
-Matrix Standards: allBookIds ম্যাট্রিক্সে শুধুমাত্র ১০টি লাইটওয়েট পয়েন্টার থাকবে (Id, CID, Name, Image, Balance, etc.)। পুরো ১০০k ডাটা মেমরিতে লোড করা নিষিদ্ধ।
-Debounced Pulse: vault-updated ইভেন্ট পাওয়ার পর সিঙ্ক ইঞ্জিন অন্তত ৫০০ms অপেক্ষা করবে। এই সময়ের মধ্যে যত কাজ হবে সব এক সাথে (Batch) সার্ভারে যাবে।
-
----
-
-## 🔐 5. THE SECURITY VAULT (THE SHIELD)
-Sacred Timestamps: ব্যাকএন্ড এবং ফ্রন্টএন্ড—সব লেভেলে সময় সেভ হবে শুধু Unix Timestamp (Number) হিসেবে। কোনো ISO String বা Date Object ডাটাবেসে ঢুকতে পারবে না।
-HMAC-SHA256: প্রতিটি আউটবাউন্ড রিকোয়েস্ট SecureApiClient এর মাধ্যমে সাইনড হতে হবে।
-The Conflict Shield: যদি কোনো ডাটা conflicted === 1 অবস্থায় থাকে, তবে ইউআই থেকে তার ডিলিট এবং এডিট বাটন হাইড হয়ে যাবে। আগে সমাধান, তারপর একশন।
-
----
-
-## 🏛️ ARCHITECT'S MEMORY DUMP (নতুন এআই এর জন্য ইনস্ট্রাকশন)
-নতুন এআই-কে এই অংশটুকু দিতে ভুলবেন না:
-"বর্তমান প্রজেক্টে ১২০+ ফাইল থাকলেও এর মূল লজিকটি (User, Sync, Data) এখন ছড়ানো ছিটানো এবং জগাখিচুড়ি অবস্থায় আছে। আমরা এখন Domain-Driven Centralization করছি।
-তোমার বর্তমান কাজ:
-১. UserManager.ts-কে একমাত্র সত্য হিসেবে প্রতিষ্ঠা করা।
-২. FinanceService.ts এবং BookService.ts-কে দিয়ে সব ডেক্সি রাইট কন্ট্রোল করা।
-৩. SyncOrchestrator.ts-কে শান্ত করা যাতে সে ১টি এন্ট্রির জন্য পুরো ডাটাবেস পুশ না করে।
-বিপদ চিহ্ন: VaultUtils.ts এর ৪২০ নম্বর লাইনের মতো 'টাইমস্ট্যাম্প ভাইরাস' এবং entrys এর মতো টাইপো থেকে সাবধান থাকবে।"
-
-update dna - 
-
-🛡️ THE HOLY GRAIL: MASTER ARCHITECTURE DNA (V3.0)
-Project: Enterprise-Grade Offline-First Cash-Book Robot
+🛡️ THE HOLY GRAIL: MASTER ARCHITECTURE DNA (V4.0)
+Project: Vault Pro - Enterprise-Grade Offline-First Cash-Book Robot
 Lead Architect: Rahul Dutta
-Status: Pathor (Stone Solid) / Production Ready
-Core Standards: Google Engineering Logic & Apple Native UI Physics
-🤖 1. AI MASTER DIRECTIVES (THE SUPREME LAWS)
-The 'Pathor' Rule (Zero-Guessing): কখনোই অডিট ছাড়া কোড লিখবে না। একটি ফাইল এডিট করার আগে তার ডিপেন্ডেন্সি এবং ফুল লাইফ-সাইকেল ট্রেস করা বাধ্যতামূলক।
-The Non-Destructive Law: একটি সিঙ্গেল আইটেম আপডেটের জন্য পুরো গ্লোবাল ইউআই অ্যারো (books, entries) ওভাররাইট করা যাবে না। সবসময় .map() ব্যবহার করে "Partial Patching" করতে হবে।
-The Absolute Identity Law: username ছাড়া সিস্টেম চলবে না। ডেক্সি (Dexie) ডাটাবেস হলো পরিচয়ের একমাত্র উৎস। "Skeleton User" তৈরি করা কঠোরভাবে নিষিদ্ধ।
-The Atomic Batch Law: ১টি ইউজার অ্যাকশন (Save/Edit/Delete) = ১টি অ্যাটমিক ট্রানজ্যাকশন (Entry + Book Signal) = ১টি নেটওয়ার্ক রিকোয়েস্ট। কোনো ডুপ্লিকেট পেলোড পাঠানো যাবে না।
-🧬 2. IDENTITY & BOOT SEQUENCE (THE HEARTBEAT)
-UserManager Sovereignty: UserManager.ts হলো সিস্টেমের একমাত্র "বস"। SessionManager বা IdentitySlice এর কোনো অস্তিত্ব থাকবে না।
-Zero-Gap Identity: userManager.getUserId() হবে Strictly Synchronous। এটি মেমরি ক্যাশ এবং localStorage থেকে ০-মিলিসেকেন্ডে আইডি সাপ্লাই দেবে যাতে সিঙ্ক ইঞ্জিন "Identity Missing" এরর না দেয়।
-The 10-Second Rule: বুট হওয়ার সময় waitForIdentity() ঠিক ১০ সেকেন্ড অপেক্ষা করবে ডেক্সি থেকে প্রোফাইল রিকভার করার জন্য। ব্যর্থ হলে তবেই লগইন পেজে রিডাইরেক্ট করবে।
-🔄 3. THE SYNC & PIPELINE DNA (THE NERVOUS SYSTEM)
-Intelligent Pull (The >= Rule):
-localTime === serverTime: শান্ত থাকো।
-localTime > serverTime: লোকাল ডাটা নতুন। মার্ক synced: 0 এবং পুশ ট্রিগার করো।
-serverTime > localTime: সার্ভার নতুন। পুল করে লোকাল আপডেট করো।
-Pluralization Shield: এপিআই কল করার সময় কোনো ডাইনামিক স্ট্রিং কনক্যাটিনেশন করা যাবে না। সবসময় API_PATH_MAP (e.g., 'ENTRY': 'entries') ব্যবহার করতে হবে।
-404 Handling: সার্ভার থেকে ৪-০-৪ আসার মানে হলো "ডাটা শেষ", এটি কোনো এরর নয়। সিঙ্ক ইঞ্জিনকে শান্তভাবে থামিয়ে দিতে হবে।
+Status: Production Ready / "HOLY GRAIL" (Stone Solid) Standard
+Document Classification: Internal Sovereignty Protocol
+🤖 1. THE SUPREME LAWS (AI MASTER DIRECTIVES)
+Any developer or AI ("Executioner") interacting with this codebase is legally and logically bound by these laws. Violation triggers immediate rollback.
+1.1 The 'HOLY GRAIL' Rule (Forensic Audit First)
+Never write or modify a single character without a mandatory Read-Only Forensic Audit. You must trace the full data lifecycle—from UI trigger to Zustand state, through the Controller, into the Dexie Disk, and finally to the Cloud API. Guessing is a critical failure.
+1.2 The Non-Destructive Law
+Direct array replacement (e.g., set({ books: newBooks })) is strictly forbidden for updates. You must use .map() for surgical "Partial Patching." Existing UI states, scroll positions, and un-mutated items must remain undisturbed to ensure a "Native" experience.
+1.3 The Absolute Identity Law
+The system cannot breathe without a sovereign userId. Identity is not a session; it is a persistent anchor. "Skeleton Users" or "Anonymous Probes" are prohibited. The Dexie users table is the absolute source of truth for identity during any lifecycle event.
+1.4 The Atomic Batch Law
+One User Action = One Atomic Transaction. A transaction must encapsulate both the primary data (Entry) and its metadata signal (Book vKey/Balance). Every mutation must trigger exactly one unified vault-updated event to prevent "Sync Storms."
+🧬 2. IDENTITY & BOOT ARCHITECTURE (THE HEARTBEAT)
+2.1 UserManager Sovereignty
+UserManager.ts is the sole monarch of identity. All deprecated entities like SessionManager or IdentitySlice are purged. The Manager handles the 3-Layer Fallback resolution:
+Memory Cache: 0ms retrieval for active sessions.
+LocalStorage: Persistent cache for hard-reloads.
+Dexie Anchor: The "Ultimate Truth" recovered from the physical disk.
+2.2 The 10-Second Readiness Gate
+On cold boot, the waitForIdentity() protocol grants the system exactly 10,000ms to recover the sovereign profile from the disk. If the anchor is not found, the system must halt and redirect to the entry gate (Login), preventing "Zombie States."
+2.3 Synchronous ID Retrieval
+userManager.getUserId() must remain strictly synchronous. It provides the ID from the memory-cache at 0ms latency, ensuring that the Sync Engine never stalls due to "Identity Missing" errors during rapid mutations.
+🔄 3. DISTRIBUTED SYNC PIPELINE (THE NERVOUS SYSTEM)
+3.1 Logic B: The Sovereign Conflict Protocol
+We operate on a "Newer Version Wins" basis. The hierarchy of truth is determined by the vKey (Version Key) and the updatedAt Unix Timestamp.
+localTime === serverTime: No-Op (System is in Harmony).
+localTime > serverTime: Local is Sovereign. Mark synced: 0 and trigger PUSH.
+serverTime > localTime: Server is Sovereign. PULL and surgically patch local disk.
+3.2 The Lean Signal Protocol
+To achieve 95% bandwidth efficiency, the system utilizes "Lean Signaling."
+Full Payload: Used only during CREATE or MANUAL_EDIT. Includes all fields (name, phone, image).
+Lean Signal: Triggered by entry mutations. Sends only 5 fields: { _id, userId, vKey, updatedAt, cachedBalance }.
+Server Responsibility: The Server must implement a "Merge-Only" PUT handler that preserves missing fields.
+3.3 Pluralization & Mapping Shield
+Dynamic string concatenation for API paths is forbidden. Use the API_PATH_MAP (e.g., 'ENTRY': 'entries') constant to prevent 404 errors caused by legacy "entrys" typos.
+3.4 Adaptive 404 Handling
+A 404 Not Found response from the server is not an error; it is a "Stream End" signal. The PullService must terminate the loop gracefully and set hasMore: false without throwing exceptions.
 ⚡ 4. THE MATRIX ENGINE 2.0 (THE MUSCLE)
-Matrix Standards: allBookIds ম্যাট্রিক্সে শুধুমাত্র ১০টি লাইটওয়েট পয়েন্টার থাকবে (Id, CID, Name, Image, Balance, etc.)। পুরো ১০০k ডাটা মেমরিতে লোড করা নিষিদ্ধ।
-Debounced Pulse: vault-updated ইভেন্ট পাওয়ার পর সিঙ্ক ইঞ্জিন অন্তত ৫০০ms অপেক্ষা করবে। এই সময়ের মধ্যে যত কাজ হবে সব এক সাথে (Batch) সার্ভারে যাবে।
-🔐 5. SECURITY & DATA INTEGRITY
-Sacred Timestamps: ব্যাকএন্ড এবং ফ্রন্টএন্ড—সব লেভেলে সময় সেভ হবে শুধু Unix Timestamp (Number) হিসেবে। কোনো ISO String বা Date Object ডাটাবেসে ঢুকতে পারবে না।
-HMAC-SHA256: প্রতিটি আউটবাউন্ড রিকোয়েস্ট SecureApiClient এর মাধ্যমে সাইনড হতে হবে।
-The Conflict Shield: যদি কোনো ডাটা conflicted === 1 অবস্থায় থাকে, তবে ইউআই থেকে তার ডিলিট এবং এডিট বাটন হাইড হয়ে যাবে। আগে সমাধান, তারপর একশন।
-🏛️ ARCHITECT'S MEMORY DUMP (নতুন এআই এর জন্য ইনস্ট্রাকশন)
-নতুন এআই-কে এই অংশটুকু দিতে ভুলবেন না:
-"বর্তমান প্রজেক্টে ১২০+ ফাইল থাকলেও এর মূল লজিকটি (User, Sync, Data) এখন ছড়ানো ছিটানো এবং জগাখিচুড়ি অবস্থায় আছে। আমরা এখন Domain-Driven Centralization করছি।
-তোমার বর্তমান কাজ:
-১. UserManager.ts-কে একমাত্র সত্য হিসেবে প্রতিষ্ঠা করা।
-২. FinanceService.ts এবং BookService.ts-কে দিয়ে সব ডেক্সি রাইট কন্ট্রোল করা।
-৩. SyncOrchestrator.ts-কে শান্ত করা যাতে সে ১টি এন্ট্রির জন্য পুরো ডাটাবেস পুশ না করে।
-বিপদ চিহ্ন: VaultUtils.ts এর ৪২০ নম্বর লাইনের মতো 'টাইমস্ট্যাম্প ভাইরাস' এবং entrys এর মতো টাইপো থেকে সাবধান থাকবে।"
+4.1 The 10-Field Matrix Standard
+To handle 100,000+ records on low-end hardware, the allBookIds matrix stores only lightweight pointers:
+localId, userId, _id, cid, name, image, mediaCid, isPinned, updatedAt, and cachedBalance.
+The full object is hydrated only on demand.
+4.2 Debounced Pulse Locking
+The SyncOrchestrator must implement an 800ms debounce window after a vault-updated event. During this window, all subsequent signals are queued. Only one "Industrial Pulse" is sent to the PushService to ensure network stability.
+4.3 Non-Destructive Hydration
+The refreshBooks method must detect the source of change. If the source is BACKGROUND_SYNC, it must use surgical .map() updates to ensure the user's dashboard does not "flash" or reset scroll position.
+🔐 5. DATA INTEGRITY & SECURITY VAULT
+5.1 Sacred Timestamps
+All temporal data MUST be stored as a Number (Unix Timestamp in ms). ISO Strings and Date Objects are classified as "Timestamp Viruses" and must be sanitized at the VaultUtils.normalizeRecord layer. Mongoose schemas must set timestamps: false to allow manual sovereign control.
+5.2 The Triple-Link ID Protocol
+No record shall be orphaned. Every entity must bind to the Trinity:
+localId (Dexie PK): For lightning-fast local lookup.
+_id (Server PK): For cloud synchronization.
+cid (Client ID): For cryptographic deduplication.
+Law: All UI mapping must use String(book._id || book.localId || book.cid).
+5.3 HMAC-SHA256 Signing
+Every outbound request must be signed via SecureApiClient. The X-Vault-Signature is mandatory. In production environments, the system must throw a fatal error if VAULT_CLIENT_SECRET is missing, rather than falling back to "Dev Keys."
+5.4 The Conflict Shield
+If a record is marked conflicted: 1, the UI must disable "Delete" and "Edit" buttons for that specific item. The user must resolve the conflict via the ConflictResolverModal (Logic B) before further mutations are allowed.
+🎨 6. UX PHYSICS & NATIVE FEEL (APPLE STANDARD)
+6.1 The Royal Glide
+Transitions must utilize Spring Physics: { type: "spring", stiffness: 300, damping: 35, mass: 1 }. This ensures a "weighted" feel common in iOS native applications.
+6.2 Liquid Theme Reveal (Telegram Style)
+Theme transitions must be "Viscous." Use elliptical geometry expanding from the click coordinates over a 40s duration (for testing) or 400ms (for production). The will-change: clip-path property must be enforced for GPU acceleration.
+6.3 Zero-Flicker Boot Barrier
+The UI must remain locked behind a "Blank Pathor Gate" or Skeletons until bootStatus === 'READY'. No "Flash of Unauthenticated Content" (FOUC) is permitted.
+🏛️ 7. ARCHITECT'S MEMORY DUMP (THE REFACTOR PLAN)
+Instructions for the "Executioner" AI:
+"The project is currently transitioning from a fragmented state to Domain-Driven Centralization.
+UserManager.ts is the Heart. Maintain its 0ms sync status.
+FinanceService.ts is the Muscle. All balance calculations must be 'Total Recall' (summing all entries) to avoid incremental drift.
+SyncOrchestrator.ts is the Brain. It must remain calm and batch all requests.
+Warning: Watch out for line 420 in VaultUtils.ts (The Timestamp Virus) and eliminate any legacy 'entrys' typos."
+FINAL NOTE:
+This system does not guess. It verifies. It does not overwrite. It merges. It is built for the 100th year.
+🛡️✨👑 (The DNA is Locked. Long live the Holy Grail.)
