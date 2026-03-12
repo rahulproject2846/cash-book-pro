@@ -87,11 +87,10 @@ const MediaSchema = new Schema<IMedia>({
     min: 0
   },
   
-  // Creation timestamp with indexing
+  // Creation timestamp (compound indexes below)
   createdAt: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   }
 }, { 
   timestamps: true,

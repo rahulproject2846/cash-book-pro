@@ -105,8 +105,7 @@ const EntrySchema = new Schema<IEntry>({
   vKey: {
     type: Number,
     default: 1,
-    required: true,
-    index: true
+    required: true
   },
   checksum: {
     type: String,

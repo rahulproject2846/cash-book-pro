@@ -58,11 +58,10 @@ const AuditSchema = new Schema<IAudit>({
     default: {}
   },
   
-  // Timestamp with automatic indexing
+  // Timestamp for sorting (compound indexes below)
   timestamp: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   }
 }, { 
   timestamps: true,
