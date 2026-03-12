@@ -1,9 +1,13 @@
 "use client";
 
+import { getPlatform } from '@/lib/platform';
+import type { SovereignPlatform, IdentityEstablishedDetail, IdentityClearedDetail, PlatformEventDetail } from '@/lib/platform';
+
 /**
- * 🏛️ SOVEREIGN USER DOMAIN - UserManager (Skeleton)
- * -------------------------------------------------
+ * 🏛️ SOVEREIGN USER DOMAIN - UserManager (Platform-Refactored)
+ * ----------------------------------------------------------------
  * Unified User Management System - Single Source of Truth
+ * NOW DECOUPLED FROM BROWSER APIs - Uses SovereignPlatform abstraction
  * 
  * Merges: IdentityManager + SessionManager + IdentitySlice
  * 
@@ -32,6 +36,9 @@ export class UserManager {
   // 📋 HYDRATION PROPERTIES (from IdentitySlice)
   private server_profile_missing: boolean = false;
 
+  // 🏛️ PLATFORM ABSTRACTION: Decoupled from browser APIs
+  private platform: SovereignPlatform;
+
   /**
    * 🏛️ SINGLETON PATTERN - Get Instance
    * Ensures single source of truth across the application
@@ -48,7 +55,8 @@ export class UserManager {
    * Prevents direct instantiation
    */
   private constructor() {
-    // Initialization logic will be added later
+    // Initialize platform abstraction
+    this.platform = getPlatform();
   }
 
   // ======== GETTER METHODS (Skeleton) ========
@@ -188,12 +196,14 @@ export class UserManager {
       this.currentUser = user;
       
       // 2. Broadcast identity change to entire system
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('identity-established', { 
-          detail: { user, timestamp: Date.now() }
-        }));
-        console.log('📡 [USER MANAGER] Identity update event broadcasted');
-      }
+      const eventDetail: IdentityEstablishedDetail = {
+        userId: user._id,
+        username: user.username || '',
+        timestamp: Date.now(),
+        source: 'UserManager.updateIdentity'
+      };
+      this.platform.events.dispatch('identity-established', eventDetail);
+      console.log('📡 [USER MANAGER] Identity update event broadcasted');
       
       // 3. Notify subscribers
       this.notifySubscribers();
@@ -248,12 +258,14 @@ export class UserManager {
       console.log('✅ [USER MANAGER] User persisted to Dexie');
       
       // 4. Broadcast identity change to entire system
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('identity-established', { 
-          detail: { user, timestamp: Date.now() }
-        }));
-        console.log('📡 [USER MANAGER] Identity established event broadcasted');
-      }
+      const eventDetail: IdentityEstablishedDetail = {
+        userId: user._id,
+        username: user.username || '',
+        timestamp: Date.now(),
+        source: 'UserManager.setIdentity'
+      };
+      this.platform.events.dispatch('identity-established', eventDetail);
+      console.log('📡 [USER MANAGER] Identity established event broadcasted');
       
       // 5. Mark as ready
       this.isReady = true;
@@ -306,10 +318,10 @@ export class UserManager {
 
   /**
    * 🔍 VERIFY SESSION: Validate current session
-   * Copied and adapted from SessionManager
+   * Platform-abstracted version
    */
   public async verifySession(): Promise<boolean> {
-    const session = this.getStoredSession();
+    const session = this.getStoredSession() as { expiresAt: number; userId: string } | null;
     if (!session) return false;
 
     const isExpired = Date.now() > session.expiresAt;
@@ -341,17 +353,17 @@ export class UserManager {
   // ======== SESSION METHODS (Skeleton) ========
 
   /**
-   * �️ GET STORED SESSION: Retrieve from localStorage
-   * Copied and adapted from SessionManager.ts:165
+   * 💿 GET STORED SESSION: Retrieve from platform storage
+   * Platform-abstracted version
    */
-  public getStoredSession(): any {
-    if (typeof window === 'undefined') return null;
+  public getStoredSession(): unknown {
+    const platform = this.platform;
+    
+    const result = platform.storage.getItem('cashbookSession');
+    if (!result.success || !result.value) return null;
     
     try {
-      const stored = localStorage.getItem('cashbookSession');
-      if (!stored) return null;
-      
-      const session = JSON.parse(stored);
+      const session = JSON.parse(result.value);
       return {
         ...session,
         isValid: true // Default to true, will be verified
@@ -363,46 +375,47 @@ export class UserManager {
   }
 
   /**
-   * 💾 STORE SESSION: Save to localStorage
-   * Copied and adapted from SessionManager.ts:184
+   * 💾 STORE SESSION: Save to platform storage
+   * Platform-abstracted version
    */
-  public storeSession(user: any): void {
-    if (typeof window === 'undefined') return;
+  public storeSession(user: unknown): void {
+    const platform = this.platform;
+    const typedUser = user as Record<string, unknown>;
     
     try {
       // 1. Store full user profile for fast reload recovery
       const userProfile = {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        image: user.image || "",
-        authProvider: user.authProvider,
-        categories: user.categories || [],
-        currency: user.currency || "USD",
-        isVerified: user.isVerified || false,
-        createdAt: user.createdAt,
-        plan: user.plan || 'free', // ✅ FIXED: Use 'plan' instead of 'proStatus'
-        preferences: user.preferences || {}
+        _id: typedUser._id,
+        username: typedUser.username,
+        email: typedUser.email,
+        image: typedUser.image || '',
+        authProvider: typedUser.authProvider,
+        categories: typedUser.categories || [],
+        currency: typedUser.currency || 'USD',
+        isVerified: typedUser.isVerified || false,
+        createdAt: typedUser.createdAt,
+        plan: typedUser.plan || 'free',
+        preferences: typedUser.preferences || {}
       };
       
-      localStorage.setItem('vault_user_profile', JSON.stringify(userProfile));
-      console.log('💾 [USER MANAGER] Full user profile stored to localStorage');
+      platform.storage.setItem('vault_user_profile', JSON.stringify(userProfile));
+      console.log('💾 [USER MANAGER] Full user profile stored to platform');
       
       // 2. Store session metadata (existing logic preserved)
       const session = {
-        userId: user._id,
-        sessionToken: btoa(JSON.stringify({ userId: user._id, timestamp: Date.now() })), // Simple token
-        expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
+        userId: String(typedUser._id),
+        sessionToken: btoa(JSON.stringify({ userId: typedUser._id, timestamp: Date.now() })),
+        expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000),
         deviceFingerprint: this.getDeviceFingerprint(),
         lastActivity: Date.now(),
         isValid: true
       };
 
-      localStorage.setItem('cashbookSession', JSON.stringify(session));
-      this.sessionCache.set(user._id, session);
+      platform.storage.setItem('cashbookSession', JSON.stringify(session));
+      this.sessionCache.set(String(typedUser._id), session);
       
       console.log('💾 [USER MANAGER] Session stored:', {
-        userId: user._id,
+        userId: typedUser._id,
         expiresAt: new Date(session.expiresAt).toISOString(),
         deviceFingerprint: session.deviceFingerprint
       });
@@ -412,19 +425,17 @@ export class UserManager {
   }
 
   /**
-   * � SYNCHRONOUS HINT (0ms): Check localStorage immediately
-   * Copied and adapted from SessionManager.ts:56
+   * � SYCHRONOUS HINT (0ms): Check platform storage immediately
+   * Platform-abstracted version
    */
   public hasSessionHint(): boolean {
-    if (typeof window === 'undefined') return false;
-    
     try {
       const session = this.getStoredSession();
       if (!session) return false;
       
-      // Quick validation without async calls
-      const isExpired = Date.now() > session.expiresAt;
-      const hasUserId = !!session.userId;
+      const sessionObj = session as { expiresAt: number; userId: string };
+      const isExpired = Date.now() > sessionObj.expiresAt;
+      const hasUserId = !!sessionObj.userId;
       
       console.log('🚀 [USER MANAGER] Synchronous hint check:', {
         hasSession: true,
@@ -449,13 +460,15 @@ export class UserManager {
 
   /**
    * 📱 GET DEVICE FINGERPRINT
-   * Copied and adapted from SessionManager.ts:141
+   * Platform-abstracted version
    */
   public getDeviceFingerprint(): string {
-    if (typeof window === 'undefined') return 'server';
+    const platform = this.platform;
     
-    // 🚀 CHECK IF DEVICE ID EXISTS
-    let deviceId = localStorage.getItem('cashbookDeviceId');
+    // Check if DEVICE ID EXISTS in platform storage
+    const result = platform.storage.getItem('cashbookDeviceId');
+    let deviceId = result.success && result.value ? result.value : null;
+    
     if (!deviceId) {
       // Generate UUID v4 - stable across reloads
       const newDeviceId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c: string) => {
@@ -465,7 +478,7 @@ export class UserManager {
         return Array.from(r).map(b => b.toString(16)).join('');
       });
       deviceId = newDeviceId;
-      localStorage.setItem('cashbookDeviceId', deviceId);
+      platform.storage.setItem('cashbookDeviceId', deviceId);
       console.log('📱 [USER MANAGER] Static device ID generated:', deviceId);
     }
     
@@ -481,7 +494,7 @@ export class UserManager {
    * This ensures getUserId() returns values in 0ms without any I/O operations
    */
   async boot(): Promise<void> {
-    if (typeof window === 'undefined') return;
+    const platform = this.platform;
     
     // Only run once
     if (this.userId) {
@@ -495,27 +508,34 @@ export class UserManager {
       useVaultStore.setState({ bootStatus: 'IDENTITY_WAIT' });
       console.log('🚀 [USER MANAGER] Boot status set to IDENTITY_WAIT');
       
-      // 1. Read from localStorage once
-      const savedProfile = localStorage.getItem('vault_user_profile');
-      const savedSession = localStorage.getItem('cashbookSession');
+      // 1. Read from platform storage once
+      const profileResult = platform.storage.getItem('vault_user_profile');
+      const savedProfile = profileResult.success && profileResult.value ? profileResult.value : null;
+      
+      const sessionResult = platform.storage.getItem('cashbookSession');
+      const savedSession = sessionResult.success && sessionResult.value ? sessionResult.value : null;
       
       if (savedProfile) {
         // 2. Populate memory cache
         const userProfile = JSON.parse(savedProfile);
         this.userId = userProfile._id;
         this.currentUser = userProfile;
-        this.isReady = true; // 🛡️ CRITICAL FIX: Set ready state immediately
+        this.isReady = true;
         
-        console.log('🚀 [USER MANAGER] Memory cache populated from localStorage:', {
+        console.log('🚀 [USER MANAGER] Memory cache populated from platform:', {
           userId: this.userId,
           username: userProfile.username
         });
         
         // 🎯 PATHOR ANCHOR: Immediate identity event dispatch
-        if (typeof window !== 'undefined' && !this.identityEventDispatched) {
-          window.dispatchEvent(new CustomEvent('identity-established', { 
-            detail: { user: userProfile, timestamp: Date.now() }
-          }));
+        if (!this.identityEventDispatched) {
+          const eventDetail: IdentityEstablishedDetail = {
+            userId: userProfile._id,
+            username: userProfile.username || '',
+            timestamp: Date.now(),
+            source: 'UserManager.boot'
+          };
+          platform.events.dispatch('identity-established', eventDetail);
           this.identityEventDispatched = true;
           console.log('🎯 [USER MANAGER] Identity event dispatched from boot()');
         }
@@ -634,15 +654,11 @@ export class UserManager {
   }
 
   /**
-   * 🚀 INITIALIZE IDENTITY: Core async logic that reads from Dexie and localStorage
-   * Copied and adapted from IdentityManager.ts:35 with SessionManager integration
+   * 🚀 INITIALIZE IDENTITY: Core async logic that reads from Dexie and platform storage
+   * Platform-abstracted version
    */
   private async initializeIdentity(): Promise<void> {
-    if (typeof window === 'undefined') {
-      this.userId = null;
-      this.isReady = false;
-      return;
-    }
+    const platform = this.platform;
 
     // 🚀 SESSION PRIORITY CHECK: Should we prioritize session or Dexie?
     if (this.hasSessionHint()) {
@@ -651,27 +667,29 @@ export class UserManager {
       return;
     }
 
-    // 🚀 MEMORY ANCHOR: Synchronous localStorage check BEFORE any async work
+    // 🚀 MEMORY ANCHOR: Synchronous platform storage check BEFORE any async work
     try {
-      const saved = localStorage.getItem('vault_user_profile'); // 🛡️ UNIFIED KEY
+      const result = platform.storage.getItem('vault_user_profile');
+      const saved = result.success && result.value ? result.value : null;
+      
       if (saved) {
         const userData = JSON.parse(saved);
-        const localStorageUserId = userData._id || null;
+        const platformUserId = userData._id || null;
         
-        if (localStorageUserId) {
-          // �️ SOVEREIGN TRUTH: Don't reset if userId already exists
+        if (platformUserId) {
+          // 🛡️ SOVEREIGN TRUTH: Don't reset if userId already exists
           if (!this.userId) {
-            // �� IMMEDIATE SET: Set userId and update Zustand store BEFORE any await calls
-            this.userId = localStorageUserId;
+            // 🛡️ IMMEDIATE SET: Set userId and update Zustand store BEFORE any await calls
+            this.userId = platformUserId;
             this.isReady = true; // 🛡️ ABSOLUTE ANCHOR: userId is our absolute anchor
-            console.log('🚀 [USER MANAGER] Memory anchor established IMMEDIATELY from localStorage:', this.userId);
+            console.log('🚀 [USER MANAGER] Memory anchor established IMMEDIATELY from platform:', this.userId);
           }
           
           // 🚀 ATOMIC STORE INJECTION: Immediate Zustand update to prevent race condition
           try {
             const { useVaultStore } = await import('@/lib/vault/store/index');
             useVaultStore.setState({ 
-              userId: localStorageUserId,
+              userId: platformUserId,
               currentUser: JSON.parse(saved),
               isAuthenticated: true // ✅ IMMEDIATE AUTH STATE SET
             });
@@ -682,7 +700,7 @@ export class UserManager {
         }
       }
     } catch (error) {
-      console.warn('🚨 [USER MANAGER] Failed to read localStorage for memory anchor:', error);
+      console.warn('🚨 [USER MANAGER] Failed to read platform storage for memory anchor:', error);
     }
 
     try {
@@ -698,14 +716,20 @@ export class UserManager {
           this.isReady = true;
           console.log('✅ [USER MANAGER] User with valid username loaded from Dexie:', { userId: this.userId, username: users[0].username });
           
-          // 🎯 PATHOR ANCHOR: Notify store via event (decoupled)
-          if (typeof window !== 'undefined' && !this.identityEventDispatched) {
-            window.dispatchEvent(new CustomEvent('identity-established', { detail: { user: users[0] } }));
-            this.identityEventDispatched = true; // 🛡️ SET FLAG TO PREVENT MULTIPLE DISPATCHES
+          // 🎯 PATHOR ANCHOR: Notify store via platform events (decoupled)
+          if (!this.identityEventDispatched) {
+            const eventDetail: IdentityEstablishedDetail = {
+              userId: users[0]._id,
+              username: users[0].username || '',
+              timestamp: Date.now(),
+              source: 'UserManager.initializeIdentity'
+            };
+            platform.events.dispatch('identity-established', eventDetail);
+            this.identityEventDispatched = true;
             console.log('🎯 [USER MANAGER] Pathor Anchor deployed - Identity event dispatched');
           }
           
-          // Update localStorage for persistence
+          // Update platform storage for persistence
           this.persistToStorage(this.userId);
           this.notifyReadyCallbacks();
           this.notifySubscribers();
@@ -714,34 +738,34 @@ export class UserManager {
         } else {
           // ⚠️ USER EXISTS BUT NO USERNAME: Keep gate open, trigger background sync
           console.warn('⚠️ [USER MANAGER] User found in Dexie but missing username - will trigger background sync');
-          this.userId = users[0]._id; // Set ID but keep isReady = true
-          this.isReady = true; // 🛡️ KEEP GATE OPEN: userId is enough
-          this.server_profile_missing = true; // Mark for background sync
+          this.userId = users[0]._id;
+          this.isReady = true;
+          this.server_profile_missing = true;
         }
       }
       
-      // 🚨 FALLBACK: Check localStorage as backup
-      const saved = localStorage.getItem('vault_user_profile'); // 🛡️ UNIFIED KEY
-      let localStorageUserId = null;
+      // 🚨 FALLBACK: Check platform storage as backup
+      const savedResult = platform.storage.getItem('vault_user_profile');
+      const saved = savedResult.success && savedResult.value ? savedResult.value : null;
+      let platformUserId: string | null = null;
       
       if (saved) {
         const userData = JSON.parse(saved);
-        localStorageUserId = userData._id || null;
-        console.log(`🔐 [USER MANAGER] Loaded from storage:`, {
-          userId: localStorageUserId,
-          source: 'localStorage'
+        platformUserId = userData._id || null;
+        console.log(`🔐 [USER MANAGER] Loaded from platform storage:`, {
+          userId: platformUserId,
+          source: 'platform'
         });
       }
       
-      // 🚨 IMMEDIATE SET: Set userId the moment it's found from localStorage
-      if (localStorageUserId) {
-        // 🚨 CRITICAL FIX: SET ID AND READY STATE IMMEDIATELY
-        this.userId = localStorageUserId;
-        this.isReady = true; // 🛡️ ABSOLUTE ANCHOR: userId is enough for readiness
-        console.log('🔐 [USER MANAGER] Memory anchor established IMMEDIATELY from localStorage:', this.userId);
+      // 🚨 IMMEDIATE SET: Set userId the moment it's found from platform storage
+      if (platformUserId) {
+        this.userId = platformUserId;
+        this.isReady = true;
+        console.log('🔐 [USER MANAGER] Memory anchor established IMMEDIATELY from platform:', this.userId);
         
         // 🚨 DEXIE VERIFICATION: Background check (non-blocking)
-        const dexieUser = await db.users.get(localStorageUserId);
+        const dexieUser = await db.users.get(platformUserId);
         
         // 🛡️ [PATHOR LOGIC] Check for existing user
         let userToAnchor = dexieUser;
@@ -749,37 +773,36 @@ export class UserManager {
         if (!dexieUser) {
             // 🛡️ BACKGROUND SYNC: Trigger background sync instead of failure
             console.warn('⚠️ [USER MANAGER] User not found in Dexie - triggering background sync');
-            // Keep isReady = true, trigger background hydration
             this.server_profile_missing = true;
-            // Notify store that we need profile hydration
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('identity-needs-hydration', { 
-                detail: { userId: localStorageUserId }
-              }));
-            }
+            // Notify store that we need profile hydration via platform
+            const hydrationDetail: PlatformEventDetail = {
+              timestamp: Date.now(),
+              source: 'UserManager.initializeIdentity'
+            };
+            platform.events.dispatch('identity-needs-hydration', hydrationDetail);
             return;
         }
         
         if (userToAnchor && userToAnchor.username) {
-            // ✅ USER WITH USERNAME: Update currentUser
             this.currentUser = userToAnchor;
             console.log('✅ [USER MANAGER] Full profile loaded from Dexie:', userToAnchor.username);
             
-            // 🎯 PATHOR ANCHOR: Notify store via event (decoupled)
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('identity-established', { detail: { user: userToAnchor } }));
-            }
+            // 🎯 PATHOR ANCHOR: Notify store via platform events (decoupled)
+            const eventDetail: IdentityEstablishedDetail = {
+              userId: userToAnchor._id,
+              username: userToAnchor.username || '',
+              timestamp: Date.now(),
+              source: 'UserManager.initializeIdentity.dexieUser'
+            };
+            platform.events.dispatch('identity-established', eventDetail);
             
             this.notifyReadyCallbacks();
             this.notifySubscribers();
         } else {
-            // ⚠️ INCOMPLETE USER: Keep gate open, trigger background sync
             this.server_profile_missing = true;
             console.warn('⚠️ [USER MANAGER] Incomplete user profile - will hydrate from server');
-            // Keep isReady = true, userId is enough for operations
           }
       } else {
-        // 🚨 NO USER FOUND: Clear identity
         this.userId = null;
         this.isReady = false;
         console.log('🚨 [USER MANAGER] No user found in any storage');
@@ -793,27 +816,35 @@ export class UserManager {
 
   /**
    * 🚀 INITIALIZE FROM SESSION: Session-based identity initialization
-   * New method for SessionManager integration
+   * Platform-abstracted version
    */
   private async initializeFromSession(): Promise<void> {
+    const platform = this.platform;
+    
     try {
       const session = this.getStoredSession();
-      if (session && session.userId) {
-        this.userId = session.userId;
+      const sessionObj = session as { userId: string } | null;
+      
+      if (sessionObj && sessionObj.userId) {
+        this.userId = sessionObj.userId;
         console.log('🚀 [USER MANAGER] Identity initialized from session:', this.userId);
         
         // Verify user exists in Dexie
         const { db } = await import('@/lib/offlineDB');
-        const user = await db.users.get(session.userId);
+        const user = await db.users.get(sessionObj.userId);
         
         if (user && user.username) {
           this.isReady = true;
           console.log('✅ [USER MANAGER] Session user verified in Dexie - READY');
           
-          // Notify store via event (decoupled)
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('identity-established', { detail: { user } }));
-          }
+          // Notify store via platform events (decoupled)
+          const eventDetail: IdentityEstablishedDetail = {
+            userId: user._id,
+            username: user.username || '',
+            timestamp: Date.now(),
+            source: 'UserManager.initializeFromSession'
+          };
+          platform.events.dispatch('identity-established', eventDetail);
           
           this.notifyReadyCallbacks();
           this.notifySubscribers();
@@ -833,16 +864,15 @@ export class UserManager {
 
   /**
    * 🧹 CLEAR ALL
-   * Clear all user data (logout) - Hard logout logic
-   * Copied and adapted from SessionManager.ts:212
+   * Clear all user data (logout) - Platform-abstracted version
    */
   public clearAll(): void {
-    if (typeof window === 'undefined') return;
+    const platform = this.platform;
     
     try {
-      // Clear localStorage
-      localStorage.removeItem('cashbookSession');
-      localStorage.removeItem('vault_user_profile'); // 🛡️ UNIFIED KEY
+      // Clear platform storage
+      platform.storage.removeItem('cashbookSession');
+      platform.storage.removeItem('vault_user_profile');
       
       // Clear session cache
       this.sessionCache.clear();
@@ -852,12 +882,15 @@ export class UserManager {
       this.currentUser = null;
       this.isReady = false;
       this.server_profile_missing = false;
-      this.identityEventDispatched = false; // Reset event flag
+      this.identityEventDispatched = false;
       
-      // Broadcast identity cleared to entire system
-      window.dispatchEvent(new CustomEvent('identity-cleared', { 
-        detail: { timestamp: Date.now() }
-      }));
+      // Broadcast identity cleared via platform events
+      const eventDetail: IdentityClearedDetail = {
+        timestamp: Date.now(),
+        source: 'UserManager.clearAll',
+        reason: 'logout'
+      };
+      platform.events.dispatch('identity-cleared', eventDetail);
       console.log('📡 [USER MANAGER] Identity cleared event broadcasted');
       
       // Notify subscribers of logout
@@ -870,24 +903,25 @@ export class UserManager {
   }
 
   /**
-   * 💾 PERSIST TO STORAGE: Save user data to localStorage
-   * Helper method for identity persistence
+   * 💾 PERSIST TO STORAGE: Save user data to platform storage
+   * Platform-abstracted version
    */
   private persistToStorage(userId: string | null): void {
+    const platform = this.platform;
+    
     try {
-      if (typeof window === 'undefined') return;
-      
       if (userId) {
         // Get existing user data to preserve other fields
-        const existingData = localStorage.getItem('vault_user_profile'); // 🛡️ UNIFIED KEY
+        const result = platform.storage.getItem('vault_user_profile');
+        const existingData = result.success && result.value ? result.value : null;
         const userData = existingData ? JSON.parse(existingData) : {};
         
         // Update only the _id field
         userData._id = userId;
-        localStorage.setItem('vault_user_profile', JSON.stringify(userData)); // 🛡️ UNIFIED KEY
+        platform.storage.setItem('vault_user_profile', JSON.stringify(userData));
       } else {
         // Remove user data
-        localStorage.removeItem('vault_user_profile'); // 🛡️ UNIFIED KEY
+        platform.storage.removeItem('vault_user_profile');
       }
     } catch (error) {
       console.error('🚨 [USER MANAGER] Failed to persist to storage:', error);

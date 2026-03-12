@@ -4,6 +4,8 @@
 
 import { db } from '@/lib/offlineDB';
 
+import { getPlatform } from '@/lib/platform';
+
 import { normalizeRecord, normalizeTimestamp } from '../../core/VaultUtils';
 
 import { getVaultStore } from '../../store/storeHelper';
@@ -499,12 +501,15 @@ export class HydrationEngine {
 
       console.log(`🎯 [IRON GATE] Commit successful: ${result} records processed`);
 
-      // 🆕 DISPATCH GLOBAL UPDATE EVENT
-      if (typeof window !== 'undefined' && 
-          (source === 'identity_hydration' || source === 'books_hydration' || source === 'entries_hydration')) {
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-          detail: { source: 'HydrationEngine', origin: 'local-commit' } 
-        }));
+      // 🆕 DISPATCH GLOBAL UPDATE EVENT via platform
+      const platform = getPlatform();
+      if ((source === 'identity_hydration' || source === 'books_hydration' || source === 'entries_hydration')) {
+        platform.events.dispatch('vault-updated', { 
+          timestamp: Date.now(),
+          source: 'HydrationEngine',
+          entityType: 'book',
+          operation: 'update'
+        });
       }
 
       return { 
@@ -879,12 +884,14 @@ export class HydrationEngine {
 
       console.log(`🎯 [IRON GATE] Batch commit successful: ${result} records processed across ${processedOperations.length} operations`);
 
-      // 🆕 DISPATCH GLOBAL UPDATE EVENT
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-          detail: { source: 'HydrationEngine', origin: 'batch-commit' } 
-        }));
-      }
+      // 🆕 DISPATCH GLOBAL UPDATE EVENT via platform
+      const platform = getPlatform();
+      platform.events.dispatch('vault-updated', { 
+        timestamp: Date.now(),
+        source: 'HydrationEngine',
+        entityType: 'book',
+        operation: 'update'
+      });
 
       return { 
 

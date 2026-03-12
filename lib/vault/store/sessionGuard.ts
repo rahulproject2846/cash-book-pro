@@ -111,23 +111,7 @@ class SessionGuardManager {
 
   static getInstance(): SessionGuardManager {
 
-    // 🛡️ TRUE SINGLETON: Enforce single instance across HMR and multiple imports
-
-    if (typeof window !== 'undefined') {
-
-      if (!window.__SESSION_GUARD_INSTANCE__) {
-
-        window.__SESSION_GUARD_INSTANCE__ = new SessionGuardManager();
-
-      }
-
-      return window.__SESSION_GUARD_INSTANCE__;
-
-    }
-
-    
-
-    // Fallback for SSR
+    // 🛡️ TRUE SINGLETON: Use private static instance (no window dependency)
 
     if (!SessionGuardManager.instance) {
 

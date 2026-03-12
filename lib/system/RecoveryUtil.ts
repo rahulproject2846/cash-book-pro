@@ -199,11 +199,11 @@ export async function safeNuclearReset(): Promise<void> {
 
   try {
 
-    // Step 1: Clear database
+    // Step 1: Clear database (use imported db with singleton pattern)
 
-    if (typeof window !== 'undefined' && (window as any).db) {
+    if (db) {
 
-      await (window as any).db.delete();
+      await db.delete();
 
       console.log('🧹 [RECOVERY] Database deleted successfully');
 

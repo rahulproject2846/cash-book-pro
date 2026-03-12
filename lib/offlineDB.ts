@@ -212,11 +212,18 @@ export class VaultProDB extends Dexie {
   }
 }
 
-if (typeof window !== 'undefined') {
-  (window as any).db = new VaultProDB();
-}
+// 🛡️ SINGLETON PATTERN: No window dependency for Native Shell compatibility
+let dbInstance: VaultProDB | null = null;
 
-export const db = (typeof window !== 'undefined') ? (window as any).db : null as any;
+export const getDB = (): VaultProDB => {
+  if (!dbInstance) {
+    dbInstance = new VaultProDB();
+  }
+  return dbInstance;
+};
+
+// Export db as getter for backward compatibility
+export const db = typeof window !== 'undefined' ? getDB() : null as any;
 
 export const clearVaultData = async () => {
   if (typeof window === "undefined" || !db) return;
