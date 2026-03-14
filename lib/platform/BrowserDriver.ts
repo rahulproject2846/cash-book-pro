@@ -20,6 +20,9 @@ import type {
   PlatformEventMap,
   StorageResult,
   PlatformType,
+  NavigationInterface,
+  NavigationState,
+  LifecycleInterface,
 } from './SovereignPlatform';
 
 // ===== BROWSER STORAGE IMPLEMENTATION =====
@@ -268,7 +271,132 @@ function getBrowserInfo(): PlatformInfo {
   };
 }
 
+// ===== BROWSER NAVIGATION IMPLEMENTATION =====
+
+/**
+ * Browser window.history wrapper with type-safe operations
+ */
+class BrowserNavigation implements NavigationInterface {
+  to(path: string): void {
+    if (typeof window !== 'undefined') {
+      window.location.href = path;
+    }
+  }
+
+  pushState(state: NavigationState, title?: string, url?: string): void {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(state, title || '', url);
+    }
+  }
+
+  replaceState(state: NavigationState, title?: string, url?: string): void {
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(state, title || '', url);
+    }
+  }
+
+  getState(): NavigationState | null {
+    if (typeof window !== 'undefined' && window.history.state) {
+      return window.history.state as NavigationState;
+    }
+    return null;
+  }
+
+  reload(): void {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }
+
+  getHref(): string {
+    if (typeof window !== 'undefined') {
+      return window.location.href;
+    }
+    return '';
+  }
+
+  getPathname(): string {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname;
+    }
+    return '';
+  }
+
+  scrollTo(options?: { top?: number; behavior?: 'auto' | 'smooth' }): void {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({
+        top: options?.top ?? 0,
+        behavior: options?.behavior ?? 'auto'
+      });
+    }
+  }
+}
+
+// ===== BROWSER LIFECYCLE IMPLEMENTATION =====
+
+/**
+ * Browser window lifecycle event wrapper
+ */
+class BrowserLifecycle implements LifecycleInterface {
+  onOnline(handler: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    window.addEventListener('online', handler);
+    return () => window.removeEventListener('online', handler);
+  }
+
+  onOffline(handler: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    window.addEventListener('offline', handler);
+    return () => window.removeEventListener('offline', handler);
+  }
+
+  onFocus(handler: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    window.addEventListener('focus', handler);
+    return () => window.removeEventListener('focus', handler);
+  }
+
+  onBlur(handler: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    window.addEventListener('blur', handler);
+    return () => window.removeEventListener('blur', handler);
+  }
+
+  onBeforeUnload(handler: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }
+
+  onPopState(handler: (state: NavigationState) => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    const wrappedHandler = (event: PopStateEvent) => {
+      handler(event.state as NavigationState);
+    };
+    window.addEventListener('popstate', wrappedHandler);
+    return () => window.removeEventListener('popstate', wrappedHandler);
+  }
+
+  private scrollLocked = false;
+  private originalOverflow = '';
+
+  lockScroll(): void {
+    if (typeof window === 'undefined' || this.scrollLocked) return;
+    this.originalOverflow = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    this.scrollLocked = true;
+  }
+
+  unlockScroll(): void {
+    if (typeof window === 'undefined' || !this.scrollLocked) return;
+    document.body.style.overflow = this.originalOverflow || '';
+    this.scrollLocked = false;
+  }
+}
+
 // ===== BROWSER DRIVER CLASS =====
+
+let resizeTimeout: NodeJS.Timeout | null = null;
 
 /**
  * Browser implementation of SovereignPlatform
@@ -276,15 +404,43 @@ function getBrowserInfo(): PlatformInfo {
 export class BrowserDriver implements SovereignPlatform {
   public readonly storage: StorageInterface;
   public readonly events: EventsInterface;
+  public readonly navigation: NavigationInterface;
+  public readonly lifecycle: LifecycleInterface;
   public readonly info: PlatformInfo;
 
   constructor() {
     this.storage = new BrowserStorage();
     this.events = new BrowserEvents();
+    this.navigation = new BrowserNavigation();
+    this.lifecycle = new BrowserLifecycle();
     this.info = getBrowserInfo();
+
+    // 🚀 REACTIVE VIEWPORT: Listen for resize events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.handleResize);
+    }
 
     console.log('🏭 [BROWSER DRIVER] Initialized - Platform:', this.info.platformType);
   }
+
+  private handleResize = () => {
+    // Debounce by 100ms for performance
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+    
+    resizeTimeout = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        (this.info as any).viewport = {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        };
+        // Emit viewport change event for reactive hooks
+        this.events.dispatch('platform-viewport-change', {
+          timestamp: Date.now(),
+          source: 'BrowserDriver',
+        });
+      }
+    }, 100);
+  };
 
   isBrowser(): boolean {
     return typeof window !== 'undefined';
