@@ -26,6 +26,10 @@ import { SettingsSection } from '@/components/Sections/Settings/SettingsSection'
 
 import { ProfileSection } from '@/components/Sections/Profile/ProfileSection';
 
+import { ReportsSection } from '@/components/Sections/Reports/ReportsSection';
+
+import { TimelineSection } from '@/components/Sections/Timeline/TimelineSection';
+
 
 
 // Store hooks & logic
@@ -210,21 +214,13 @@ function CashBookAppContent() {
 
         <div className={effectiveSection === 'reports' ? 'block' : 'hidden'}>
 
-          <div className="p-20 text-center text-[var(--text-muted)] font-black opacity-20">
-
-            Analytics Node Offline
-
-          </div>
+          <ReportsSection currentUser={currentUser} />
 
         </div>
 
         <div className={effectiveSection === 'timeline' ? 'block' : 'hidden'}>
 
-          <div className="p-20 text-center text-[var(--text-muted)] font-black opacity-20">
-
-            Timeline Sequence Locked
-
-          </div>
+          <TimelineSection currentUser={currentUser} />
 
         </div>
 

@@ -18,12 +18,17 @@ export const AnalyticsHeader = ({ timeRange, setTimeRange, count }: any) => {
     ];
 
     useEffect(() => {
-        const handler = (e: MouseEvent) => { 
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setIsMenuOpen(false); 
+        if (!isMenuOpen) return;
+        
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
         };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, []);
+        
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isMenuOpen]);
 
     return (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-1 mb-10 transition-all duration-500 w-full">

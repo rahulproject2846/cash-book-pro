@@ -2,12 +2,13 @@
 
 import { getTimestamp } from '@/lib/shared/utils';
 import { useConflictStore } from './ConflictStore';
+import { getPlatform } from '@/lib/platform';
 
 /**
  * 🚨 CONFLICT BACKGROUND SERVICE
  * -------------------------------
  * Manages persistent timer execution across modal close/re-open cycles
- * In-memory queue with localStorage persistence for survival
+ * 🏛️ PATHOR: Uses SovereignPlatform abstraction
  */
 export class ConflictBackgroundService {
     private static instance: ConflictBackgroundService;
@@ -102,27 +103,27 @@ export class ConflictBackgroundService {
     }
     
     /**
-     * 🚨 SAVE TO LOCALSTORAGE
+     * 🚨 SAVE TO STORAGE - Platform abstracted
      */
     private saveToStorage() {
         try {
-            if (typeof window === 'undefined') return; // 🚨 SSR Guard
+            const platform = getPlatform();
             const queueArray = Array.from(this.executionQueue.entries());
-            localStorage.setItem('conflictExecutionQueue', JSON.stringify(queueArray));
+            platform.storage.setItem('conflictExecutionQueue', JSON.stringify(queueArray));
         } catch (error) {
-            console.warn('🚨 [BACKGROUND SERVICE] Failed to save queue to localStorage:', error);
+            console.warn('🚨 [BACKGROUND SERVICE] Failed to save queue to storage:', error);
         }
     }
     
     /**
-     * 🚨 RESTORE FROM LOCALSTORAGE
+     * 🚨 RESTORE FROM STORAGE - Platform abstracted
      */
     restoreFromStorage() {
         try {
-            if (typeof window === 'undefined') return; // 🚨 SSR Guard
-            const stored = localStorage.getItem('conflictExecutionQueue');
-            if (stored) {
-                const queueArray = JSON.parse(stored);
+            const platform = getPlatform();
+            const result = platform.storage.getItem('conflictExecutionQueue');
+            if (result.success && result.value) {
+                const queueArray = JSON.parse(result.value);
                 const now = getTimestamp();
                 
                 // 🚨 RESTORE ONLY FUTURE EXECUTIONS

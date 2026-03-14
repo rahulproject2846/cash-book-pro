@@ -4,6 +4,7 @@ import { db } from '@/lib/offlineDB';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { getVaultStore } from '@/lib/vault/store/storeHelper';
+import { getPlatform } from '@/lib/platform';
 
 interface MediaStoreState {
     // 🔄 QUEUE MANAGEMENT
@@ -127,11 +128,12 @@ export const useMediaStore = create<MediaStoreState>()(
                         });
                         
                         // FORCE UI REFRESH: Trigger vault update event
-                        if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new CustomEvent('vault-updated', { 
-                                detail: { source: 'MediaStore', origin: 'media-upload' } 
-                            }));
-                        }
+                        getPlatform().events.dispatch('vault-updated', {
+                            source: 'MediaStore',
+                            entityType: 'book',
+                            operation: 'update',
+                            timestamp: Date.now()
+                        });
                         
                         // CRITICAL: Check if book has server _id before sync
                         if (!existingBook._id) {
@@ -186,11 +188,11 @@ export const useMediaStore = create<MediaStoreState>()(
                 });
                 
                 // 🚨 TRIGGER SYNC REQUEST (Hydration Gap Fix)
-                if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('sync-request', {
-                        detail: { userId: mediaRecord.userId }
-                    }));
-                }
+                getPlatform().events.dispatch('sync-request', {
+                    trigger: 'automatic',
+                    priority: 'normal',
+                    timestamp: Date.now()
+                });
                 
             } catch (error) {
                 console.error(`❌ [MEDIA STORE] Failed to mark uploaded: ${mediaCid}`, error);

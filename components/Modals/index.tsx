@@ -181,3 +181,4 @@ export { BookModal } from './BookModal';
 export { EntryModal } from './EntryModal';
 export { AdvancedExportModal } from './AdvancedExportModal';
 export { ActionMenuModal } from './ActionMenuModal';
+export { UnifiedModalWrapper } from './UnifiedModalWrapper';

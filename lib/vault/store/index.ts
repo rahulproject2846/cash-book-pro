@@ -26,96 +26,77 @@ import { createSyncSlice, SyncState, SyncActions } from './slices/syncSlice';
 
 import { createToastSlice, ToastState, ToastActions } from './slices/toastSlice';
 
+import { getPlatform } from '@/lib/platform';
 
 
-// 🔐 SECURE STORAGE: Encrypted transform for sensitive data
+// 🔐 SECURE STORAGE: Platform-abstracted wrapper for Zustand persist
+
+const createPlatformStorage = () => {
+  const platform = getPlatform();
+  
+  return {
+    getItem: (name: string): string | null => {
+      if (typeof window === 'undefined') return null;
+      const result = platform.storage.getItem(name);
+      return result.success ? (result.value ?? null) : null;
+    },
+    setItem: (name: string, value: string): void => {
+      if (typeof window === 'undefined') return;
+      platform.storage.setItem(name, value);
+    },
+    removeItem: (name: string): void => {
+      if (typeof window === 'undefined') return;
+      platform.storage.removeItem(name);
+    },
+  };
+};
 
 const secureStorage = {
-
-  getItem: (name: string) => {
-
+  getItem: (name: string): string | null => {
     if (typeof window === 'undefined') return null;
-
-    const item = localStorage.getItem(name);
-
-    if (!item) return null;
-
     
+    const platform = getPlatform();
+    const result = platform.storage.getItem(name);
+    
+    if (!result.success || !result.value) return null;
 
     try {
-
-      const parsed = JSON.parse(item);
-
-      // 🔐 SECURITY: Exclude sensitive fields from plain text storage
-
+      const parsed = JSON.parse(result.value);
       if (parsed.state) {
-
         const { userId, currentUser, ...safeState } = parsed.state;
-
         return JSON.stringify({ ...parsed, state: safeState });
-
       }
-
-      return item;
-
+      return result.value;
     } catch (error) {
-
       console.warn('🔐 [SECURE STORAGE] Failed to parse stored data:', error);
-
       return null;
-
     }
-
   },
 
-  
-
-  setItem: (name: string, value: string) => {
-
+  setItem: (name: string, value: string): void => {
     if (typeof window === 'undefined') return;
-
     
+    const platform = getPlatform();
 
     try {
-
       const parsed = JSON.parse(value);
-
-      // 🔐 SECURITY: Exclude sensitive fields from plain text storage
-
       if (parsed.state) {
-
         const { userId, currentUser, ...safeState } = parsed.state;
-
         const secureValue = JSON.stringify({ ...parsed, state: safeState });
-
-        localStorage.setItem(name, secureValue);
-
+        platform.storage.setItem(name, secureValue);
       } else {
-
-        localStorage.setItem(name, value);
-
+        platform.storage.setItem(name, value);
       }
-
     } catch (error) {
-
       console.warn('🔐 [SECURE STORAGE] Failed to store data:', error);
-
-      localStorage.setItem(name, value); // Fallback to non-secure storage
-
+      platform.storage.setItem(name, value);
     }
-
   },
 
-  
-
-  removeItem: (name: string) => {
-
+  removeItem: (name: string): void => {
     if (typeof window === 'undefined') return;
-
-    localStorage.removeItem(name);
-
+    getPlatform().storage.removeItem(name);
   }
-
 };
 // UNIFIED VAULT STORE TYPE
 
@@ -204,8 +185,13 @@ export interface VaultStore extends BookState, BookActions, EntryState, EntryAct
 
 // MAIN VAULT STORE - COMBINES ALL SLICES WITH SECURE PERSISTENCE
 
-// 🛡️ MILLISECOND-0 IDENTITY ANCHOR: Synchronous session check to prevent race condition
-const hasSession = typeof window !== 'undefined' ? !!localStorage.getItem('auth_token') : false;
+// 🛡️ MILLISECOND-0 IDENTITY ANCHOR: Synchronous session check using platform abstraction
+const hasSession = (() => {
+  if (typeof window === 'undefined') return false;
+  const platform = getPlatform();
+  const result = platform.storage.getItem('auth_token');
+  return result.success && !!result.value;
+})();
 
 export const useVaultStore = create<VaultStore>()(
 
@@ -781,30 +767,28 @@ if (typeof window !== 'undefined') {
 
 
 
-  // 🛡️ SOVEREIGN IDENTITY MIRROR: Listen ONLY to UserManager events
-  if (typeof window !== 'undefined') {
-    window.addEventListener('identity-established', (event: any) => {
-      const { user, timestamp } = event.detail || {};
-      if (user && user._id) {
-        console.log('📡 [MAIN STORE] Identity established event received:', user._id, 'timestamp:', timestamp);
-        // Store acts as READ-ONLY mirror - updates only from UserManager events
-        useVaultStore.setState({ 
-          userId: user._id,
-          currentUser: user 
-        });
-      }
-    });
-
-    window.addEventListener('identity-cleared', (event: any) => {
-      const { timestamp } = event.detail || {};
-      console.log('📡 [MAIN STORE] Identity cleared event received', 'timestamp:', timestamp);
-      // Store acts as READ-ONLY mirror - updates only from UserManager events
+  // 🛡️ SOVEREIGN IDENTITY MIRROR: Listen via platform abstraction
+  const platform = getPlatform();
+  const identityEstablishedCleanup = platform.events.listen('identity-established', (detail: any) => {
+    const { userId, username, timestamp } = detail || {};
+    if (userId) {
+      console.log('📡 [MAIN STORE] Identity established event received:', userId, 'timestamp:', timestamp);
       useVaultStore.setState({ 
-        userId: undefined,
-        currentUser: undefined 
+        userId,
+        currentUser: { _id: userId, username }
       });
+    }
+  });
+
+  const identityClearedCleanup = platform.events.listen('identity-cleared', (detail: any) => {
+    const { timestamp } = detail || {};
+    console.log('📡 [MAIN STORE] Identity cleared event received', 'timestamp:', timestamp);
+    useVaultStore.setState({ 
+      userId: undefined,
+      currentUser: undefined 
     });
-  }
+  });
+
 
 
 

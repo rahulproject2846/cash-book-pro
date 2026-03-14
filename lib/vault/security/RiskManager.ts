@@ -1,38 +1,39 @@
 "use client";
 
 import { LocalUser } from '@/lib/offlineDB';
+import { getPlatform } from '@/lib/platform';
 
 /**
  * 🔒 RISK MANAGER - Security & Tampering Detection
  * Implements time-based access control and risk scoring
+ * 🏛️ PATHOR: Uses SovereignPlatform abstraction
  */
 export class RiskManager {
   private static readonly STORAGE_KEY = 'vault_secure_timestamp';
-  private static readonly MAX_RISK_THRESHOLD = 80; // 🎯 UNIFIED THRESHOLD
+  private static readonly MAX_RISK_THRESHOLD = 80;
   
   /**
-   * 🕒 CHECK TIME TAMPERING
+   * 🕒 CHECK TIME TAMPERING - Platform abstracted
    */
   static checkTimeTampering(): boolean {
-    const lastKnownTime = localStorage.getItem(RiskManager.STORAGE_KEY);
+    const platform = getPlatform();
+    const result = platform.storage.getItem(RiskManager.STORAGE_KEY);
+    const lastKnownTime = result.success ? result.value : null;
     const currentTime = Date.now();
     
     if (!lastKnownTime) {
-      // First time user accesses the system
-      localStorage.setItem(RiskManager.STORAGE_KEY, currentTime.toString());
+      platform.storage.setItem(RiskManager.STORAGE_KEY, currentTime.toString());
       return false;
     }
     
     const timeDiff = currentTime - parseInt(lastKnownTime);
-    const tamperingThreshold = 300000; // 5 minutes
+    const tamperingThreshold = 300000;
     
     if (timeDiff < -tamperingThreshold) {
-      // User moved clock back (tampering detected)
       return true;
     }
     
-    // Update current timestamp
-    localStorage.setItem(RiskManager.STORAGE_KEY, currentTime.toString());
+    platform.storage.setItem(RiskManager.STORAGE_KEY, currentTime.toString());
     return false;
   }
   

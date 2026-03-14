@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from 'next-themes';
 import { db } from '@/lib/offlineDB';
 import { useVaultStore } from '@/lib/vault/store/index';
+import { getPlatform } from '@/lib/platform';
 
 /**
  * 🛡️ VAULT PRO: MASTER SETTINGS ENGINE (V26.0 - STABLE REL)
@@ -34,11 +35,12 @@ export const useSettings = () => {
             return;
         }
         
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('vault-updated', { 
-                detail: { source: 'useSettings', origin: 'local-mutation' } 
-            }));
-        }
+        getPlatform().events.dispatch('vault-updated', {
+            source: 'useSettings',
+            entityType: 'settings',
+            operation: 'update',
+            timestamp: Date.now()
+        });
     }, []);
 
     // 🎨 DOM SYNC: Apply visual protocols directly

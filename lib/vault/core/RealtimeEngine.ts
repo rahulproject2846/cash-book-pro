@@ -18,6 +18,7 @@ import type { LocalEntry, LocalBook } from '@/lib/offlineDB';
 import { financeService } from '../services/FinanceService';
 import { getVaultStore } from '../store/storeHelper';
 import { useVaultStore } from '../store';
+import { getPlatform } from '@/lib/platform';
 
 export class RealtimeEngine {
   private userId: string;
@@ -375,10 +376,13 @@ export class RealtimeEngine {
       requestAnimationFrame(() => {
         console.log('📡 [REALTIME] UI Broadcast Triggered');
         
-        // 🚀 HIGH PRIORITY: Force immediate UI refresh via global event
-        window.dispatchEvent(new CustomEvent('VAULT_FORCE_REFRESH', {
-          detail: { source: 'realtime', eventType, timestamp: Date.now() }
-        }));
+        // 🚀 HIGH PRIORITY: Force immediate UI refresh via platform
+        getPlatform().events.dispatch('vault-updated', {
+          source: 'RealtimeEngine',
+          entityType: 'settings',
+          operation: 'update',
+          timestamp: Date.now()
+        });
         
         this.broadcastCallback();
       });

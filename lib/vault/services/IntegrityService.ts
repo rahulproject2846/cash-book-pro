@@ -18,6 +18,8 @@ import { generateEntryChecksum } from '@/lib/offlineDB';
 
 import { getVaultStore } from '@/lib/vault/store/storeHelper';
 
+import { getPlatform } from '@/lib/platform';
+
 import { HydrationController } from '../hydration/HydrationController';
 
 
@@ -1240,21 +1242,18 @@ export class IntegrityService {
 
       };
 
-      
-
       const table = type === 'ENTRY' ? db.entries : db.books;
 
       await table.update(Number(localId), restoredRecord);
 
       this.clearShadowCacheEntry(localId);
 
-      
-
-      window.dispatchEvent(new CustomEvent(`${type.toLowerCase()}-restored-from-cache`, {
-
-        detail: { localId, restoredRecord, cacheAge }
-
-      }));
+      getPlatform().events.dispatch('vault-updated', {
+        source: 'IntegrityService',
+        entityType: type.toLowerCase() as 'entry' | 'book',
+        operation: 'update',
+        timestamp: Date.now()
+      });
 
       
 

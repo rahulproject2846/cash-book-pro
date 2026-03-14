@@ -7,6 +7,7 @@ import { useMediaStore } from '@/lib/vault/MediaStore';
 import { UserManager } from '@/lib/vault/core/user/UserManager';
 import { generateCID } from '@/lib/offlineDB';
 import { useVaultStore } from '@/lib/vault/store/index';
+import { getPlatform } from '@/lib/platform';
 
 /**
  * 🏆 MASTER PROFILE ENGINE (V12.0)
@@ -42,11 +43,12 @@ export const useProfile = () => {
 
     // 🤝 THE ATOMIC HANDSHAKE
     const dispatchHandshake = useCallback(() => {
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('vault-updated', { 
-                detail: { source: 'useProfile', origin: 'local-mutation' } 
-            }));
-        }
+        getPlatform().events.dispatch('vault-updated', {
+            source: 'useProfile',
+            entityType: 'user',
+            operation: 'update',
+            timestamp: Date.now()
+        });
     }, []);
 
     // ১. ইমেজ প্রসেসিং (🚀 BANKING-GRADE MEDIA ENGINE)
@@ -200,7 +202,7 @@ export const useProfile = () => {
             if (res.ok) { 
                 toast.success('Account Terminated'); 
                 logout(); // Atomic Store Logout
-                window.location.href = '/';
+                getPlatform().navigation.to('/');
             }
         } catch (error) { 
             toast.error('Erasure Protocol Interrupted'); 

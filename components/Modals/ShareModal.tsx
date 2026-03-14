@@ -66,31 +66,9 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
     };
 
     return (
-        <ModalPortal>
-            <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center overflow-hidden">
-                {/* --- 🌑 NATIVE BACKDROP --- */}
-                <motion.div 
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    onClick={onClose}
-                    className="absolute inset-0 bg-black/70 backdrop-blur-xl z-0"
-                />
+        <>
 
-                {/* --- 🍃 THE SOVEREIGN SHEET --- */}
-                <motion.div 
-                    drag={isMobile ? "y" : false}
-                    dragConstraints={{ top: 0, bottom: 0 }}
-                    onDragEnd={(_, info) => { if (info.offset.y > 150) onClose(); }}
-                    initial={isMobile ? { y: "100%" } : { scale: 0.95, opacity: 0 }}
-                    animate={isMobile ? { y: 0 } : { scale: 1, opacity: 1 }}
-                    exit={isMobile ? { y: "100%" } : { scale: 0.95, opacity: 0 }}
-                    transition={{ type: "spring", damping: 30, stiffness: 350 }}
-                    className="bg-[var(--bg-card)] w-full md:max-w-md h-auto rounded-t-[45px] md:rounded-[45px] border-t md:border border-[var(--border)] shadow-2xl relative z-10 flex flex-col overflow-hidden will-change-transform"
-                >
-                    {/* Visual Handle */}
-                    <div className="w-12 h-1 bg-[var(--border)] rounded-full mx-auto mt-4 shrink-0 opacity-20 md:hidden" />
-
-                    <div className="p-8">
+            <div className="p-8">
                         {/* --- 🏷️ HEADER --- */}
                         <div className="flex justify-between items-center mb-8 relative z-20">
                             <div>
@@ -200,10 +178,6 @@ export const ShareModal = ({ isOpen, onClose, currentBook, onToggleShare }: any)
                             </div>
                         </motion.div>
                     </div>
-                    {/* Safe Area Padding for iOS */}
-                    <div className="h-[env(safe-area-inset-bottom,1.5rem)] bg-transparent" />
-                </motion.div>
-            </div>
-        </ModalPortal>
-    );
+            </>
+        );
 };

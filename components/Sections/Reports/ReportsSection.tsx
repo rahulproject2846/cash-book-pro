@@ -6,8 +6,9 @@ import { db } from '@/lib/offlineDB';
 import { useTranslation } from '@/hooks/useTranslation';
 import { HubHeader } from '@/components/Layout/HubHeader';
 import { TimeRangeSelector } from '@/components/TimeRangeSelector';
-import { StatsGrid } from '@/components/UI/StatsGrid';
+import { StatsGrid } from '@/components/Sovereign/Shared/StatsGrid';
 import { toBn } from '@/lib/utils/helpers';
+import { getPlatform } from '@/lib/platform';
 import dynamic from 'next/dynamic';
 
 // ১. চার্ট কম্পোনেন্টকে ডাইনামিক করো
@@ -30,11 +31,16 @@ export const ReportsSection = ({ currentUser }: any) => {
 
     const currencySymbol = currentUser?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
 
-    // ১. ডাটা লোড প্রোটোকল
+    // ১. ডাটা লোড প্রোটোকল (Triple-Link: userId + isDeleted)
     const fetchLocalAnalytics = async () => {
         try {
             if (!db.isOpen()) await db.open();
-            const data = await db.entries.where('isDeleted').equals(0).toArray();
+            const userId = String(currentUser?._id);
+            const data = await db.entries
+                .where('userId')
+                .equals(userId)
+                .and((e: any) => e.isDeleted === 0)
+                .toArray();
             setAllEntries(data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
         } catch (error) { 
             console.error("ANALYSIS_PROTOCOL_FAULT"); 
@@ -45,48 +51,79 @@ export const ReportsSection = ({ currentUser }: any) => {
 
     useEffect(() => {
         fetchLocalAnalytics();
-        window.addEventListener('vault-updated', fetchLocalAnalytics);
-        return () => window.removeEventListener('vault-updated', fetchLocalAnalytics);
+        const platform = getPlatform();
+        const cleanup = platform.events.listen('vault-updated', fetchLocalAnalytics);
+        return cleanup;
     }, []);
 
-    // ২. অ্যানালিটিক্স ইঞ্জিন (Math Logic Restored)
+    // ২. অ্যানালিটিক্স ইঞ্জিন (O(n) Single-Pass Optimization)
     const processed = useMemo(() => {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - parseInt(timeRange));
+        const cutoffTime = cutoff.getTime();
 
-        const filtered = allEntries.filter(e => new Date(e.date) >= cutoff && e.status?.toLowerCase() === 'completed');
-        const pendingEntries = allEntries.filter(e => new Date(e.date) >= cutoff && e.status?.toLowerCase() === 'pending');
-
-        const totalIn = filtered.filter(e => e.type.toLowerCase() === 'income').reduce((a, b) => a + b.amount, 0);
-        const totalOut = filtered.filter(e => e.type.toLowerCase() === 'expense').reduce((a, b) => a + b.amount, 0);
-        const totalPending = pendingEntries.reduce((a, b) => a + b.amount, 0);
-
-        const flowMap = new Map();
-        filtered.forEach(e => {
-            const date = new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            if (!flowMap.has(date)) flowMap.set(date, { name: date, income: 0, expense: 0 });
-            const item = flowMap.get(date);
-            e.type.toLowerCase() === 'income' ? item.income += e.amount : item.expense += e.amount;
-        });
-
-        const catMap = new Map();
-        filtered.filter(e => e.type.toLowerCase() === 'expense').forEach(e => {
-            const cat = (e.category || 'GENERAL').toUpperCase();
-            if (!catMap.has(cat)) catMap.set(cat, { name: cat, value: 0 });
-            catMap.get(cat).value += e.amount;
-        });
-
+        // Initialize accumulators
+        const stats = { totalIn: 0, totalOut: 0, totalPending: 0 };
+        const flowMap = new Map<string, { name: string; income: number; expense: number }>();
+        const catMap = new Map<string, { name: string; value: number }>();
         const viaMap: { [key: string]: number } = { CASH: 0, BANK: 0 };
-        filtered.filter(e => e.type.toLowerCase() === 'expense').forEach(e => {
-            const method = (e.paymentMethod || 'CASH').to ();
-            if (viaMap.hasOwnProperty(method)) viaMap[method] += e.amount;
+        const filteredEntries: any[] = [];
+
+        // Single-pass O(n) loop
+        allEntries.forEach((e: any) => {
+            const entryDate = new Date(e.date).getTime();
+            
+            // Time range filter
+            if (entryDate < cutoffTime) return;
+            
+            const entryType = (e.type || '').toLowerCase();
+            const entryStatus = (e.status || '').toLowerCase();
+            const amount = Number(e.amount) || 0;
+
+            // Track completed entries for charts
+            if (entryStatus === 'completed') {
+                filteredEntries.push(e);
+                
+                // Income/Expense stats
+                if (entryType === 'income') {
+                    stats.totalIn += amount;
+                } else if (entryType === 'expense') {
+                    stats.totalOut += amount;
+                    
+                    // Category map (expense only)
+                    const cat = (e.category || 'GENERAL').toUpperCase();
+                    if (!catMap.has(cat)) catMap.set(cat, { name: cat, value: 0 });
+                    catMap.get(cat)!.value += amount;
+
+                    // Payment method map (expense only)
+                    const method = (e.paymentMethod || 'CASH').toUpperCase();
+                    if (viaMap.hasOwnProperty(method)) {
+                        viaMap[method] += amount;
+                    }
+                }
+
+                // Flow map (both income & expense)
+                const dateKey = new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                if (!flowMap.has(dateKey)) flowMap.set(dateKey, { name: dateKey, income: 0, expense: 0 });
+                const flowItem = flowMap.get(dateKey)!;
+                if (entryType === 'income') {
+                    flowItem.income += amount;
+                } else {
+                    flowItem.expense += amount;
+                }
+            }
+
+            // Pending entries (separate from completed)
+            if (entryStatus === 'pending') {
+                stats.totalPending += amount;
+            }
         });
 
         return {
-            filtered,
-            stats: { totalIn, totalOut, totalPending, net: totalIn - totalOut },
+            filtered: filteredEntries,
+            stats: { ...stats, net: stats.totalIn - stats.totalOut },
             areaData: Array.from(flowMap.values()),
-            pieData: Array.from(catMap.values()).sort((a:any, b:any) => b.value - a.value),
+            pieData: Array.from(catMap.values()).sort((a: any, b: any) => b.value - a.value),
             viaData: viaMap
         };
     }, [allEntries, timeRange]);

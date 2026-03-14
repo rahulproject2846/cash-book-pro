@@ -4,6 +4,8 @@ import { VaultStore } from '../index';
 
 import { getTimestamp } from '@/lib/shared/utils';
 
+import { getPlatform } from '@/lib/platform';
+
 
 
 // --- Interfaces ---
@@ -620,12 +622,20 @@ export const createSyncSlice: StateCreator<
 
       };
 
-      window.addEventListener('online', handleOnline);
+      const platform = getPlatform();
+      
+      const cleanupOnline = platform.lifecycle.onOnline(handleOnline);
+      const cleanupOffline = platform.lifecycle.onOffline(handleOffline);
 
-      window.addEventListener('offline', handleOffline);
-
-      // Store references for cleanup
-      (window as any)._syncListeners = { handleOnline, handleOffline };
+      // Store cleanup functions for later
+      (window as any)._syncListeners = { 
+        handleOnline, 
+        handleOffline,
+        cleanup: () => {
+          cleanupOnline();
+          cleanupOffline();
+        }
+      };
 
       console.log(' [SYNC SLICE] Network listeners initialized');
 
@@ -633,17 +643,12 @@ export const createSyncSlice: StateCreator<
 
 
 
-    cleanupNetworkListeners: () => {
-      if (typeof window === 'undefined') return;
 
+    cleanupNetworkListeners: () => {
       const listeners = (window as any)._syncListeners;
-      if (listeners) {
-        window.removeEventListener('online', listeners.handleOnline);
-        window.removeEventListener('offline', listeners.handleOffline);
-        
-        // Clean up the reference
+      if (listeners?.cleanup) {
+        listeners.cleanup();
         delete (window as any)._syncListeners;
-        
         console.log(' [SYNC SLICE] Network listeners cleaned up');
       }
     },

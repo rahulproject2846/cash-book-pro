@@ -120,26 +120,10 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
     return amount;
   };
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={onClose}
-          />
+  if (!isOpen) return null;
 
-          {/* Modal Container */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-6xl max-h-[90vh] bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl shadow-red-500/20 overflow-hidden"
-          >
+  return (
+    <>
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-white/10 bg-linear-to-r from-red-500/10 to-transparent">
               <div className="flex items-center gap-3">
@@ -397,10 +381,7 @@ export const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
                 )}
               </div>
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+      </>
   );
 };
 

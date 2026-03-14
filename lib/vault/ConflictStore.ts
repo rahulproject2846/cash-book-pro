@@ -18,6 +18,7 @@ import { db } from '@/lib/offlineDB';
 import { UserManager } from '@/lib/vault/core/user/UserManager';
 import { mapConflictType } from './ConflictMapper';
 import { getTimestamp } from '@/lib/shared/utils';
+import { getPlatform } from '@/lib/platform';
 import toast from 'react-hot-toast';
 import { ConflictBackgroundService } from './ConflictBackgroundService';
 import { Book, FileText } from 'lucide-react';
@@ -144,7 +145,11 @@ export const useConflictStore = create<ConflictStore>()(
             if (expiredKeys.length > 0) {
                 const userId = UserManager.getInstance().getUserId();
                 if (userId) {
-                    window.dispatchEvent(new CustomEvent('sync-request', { detail: { userId } }));
+                    getPlatform().events.dispatch('sync-request', {
+                        trigger: 'automatic',
+                        priority: 'normal',
+                        timestamp: Date.now()
+                    });
                 }
             }
         },
@@ -183,19 +188,17 @@ export const useConflictStore = create<ConflictStore>()(
         getConflictCount: () => get().conflicts.length,
 
         openConflictModal: (item: ConflictItem) => {
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('openConflictModal', { 
-                    detail: { record: item.record, type: item.type, conflictType: item.conflictType } 
-                }));
-            }
+            getPlatform().events.dispatch('open-conflict-modal', {
+                source: 'ConflictStore',
+                timestamp: Date.now()
+            });
         },
 
         openBulkConflictModal: () => {
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('openBulkConflictModal', { 
-                    detail: { conflicts: get().conflicts } 
-                }));
-            }
+            getPlatform().events.dispatch('open-bulk-conflict-modal', {
+                source: 'ConflictStore',
+                timestamp: Date.now()
+            });
         },
 
         createSafetySnapshot: async (item: ConflictItem) => {

@@ -9,6 +9,7 @@ import { LicenseVault, RiskManager } from '../security';
 import { SecureApiClient } from '../utils/SecureApiClient';
 import { SyncGuard } from '../guards/SyncGuard';
 import { IdentityProvider } from '@/lib/utils/identityProvider';
+import { getPlatform } from '@/lib/platform';
 
 // 🛡️ API PATH MAPPING - Prevent pluralization typos
 const API_PATH_MAP: Record<string, string> = {
@@ -979,9 +980,11 @@ export class PullService {
           if (timeDifference > 5000) {
             console.log(`🔄 [PRECISION SYNC] Book ${book.cid} local significantly newer (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - marking for push`);
             await db.books.update(existing.localId!, { synced: 0 });
-            if (typeof window !== 'undefined') {
-               window.dispatchEvent(new CustomEvent('sync-request'));
-            }
+            getPlatform().events.dispatch('sync-request', {
+              trigger: 'automatic',
+              priority: 'normal',
+              timestamp: Date.now()
+            });
             return { success: true };
           } else {
             console.log(`⚠️ [PRECISION SYNC] Book ${book.cid} local newer but within threshold (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - keeping synced status`);
@@ -1107,9 +1110,11 @@ export class PullService {
           if (timeDifference > 5000) {
             console.log(`🔄 [PRECISION SYNC] Entry ${entry.cid} local significantly newer (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - marking for push`);
             await db.entries.update(existing.localId!, { synced: 0 });
-            if (typeof window !== 'undefined') {
-               window.dispatchEvent(new CustomEvent('sync-request'));
-            }
+            getPlatform().events.dispatch('sync-request', {
+              trigger: 'automatic',
+              priority: 'normal',
+              timestamp: Date.now()
+            });
             return { success: true };
           } else {
             console.log(`⚠️ [PRECISION SYNC] Entry ${entry.cid} local newer but within threshold (time: ${localTime} > ${serverTime}, diff: ${timeDifference}ms) - keeping synced status`);

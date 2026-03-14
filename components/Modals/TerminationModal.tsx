@@ -26,14 +26,8 @@ export const TerminationModal = ({ isOpen, onClose, onConfirm, targetName, title
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[10000] flex items-end md:items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/80 backdrop-blur-xl" />
-            <motion.div 
-                initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }}
-                transition={{ type: "spring", damping: 25, stiffness: 350 }}
-                className="bg-[var(--bg-card)] w-full md:max-w-md rounded-[40px] border border-red-500/20 shadow-2xl relative z-10 overflow-hidden"
-            >
-                <div className="p-8 space-y-8">
+        <>
+            <div className="p-8 space-y-8">
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3 text-red-500">
                             <ShieldAlert size={20} className="animate-pulse" />
@@ -78,7 +72,6 @@ export const TerminationModal = ({ isOpen, onClose, onConfirm, targetName, title
                         EXECUTE PURGE
                     </SafeButton>
                 </div>
-            </motion.div>
-        </div>
-    );
+            </>
+        );
 };

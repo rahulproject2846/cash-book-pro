@@ -3,6 +3,7 @@
 import { db } from '@/lib/offlineDB';
 import { UserManager } from '../core/user/UserManager';
 import { generateCID } from '@/lib/offlineDB';
+import { getPlatform } from '@/lib/platform';
 
 // Type definitions for book records
 interface BookRecord {
@@ -154,11 +155,12 @@ export class MediaMigrator {
       
       // 5. Trigger UI refresh if migration occurred
       if (migrated > 0) {
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('vault-updated', { 
-            detail: { source: 'MediaMigrator', origin: 'migration-complete' } 
-          }));
-        }
+        getPlatform().events.dispatch('vault-updated', {
+          source: 'MediaMigrator',
+          entityType: 'book',
+          operation: 'update',
+          timestamp: Date.now()
+        });
         // Triggered UI refresh for ${migrated} migrated books
       }
       

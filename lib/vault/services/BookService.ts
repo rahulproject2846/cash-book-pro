@@ -9,6 +9,7 @@ import { conflictService } from './ConflictService';
 import { getSovereignId } from '@/lib/utils/identityProvider';
 import { generateCID } from '@/lib/offlineDB';
 import { normalizeRecord } from '../core/VaultUtils';
+import { getPlatform } from '@/lib/platform';
 
 // 📚 LIGHTWEIGHT MATRIX INTERFACE
 interface BookMatrixItem {
@@ -818,11 +819,12 @@ export class BookService {
       });
       
       // b. Fire sync event to trigger 7-second auto-sync
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-          detail: { source: 'HydrationController', origin: 'batch-mutation' } 
-        }));
-      }
+      getPlatform().events.dispatch('vault-updated', {
+        source: 'BookService',
+        entityType: 'book',
+        operation: 'delete',
+        timestamp: Date.now()
+      });
       
       // c. Call get().refreshBooks() to update the local list
       get().refreshBooks();

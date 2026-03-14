@@ -491,6 +491,35 @@ export const normalizeUser = (user: any, currentUserId?: string): any => {
 
  */
 
+/**
+ * 📅 GROUP ENTRIES BY DATE - Mobile Date-Grouping Utility
+ * 
+ * Groups entries by date string for mobile card rendering.
+ * @param entries - Array of entry objects
+ * @param language - Language code ('bn' or 'en')
+ * @returns Object with date keys and entry arrays
+ */
+export const groupEntriesByDate = (entries: any[], language: string): { [key: string]: any[] } => {
+    const groupedData: { [key: string]: any[] } = {};
+    
+    entries.forEach((entry: any) => {
+        if (!entry.date) return;
+        
+        const dateStr = new Date(entry.date).toLocaleDateString(
+            language === 'bn' ? 'bn-BD' : 'en-GB', 
+            { day: '2-digit', month: 'short', year: 'numeric' }
+        );
+        
+        if (!groupedData[dateStr]) {
+            groupedData[dateStr] = [];
+        }
+        groupedData[dateStr].push(entry);
+    });
+    
+    return groupedData;
+};
+
+
 export const normalizeRecord = (data: any, currentUserId?: string): any => {
 
     if (!data || typeof data !== 'object') return null;

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils/helpers';
 
 import { useVaultStore } from '@/lib/vault/store';
 
-import BookCard from './BookCard'; // 
+import BookCard from '@/components/Sovereign/Shared/BookCard';
 
 
 

@@ -1,6 +1,7 @@
 // src/hooks/useGuidance.ts
 "use client";
 import { useState, useEffect } from 'react';
+import { getPlatform } from '@/lib/platform';
 
 // Define the steps and their timing
 const GUIDANCE_STEPS = [
@@ -14,7 +15,9 @@ export const useGuidance = (activeSection: string) => {
 
     useEffect(() => {
         // ১. সেভ করা স্ট্যাটাস চেক (যদি বন্ধ থাকে তবে কিছুই করবে না)
-        const isPermanentlyOff = localStorage.getItem('vault_guidance_off') === 'true';
+        const platform = getPlatform();
+        const result = platform.storage.getItem('vault_guidance_off');
+        const isPermanentlyOff = result.success && result.value === 'true';
         if (isPermanentlyOff) return;
         
         // ২. যদি সেটিংসে থাকে, তবে গাইডেন্স বন্ধ থাকবে

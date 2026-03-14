@@ -138,25 +138,9 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center overflow-hidden">
-            {/* ব্যাকড্রপ: পিওর গ্লাস ইফেক্ট */}
-            <motion.div 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                onClick={onClose} className="fixed inset-0 bg-black/60 backdrop-blur-xl" 
-            />
+        <>
 
-            {/* মডাল কন্টেনার */}
-            <motion.div 
-                drag={isMobile ? "y" : false}
-                dragConstraints={{ top: 0, bottom: 0 }}
-                onDragEnd={(_, info) => { if (info.offset.y > 100) onClose(); }}
-                initial={isMobile ? { y: "100%" } : { y: 20, opacity: 0 }} 
-                animate={{ y: 0, opacity: 1 }} 
-                exit={isMobile ? { y: "100%" } : { y: 20, opacity: 0 }} 
-                transition={{ type: "spring", damping: 30, stiffness: 400 }} 
-                className="bg-[var(--bg-card)] w-full md:max-w-md h-[90vh] md:h-auto rounded-t-[40px] md:rounded-[40px] border-t md:border border-[var(--border)] shadow-2xl relative z-10 flex flex-col overflow-hidden"
-            >
-                <div className="w-12 h-1.5 bg-[var(--border)] rounded-full mx-auto mt-4 shrink-0 opacity-20" />
+            <div className="w-12 h-1.5 bg-[var(--border)] rounded-full mx-auto mt-4 shrink-0 opacity-20" />
 
                 {/* হেডার */}
                 <div className="px-8 pt-6 pb-2 flex justify-between items-center shrink-0">
@@ -301,7 +285,6 @@ export const BookModal = ({ isOpen, onClose, initialData, currentUser }: any) =>
                     </div>
                 </div>
                 <div className="h-[env(safe-area-inset-bottom)] bg-[var(--bg-card)]" />
-            </motion.div>
-        </div>
-    );
+            </>
+        );
 };

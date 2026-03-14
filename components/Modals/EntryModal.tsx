@@ -147,32 +147,24 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
 
     if (!isOpen) return null;
 
+    // Content only - UnifiedModalWrapper provides the container, backdrop, and animations
     return (
-        <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center overflow-hidden bg-black/60 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0" />
-            
-            <motion.div 
-                initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={spring}
-                className="w-full md:max-w-lg max-h-[90vh] md:min-h-[600px] rounded-t-[32px] md:rounded-[32px] bg-[var(--bg-app)] border border-[var(--border)] shadow-2xl relative z-10 flex flex-col"
-            >
-                {/* Visual Handle for Mobile */}
-                <div className="md:hidden w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 shrink-0" />
-                
-                {/* Header: Identity */}
-                <div className="px-6 py-3 flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20">
-                            {previewUrl ? <img src={previewUrl} className="w-full h-full object-cover rounded-2xl" /> : <Calculator size={22} />}
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-[var(--text-muted)]      mb-0.5">{currentBook?.name || "LEDGER ENTRY"}</p>
-                            <p className="text-[13px] font-bold text-[var(--text-main)]">{activeInput === 'income' ? 'Cash Inflow' : 'Cash Outflow'}</p>
-                        </div>
+        <>
+            {/* Header: Identity */}
+            <div className="px-6 py-3 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20">
+                        {previewUrl ? <img src={previewUrl} className="w-full h-full object-cover rounded-2xl" /> : <Calculator size={22} />}
                     </div>
-                    <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-[var(--text-muted)] hover:text-white"><X size={18} /></button>
+                    <div>
+                        <p className="text-[10px] font-black text-[var(--text-muted)] mb-0.5">{currentBook?.name || "LEDGER ENTRY"}</p>
+                        <p className="text-[13px] font-bold text-[var(--text-main)]">{activeInput === 'income' ? 'Cash Inflow' : 'Cash Outflow'}</p>
+                    </div>
                 </div>
+                <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-[var(--text-muted)] hover:text-white"><X size={18} /></button>
+            </div>
 
-                <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-24 md:pb-8">
+            <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-24 md:pb-8">
                     
                     {/* 🎯 POINT 1 & 2: THE LIVING CARDS (Desktop Input + Mobile Keypad) */}
                     <div className="grid grid-cols-2 gap-4 h-20 mb-4">
@@ -302,7 +294,8 @@ export const EntryModal = ({ isOpen, onClose, initialData, currentUser, currentB
                         <CheckCircle2 size={18} /> {t('save_entry')}
                     </SafeButton>
                 </div>
-            </motion.div>
-        </div>
-    );
-};
+            </>
+        );
+    };
+
+    export default EntryModal;

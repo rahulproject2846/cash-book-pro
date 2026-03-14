@@ -1,13 +1,13 @@
 import { db } from '@/lib/offlineDB';
 import { UserManager } from '@/lib/vault/core/user/UserManager';
+import { getPlatform } from '@/lib/platform';
 
 /**
  * 🏗️ HOLLY GRILL SELF-HEALING MIGRATION ENGINE (V5.0)
  * ----------------------------------------------------
  * High-Performance, Memory-Safe, and Atomic Data Healing.
  * Capacity: 1M+ Records | Zero-Flicker Propagation.
- * 
- * Standards: Google Enterprise Core | Apple Haptic Sync.
+ * 🏛️ PATHOR: Uses SovereignPlatform abstraction
  */
 
 // --- 🛰️ VERSION CONTROL ---
@@ -25,6 +25,22 @@ interface MigrationCheckpoint {
 export class MigrationManager {
   private readonly VERSION_KEY = 'vault_db_version';
   private readonly BATCH_SIZE = 1000;
+  
+  // 🏛️ SOVEREIGN PLATFORM: Platform-agnostic event dispatching
+  private get platform() {
+    return getPlatform();
+  }
+  
+  private dispatchVaultUpdate(detail: any): void {
+    this.platform.events.dispatch('vault-updated', {
+      source: detail.source || 'MigrationEngine',
+      entityType: 'settings',
+      operation: 'update',
+      timestamp: Date.now(),
+      ...detail
+    });
+  }
+
 
   /**
    * 🛡️ THE HOLLY GRILL BATCHING ENGINE
@@ -158,12 +174,8 @@ export class MigrationManager {
       // 🧘 UI BREATHING: Allow UI to update
       await new Promise(resolve => setTimeout(resolve, 10));
       
-      // Dispatch progress event
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-          detail: { source: 'MigrationEngine', origin: 'migration-progress', processed: currentProcessed, total: totalRecords } 
-        }));
-      }
+      // Dispatch progress event via platform
+      this.dispatchVaultUpdate({ origin: 'migration-progress', processed: currentProcessed, total: totalRecords });
     }
   }
 
@@ -211,11 +223,7 @@ export class MigrationManager {
       
       await new Promise(resolve => setTimeout(resolve, 10));
       
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-          detail: { source: 'MigrationEngine', origin: 'migration-progress', processed: currentProcessed, total: totalRecords } 
-        }));
-      }
+      this.dispatchVaultUpdate({ origin: 'migration-progress', processed: currentProcessed, total: totalRecords });
     }
   }
 
@@ -264,11 +272,7 @@ export class MigrationManager {
       
       await new Promise(resolve => setTimeout(resolve, 10));
       
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-          detail: { source: 'MigrationEngine', origin: 'migration-progress', processed: currentProcessed, total: totalRecords } 
-        }));
-      }
+      this.dispatchVaultUpdate({ origin: 'migration-progress', processed: currentProcessed, total: totalRecords });
     }
   }
 
@@ -276,36 +280,24 @@ export class MigrationManager {
    * 🍎 APPLETOAST PROGRESS DISPLAY
    */
   private showMigrationProgress(processed: number, total: number): void {
-    if (typeof window !== 'undefined') {
-      // Create custom migration toast
-      const toastEvent = new CustomEvent('show-toast', {
-        detail: {
-          type: 'migration',
-          title: 'Holly Grill System Update',
-          message: `Processing ${processed}/${total} records... Do not reload.`,
-          duration: 0, // Persistent until completion
-          progress: Math.round((processed / total) * 100)
-        }
-      });
-      window.dispatchEvent(toastEvent);
-    }
+    this.platform.events.dispatch('show-toast', {
+      type: 'info',
+      message: `Processing ${processed}/${total} records... Do not reload.`,
+      duration: 0,
+      timestamp: Date.now()
+    });
   }
 
   /**
    * 🎉 SUCCESS TOAST
    */
   private showMigrationSuccess(): void {
-    if (typeof window !== 'undefined') {
-      const successEvent = new CustomEvent('show-toast', {
-        detail: {
-          type: 'success',
-          title: 'System Optimization Complete',
-          message: 'Your data has been successfully upgraded to the latest version.',
-          duration: 3000
-        }
-      });
-      window.dispatchEvent(successEvent);
-    }
+    this.platform.events.dispatch('show-toast', {
+      type: 'success',
+      message: 'Migration complete! System optimized.',
+      duration: 3000,
+      timestamp: Date.now()
+    });
   }
 
   /**
@@ -325,11 +317,11 @@ export class MigrationManager {
       // ATOMIC BACKUP: Pre-migration safety net
       try {
         const backup = await db.export();
-        localStorage.setItem('vault_db_backup_v33', JSON.stringify(backup));
+        const platform = getPlatform();
+        platform.storage.setItem('vault_db_backup_v33', JSON.stringify(backup));
         console.log('[MIGRATION] Pre-migration backup secured.');
       } catch (backupError) {
         console.error('[MIGRATION] Backup failed, proceeding with caution:', backupError);
-        // Continue with migration but log the risk
       }
 
       // Legacy Legacy Fixes (V1-V5)
@@ -344,12 +336,8 @@ export class MigrationManager {
       // Finalize versioning
       this.setVersion(CURRENT_DB_VERSION);
       
-      // Notify UI
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('vault-updated', { 
-            detail: { source: 'MigrationEngine', origin: 'schema-upgrade' } 
-        }));
-      }
+      // Notify UI via platform
+      this.dispatchVaultUpdate({ origin: 'schema-upgrade' });
 
       console.log(`[MIGRATION] System optimized to Holly Grill V${CURRENT_DB_VERSION}`);
       console.groupEnd();
@@ -385,16 +373,17 @@ export class MigrationManager {
   // --- 📊 VERSIONING ENGINE ---
 
   private getCurrentVersion(): number {
-    const stored = localStorage.getItem(this.VERSION_KEY);
-    return stored ? parseInt(stored, 10) : 0;
+    const platform = getPlatform();
+    const result = platform.storage.getItem(this.VERSION_KEY);
+    return result.success && result.value ? parseInt(result.value, 10) : 0;
   }
 
   private setVersion(version: number): void {
-    localStorage.setItem(this.VERSION_KEY, version.toString());
+    getPlatform().storage.setItem(this.VERSION_KEY, version.toString());
   }
 
   public resetMigrations(): void {
-    localStorage.removeItem(this.VERSION_KEY);
+    getPlatform().storage.removeItem(this.VERSION_KEY);
     console.log('🔄 [MIGRATION] Factory Reset triggered. Reloading...');
   }
 }

@@ -10,10 +10,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
 import { HubHeader } from '@/components/Layout/HubHeader';
-import { StatsGrid } from '@/components/UI/StatsGrid';
+import { StatsGrid } from '@/components/Sovereign/Shared/StatsGrid';
 import { useModal } from '@/context/ModalContext';
 import { getVaultStore } from '@/lib/vault/store/storeHelper';
 import { cn, toBn } from '@/lib/utils/helpers';
+import { getPlatform } from '@/lib/platform';
 
 // Unified UI Components
 import { TimelineFeed } from './TimelineFeed';
@@ -91,7 +92,7 @@ export const TimelineSection = ({ currentUser }: any) => {
         // ক. ফিল্টারিং
         let filtered = entries.filter((e: any) => {
             const matchesSearch = (e.title || "").toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesType = filterType === 'all' || e.type.toLowerCase() === filterType.toLowerCase();
+            const matchesType = filterType === 'all' || e.type?.toLowerCase() === filterType.toLowerCase();
             return matchesSearch && matchesType;
         });
 
@@ -132,7 +133,7 @@ export const TimelineSection = ({ currentUser }: any) => {
         setTimeout(() => {
             setCurrentPage(newPage);
             setIsSwitchingPage(false);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            getPlatform().navigation.scrollTo({ top: 0, behavior: 'smooth' });
         }, 300);
     };
 

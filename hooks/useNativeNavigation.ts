@@ -3,10 +3,12 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useModal } from '@/context/ModalContext';
 import { getVaultStore } from '@/lib/vault/store/storeHelper';
+import { getPlatform } from '@/lib/platform';
 
 /**
- * VAULT PRO: NATIVE NAVIGATION STACK (V12.1)
+ * VAULT PRO: NATIVE NAVIGATION STACK (V12.1 - PATHOR V2)
  * ------------------------------------------------
+ * 🏛️ SOVEREIGN: Uses platform.navigation abstraction
  * Intercepts browser/mobile back button to provide native app behavior.
  * Priority: Modal > ActiveBook > Default Browser Action
  */
@@ -15,10 +17,10 @@ export const useNativeNavigation = () => {
   const { isOpen, closeModal } = useModal();
   const { activeBook, setActiveBook } = getVaultStore();
   const isProcessingBackRef = useRef(false);
+  const platform = getPlatform();
 
   // 🎯 HANDLE BACK PRESS WITH PRIORITY LOGIC
   const handleBackPress = useCallback(() => {
-    // Prevent multiple simultaneous back actions
     if (isProcessingBackRef.current) {
       console.log('🚫 [NATIVE NAV] Back action already processing, ignoring');
       return;
@@ -43,43 +45,31 @@ export const useNativeNavigation = () => {
 
       // Priority 3: Let browser handle default back action
       console.log('🔙 [NATIVE NAV] No modal or active book, letting browser handle back action');
-      // No prevention - let browser exit or navigate naturally
     } finally {
-      // Reset processing flag after a short delay
       setTimeout(() => {
         isProcessingBackRef.current = false;
       }, 100);
     }
   }, [isOpen, closeModal, activeBook, setActiveBook]);
 
-  // 🎯 POPSTATE EVENT LISTENER
+  // 🎯 POPSTATE EVENT LISTENER - Using platform.lifecycle
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      console.log('🔙 [NATIVE NAV] Popstate event detected:', event.state);
-      
-      // Prevent default behavior and handle our custom logic
-      event.preventDefault();
+    const cleanup = platform.lifecycle.onPopState((state) => {
+      console.log('🔙 [NATIVE NAV] Popstate event detected:', state);
       handleBackPress();
-    };
+    });
 
-    // Add popstate listener
-    window.addEventListener('popstate', handlePopState);
+    return cleanup;
+  }, [handleBackPress, platform]);
 
-    // Cleanup
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [handleBackPress]);
-
-  // 🎯 PUSH STATE ON NAVIGATION CHANGES
+  // 🎯 PUSH STATE ON NAVIGATION CHANGES - Using platform.navigation
   useEffect(() => {
-    // Push state when activeBook changes
     if (activeBook) {
       const bookId = activeBook._id || activeBook.localId;
       const bookName = activeBook.name || 'Unknown Book';
       
       console.log('📍 [NATIVE NAV] Pushing book state to history:', bookName);
-      window.history.pushState(
+      platform.navigation.pushState(
         { 
           type: 'book-view',
           bookId,
@@ -90,9 +80,8 @@ export const useNativeNavigation = () => {
         `#book-${bookId}`
       );
     } else {
-      // Push dashboard state when no active book
       console.log('📍 [NATIVE NAV] Pushing dashboard state to history');
-      window.history.pushState(
+      platform.navigation.pushState(
         { 
           type: 'dashboard-view',
           timestamp: Date.now()
@@ -101,13 +90,13 @@ export const useNativeNavigation = () => {
         '#dashboard'
       );
     }
-  }, [activeBook]);
+  }, [activeBook, platform]);
 
   // 🎯 PUSH STATE ON MODAL CHANGES
   useEffect(() => {
     if (isOpen) {
       console.log('📍 [NATIVE NAV] Pushing modal state to history');
-      window.history.pushState(
+      platform.navigation.pushState(
         { 
           type: 'modal-view',
           timestamp: Date.now()
@@ -116,27 +105,24 @@ export const useNativeNavigation = () => {
         '#modal'
       );
     }
-  }, [isOpen]);
+  }, [isOpen, platform]);
 
   // 🎯 INITIAL STATE SETUP
   useEffect(() => {
-    // Set initial state on mount
-    if (typeof window !== 'undefined') {
-      const currentState = window.history.state;
-      
-      if (!currentState || !currentState.type) {
-        console.log('📍 [NATIVE NAV] Setting initial dashboard state');
-        window.history.replaceState(
-          { 
-            type: 'dashboard-view',
-            timestamp: Date.now()
-          }, 
-          'Ledger Hub', 
-          '#dashboard'
-        );
-      }
+    const currentState = platform.navigation.getState();
+    
+    if (!currentState || !currentState.type) {
+      console.log('📍 [NATIVE NAV] Setting initial dashboard state');
+      platform.navigation.replaceState(
+        { 
+          type: 'dashboard-view',
+          timestamp: Date.now()
+        }, 
+        'Ledger Hub', 
+        '#dashboard'
+      );
     }
-  }, []);
+  }, [platform]);
 
   return {
     handleBackPress,

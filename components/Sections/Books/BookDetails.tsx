@@ -4,17 +4,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Inbox, GitCommit, Zap } from 'lucide-react';
 
 // Sub Components
-import { StatsGrid } from '@/components/UI/StatsGrid'; 
+import { StatsGrid } from '@/components/Sovereign/Shared/StatsGrid'; 
 import { TransactionTable } from './TransactionTable';
 import { useVaultState, getVaultStore } from '@/lib/vault/store/storeHelper';
 import { Pagination } from '@/components/UI/Pagination';
 import { DetailsToolbar } from './DetailsToolbar';
 import { MobileFilterSheet } from './MobileFilterSheet';
+import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
 
 // Global UI Components
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDeviceType } from '@/hooks/useDeviceType';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { Tooltip } from '@/components/UI/Tooltip';
+import { groupEntriesByDate } from '@/lib/vault/core/VaultUtils';
 
 // 🚀 MEMOIZED TRANSACTION TABLE FOR PERFORMANCE
 const MemoizedTransactionTable = React.memo(TransactionTable);
@@ -44,12 +47,20 @@ export const BookDetails = ({
     currentUser, bookStats
 }: BookDetailsProps) => {
     const { t, language } = useTranslation();
+    const { saveEntry, deleteEntry } = getVaultStore();
+    const deviceType = useDeviceType();
+    const isMobile = deviceType === 'mobile';
     
     // 🚀 REACTIVE STORE CONNECTION
     const {
         processedEntries, entryPagination, setEntryPage,
         pendingDeletion, isInteractionLocked, activeBook
     } = useVaultState();
+    
+    // Group entries by date for mobile view
+    const groupedEntries = useMemo(() => {
+        return groupEntriesByDate(processedEntries, language);
+    }, [processedEntries, language]);
     
     // 🛡️ IRON GATE: Safety wall
     if (!activeBook) {
@@ -59,6 +70,23 @@ export const BookDetails = ({
     
     const bookId = String(activeBook._id || activeBook.localId);
     const currencySymbol = activeBook?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
+    
+    // Mobile handlers using store for Total Recall sync
+    const handleMobileEdit = (entry: any) => {
+        if (onEdit) {
+            onEdit(entry);
+        }
+    };
+    
+    const handleMobileDelete = (entry: any) => {
+        deleteEntry(entry);
+    };
+    
+    const handleMobileToggleStatus = (entry: any) => {
+        if (onToggleStatus) {
+            onToggleStatus(entry);
+        }
+    };
     
     // 🗑️ FADE-OUT LOGIC FOR DELETION
     const isThisBookBeingDeleted = pendingDeletion?.bookId === bookId;
@@ -114,14 +142,29 @@ export const BookDetails = ({
                         "relative  overflow-hidden duration-500"
                     )}>
                         
-                        {/* Table View (Unified State) */}
-                        <MemoizedTransactionTable 
-                            items={processedEntries}
-                            onEdit={onEdit}
-                            onDelete={onDelete}
-                            onToggleStatus={onToggleStatus}
-                            currencySymbol={currencySymbol}
-                        />
+                        {/* Mobile View: Swipe Cards with Date Grouping */}
+                        {isMobile && (
+                            <MobileLedgerCards
+                                groupedEntries={groupedEntries}
+                                isGrouped={true}
+                                onEdit={handleMobileEdit}
+                                onDelete={handleMobileDelete}
+                                onToggleStatus={handleMobileToggleStatus}
+                                currencySymbol={currencySymbol}
+                                deleteEntry={deleteEntry}
+                            />
+                        )}
+                        
+                        {/* Desktop View: Original Table (UNCHANGED) */}
+                        {!isMobile && (
+                            <MemoizedTransactionTable 
+                                items={processedEntries}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                                onToggleStatus={onToggleStatus}
+                                currencySymbol={currencySymbol}
+                            />
+                        )}
                         
                         {/* Empty State Overlay */}
                         <AnimatePresence>
