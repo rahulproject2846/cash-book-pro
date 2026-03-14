@@ -15,6 +15,8 @@ import { getVaultStore } from '../store/storeHelper';
 
 import type { HydrationResult } from './engine/types';
 
+import { getPlatform } from '@/lib/platform';
+
 
 
 /**
@@ -723,18 +725,19 @@ export class HydrationController {
 
         // 🆕 DISPATCH GLOBAL UPDATE EVENT
         // 🚨 DUPLICATE EVENT GUARD: Skip if already in progress
-        if (typeof window !== 'undefined' && !this.isMutationInProgress) {
+        if (!this.isMutationInProgress) {
           this.isMutationInProgress = true;
           // 🚨 SYNC TSUNAMI GUARD: Extract CID from first record for targeted sync
           const changedCid = records[0]?.cid || null;
           
-          window.dispatchEvent(new CustomEvent('vault-updated', { 
-            detail: { 
-              source: 'HydrationController', 
-              origin: 'local-mutation',
-              changedCid // 🚨 SYNC TSUNAMI GUARD: Pass specific CID
-            } 
-          }));
+          getPlatform().events.dispatch('vault-updated', {
+            source: 'HydrationController',
+            origin: 'local-mutation',
+            entityType: type === 'BOOK' ? 'book' : 'entry',
+            changedCid: changedCid,
+            operation: 'update',
+            timestamp: Date.now()
+          });
           // 🚨 RESET GUARD: Allow next event after debounce completes
           setTimeout(() => { this.isMutationInProgress = false; }, 800);
         }
@@ -855,15 +858,27 @@ export class HydrationController {
 
         // 🚨 SINGLE EVENT: Fire vault-updated ONLY ONCE for entire batch
         // 🚨 DUPLICATE EVENT GUARD: Skip if already in progress
-        if (typeof window !== 'undefined' && !this.isMutationInProgress) {
+        if (!this.isMutationInProgress) {
 
           this.isMutationInProgress = true;
 
-          window.dispatchEvent(new CustomEvent('vault-updated', { 
+          // 🎯 SMART CID EXTRACTION: CONTAINER-FIRST PROTOCOL
+          // Find BOOK operation first - it's the parent container
+          // Only fall back to ENTRY if no BOOK exists
+          const bookOperation = operations.find(op => op.type === 'BOOK');
+          const changedCid = bookOperation?.records[0]?.cid 
+            || operations[0]?.records[0]?.cid 
+            || null;
+          const batchTypes = operations.map(op => op.type === 'BOOK' ? 'book' : 'entry').join('+');
 
-            detail: { source: 'HydrationController', origin: 'batch-mutation' } 
-
-          }));
+          getPlatform().events.dispatch('vault-updated', {
+            source: 'HydrationController',
+            origin: 'batch-mutation',
+            entityType: batchTypes as any,
+            changedCid: changedCid,
+            operation: 'update',
+            timestamp: Date.now()
+          });
 
           // 🚨 RESET GUARD: Allow next event after debounce completes
           setTimeout(() => { this.isMutationInProgress = false; }, 800);

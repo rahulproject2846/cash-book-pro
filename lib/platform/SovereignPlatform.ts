@@ -11,6 +11,8 @@
  *   const platform = getPlatform();
  *   platform.storage.setItem('key', 'value');
  *   platform.events.dispatch('vault-updated', { timestamp: Date.now() });
+ *   platform.navigation.to('/path');
+ *   platform.navigation.pushState({ page: 'home' });
  */
 
 // ===== TYPE DEFINITIONS =====
@@ -50,6 +52,8 @@ export interface VaultUpdatedDetail extends PlatformEventDetail {
   entityType: 'book' | 'entry' | 'user' | 'settings';
   entityId?: string;
   operation: 'create' | 'update' | 'delete';
+  origin?: 'local-mutation' | 'batch-mutation';
+  changedCid?: string | null;
 }
 
 /**
@@ -81,6 +85,7 @@ export type PlatformEventMap = {
   'show-toast': ShowToastDetail;
   'open-conflict-modal': PlatformEventDetail;
   'open-bulk-conflict-modal': PlatformEventDetail;
+  'platform-viewport-change': PlatformEventDetail;
 };
 
 /**
@@ -121,6 +126,49 @@ export interface StorageInterface {
 }
 
 /**
+ * Navigation state for history management
+ */
+export interface NavigationState {
+  page?: string;
+  section?: string;
+  bookId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Navigation interface - abstract window.location and window.history
+ */
+export interface NavigationInterface {
+  to(path: string): void;
+  pushState(state: NavigationState, title?: string, url?: string): void;
+  replaceState(state: NavigationState, title?: string, url?: string): void;
+  getState(): NavigationState | null;
+  reload(): void;
+  getHref(): string;
+  getPathname(): string;
+  scrollTo(options?: { top?: number; behavior?: 'auto' | 'smooth' }): void;
+}
+
+/**
+ * Lifecycle event types
+ */
+export type LifecycleEventType = 'online' | 'offline' | 'focus' | 'blur' | 'beforeunload' | 'popstate';
+
+/**
+ * Lifecycle interface - abstract window event listeners
+ */
+export interface LifecycleInterface {
+  onOnline(handler: () => void): () => void;
+  onOffline(handler: () => void): () => void;
+  onFocus(handler: () => void): () => void;
+  onBlur(handler: () => void): () => void;
+  onBeforeUnload(handler: () => void): () => void;
+  onPopState(handler: (state: NavigationState) => void): () => void;
+  lockScroll(): void;
+  unlockScroll(): void;
+}
+
+/**
  * Events interface - abstract window.dispatchEvent
  */
 export interface EventsInterface {
@@ -146,6 +194,8 @@ export interface EventsInterface {
 export interface SovereignPlatform {
   readonly storage: StorageInterface;
   readonly events: EventsInterface;
+  readonly navigation: NavigationInterface;
+  readonly lifecycle: LifecycleInterface;
   readonly info: PlatformInfo;
   
   // Convenience methods

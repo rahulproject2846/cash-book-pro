@@ -295,15 +295,17 @@ export class FinanceService {
       const { HydrationController } = await import('../hydration/HydrationController');
       const controller = HydrationController.getInstance();
       
-      // 🎯 STEP B: CONSTRUCT ATOMIC OPERATIONS
-      const atomicOperations: Array<{ type: 'ENTRY' | 'BOOK'; records: any[] }> = [
-        { type: 'ENTRY' as const, records: [normalized] }
-      ];
+      // 🎯 STEP B: CONSTRUCT ATOMIC OPERATIONS - CONTAINER-FIRST PROTOCOL
+      // Book must be FIRST - it's the parent container for entries
+      const atomicOperations: Array<{ type: 'ENTRY' | 'BOOK'; records: any[] }> = [];
       
-      // Add Book signal if available
+      // Add Book signal FIRST if available
       if (bookSignalPayload) {
         atomicOperations.push({ type: 'BOOK' as const, records: [bookSignalPayload] });
       }
+      
+      // Add Entry second - depends on Book being synced first
+      atomicOperations.push({ type: 'ENTRY' as const, records: [normalized] });
       
       // 🎯 STEP C: ATOMIC BATCH EXECUTION
       const batchResult = await controller.ingestBatchMutation(atomicOperations);

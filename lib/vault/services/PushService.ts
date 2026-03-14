@@ -18,6 +18,8 @@ import { LicenseVault, RiskManager } from '../security';
 
 import { SecureApiClient } from '../utils/SecureApiClient';
 
+import { getPlatform } from '@/lib/platform';
+
 import { SyncGuard } from '../guards/SyncGuard';
 
 
@@ -755,10 +757,32 @@ export class PushService {
             unsyncedBooks = [targetBook];
           }
           
-          // Also check for entries with this bookId
-          const targetEntries = await db.entries.where('bookId').equals(changedCid)
-            .and((entry: any) => entry.synced === 0 && entry.userId === currentSovereignId)
+          // 🎯 SMART TARGETED RETRIEVAL: Use Triple-Link to find entries
+          // changedCid is the book's CID, but entry.bookId may be localId (Number), _id (String), or cid (String)
+          const allUnsyncedEntries = await db.entries
+            .where('synced').equals(0)
+            .and((entry: any) => entry.userId === currentSovereignId)
             .toArray();
+          
+          // Filter entries using Triple-Link: match by localId, _id, OR cid
+          const targetEntries = allUnsyncedEntries.filter((entry: any) => {
+            const entryBookId = entry.bookId;
+            if (!entryBookId) return false;
+            
+            // Check if bookId matches changedCid directly (String comparison)
+            if (String(entryBookId) === String(changedCid)) return true;
+            
+            // Check if entry's bookId matches the target book's localId (Number)
+            if (targetBook && Number(entryBookId) === targetBook.localId) return true;
+            
+            // Check if entry's bookId matches the target book's server _id (String)
+            if (targetBook && targetBook._id && String(entryBookId) === String(targetBook._id)) return true;
+            
+            // Check if entry's bookId matches the target book's cid
+            if (targetBook && targetBook.cid && String(entryBookId) === String(targetBook.cid)) return true;
+            
+            return false;
+          });
           unsyncedEntries = targetEntries;
           
           console.log(`🎯 [TARGETED SYNC] Found ${unsyncedBooks.length} book and ${unsyncedEntries.length} entries for CID ${changedCid}`);
@@ -1167,8 +1191,8 @@ export class PushService {
 
       const safeEntries = pendingEntries.filter((entry: any) => !conflictedBookCids.has(entry.bookId));
 
-      // 🛡️ PARENT CHECK: Filter out entries whose parent book doesn't have server _id yet
-      // 🎯 TRIPLE-LINK: Use localId, _id, or cid to find parent book
+      // 🛡️ PARENT CHECK: Allow entries to push even if parent book hasn't synced yet
+      // Server handles the case where parent book doesn't exist (will create or link)
       const parentCheckResults = await Promise.all(
         safeEntries.map(async (entry: any) => {
           const bookId = entry.bookId;
@@ -1186,9 +1210,11 @@ export class PushService {
             parentBook = await db.books.where('cid').equals(bookId).first();
           }
           
+          // 🎯 FIX: Allow entry push even if parent has no server ID yet
+          // The server will handle linking (either parent exists or gets created)
           return {
             entry,
-            hasValidParent: parentBook && parentBook._id && parentBook._id.length > 0
+            hasValidParent: parentBook !== undefined // Parent exists in Dexie is sufficient
           };
         })
       );
@@ -1202,10 +1228,10 @@ export class PushService {
         .map(result => result.entry.cid);
 
       if (skippedEntries.length > 0) {
-        console.warn(`🛡️ [PUSH GUARD] Skipping ${skippedEntries.length} entries - Parent book is not yet synced on server`);
+        console.warn(`🛡️ [PUSH GUARD] Skipping ${skippedEntries.length} entries - Parent book missing from Dexie`);
       }
 
-      console.log('🚀 [BATCH PUSH SERVICE] Safe entries to push:', entriesWithSyncedParents.length, 'conflicted entries blocked:', pendingEntries.length - safeEntries.length, 'parent not synced:', skippedEntries.length);
+      console.log('🚀 [BATCH PUSH SERVICE] Safe entries to push:', entriesWithSyncedParents.length, 'conflicted entries blocked:', pendingEntries.length - safeEntries.length);
 
       // 🎯 SMART BATCHING: Create intelligent batches based on payload size
       const batches = this.batchProcessor.createSmartBatches(entriesWithSyncedParents);
@@ -1482,7 +1508,7 @@ export class PushService {
           _id: book._id,
           cid: book.cid,
           userId: sovereignUserId,
-          vKey: Number(book.vKey),
+          vKey: Number(book.vKey) || 1,
           updatedAt: Number(book.updatedAt),
           cachedBalance: Number(book.cachedBalance || 0)
         };
@@ -1529,8 +1555,12 @@ export class PushService {
 
         // 🎯 ATOMIC vKey GUARD: Verify server echo back client's vKey
         const clientVKey = sData.clientVKey;
+        const localVKey = Number(book.vKey) || 1;
         if (clientVKey !== undefined && clientVKey !== book.vKey) {
-          console.warn('⚠️ [ATOMIC GUARD] Server vKey mismatch! Client:', book.vKey, 'Server echoed:', clientVKey);
+          console.warn('⚠️ [ATOMIC GUARD] Server vKey mismatch! Client:', localVKey, 'Server echoed:', clientVKey);
+        } else if (clientVKey === undefined) {
+          // Server doesn't echo vKey - show local vKey that was sent
+          console.log('🔒 [ATOMIC GUARD] vKey sent:', localVKey, '(server did not echo)');
         } else {
           console.log('🔒 [ATOMIC GUARD] vKey verified:', clientVKey);
         }
@@ -1589,24 +1619,36 @@ export class PushService {
           } catch (e) {
             console.warn(`⚠️ [UI MATRIX] Failed to update sync icon:`, e);
           }
-
           
-
-          // 🆕 CASCADE ID UPDATE: Update all entries to reference new server ID
-
-          const updatedEntries = await db.entries
-
+          // 🆕 CASCADE ID UPDATE: Update all entries to reference new server ID using Triple-Link
+          // Match by localId (Number), _id (String), OR cid (String)
+          let cascadeCount = 0;
+          
+          // Try updating by localId (Number)
+          const byLocalId = await db.entries
             .where('bookId')
-
-            .equals(String(book.localId))
-
+            .equals(Number(book.localId))
             .modify({ bookId: String(serverId) });
-
+          cascadeCount += byLocalId;
           
+          // Try updating by _id (String) - only if book._id exists
+          if (book._id) {
+            const byServerId = await db.entries
+              .where('bookId')
+              .equals(String(book._id))
+              .modify({ bookId: String(serverId) });
+            cascadeCount += byServerId;
+          }
+          
+          // Try updating by cid (String)
+          const byCid = await db.entries
+            .where('bookId')
+            .equals(String(book.cid))
+            .modify({ bookId: String(serverId) });
+          cascadeCount += byCid;
 
           console.log(`✅ [PUSH SERVICE] Book ${book.cid} marked as synced (ID: ${serverId})`);
-
-          console.log(`🔗 [CASCADE] Updated ${updatedEntries} entries to reference server ID: ${serverId}`);
+          console.log(`🔗 [CASCADE] Re-linked ${cascadeCount} entries to server ID: ${serverId}`);
 
           
 
@@ -1810,7 +1852,7 @@ export class PushService {
 
         userId: this.userId,
 
-        vKey: entry.vKey,
+        vKey: Number(entry.vKey) || 1,
 
       };
 
@@ -2128,11 +2170,12 @@ export class PushService {
 
         await db.entries.update(Number(localId), restoredEntry);
 
-        window.dispatchEvent(new CustomEvent('entry-restored-from-cache', {
-
-          detail: { localId, restoredEntry, cacheAge }
-
-        }));
+        getPlatform().events.dispatch('vault-updated', {
+          source: 'PushService',
+          entityType: 'entry',
+          operation: 'update',
+          timestamp: Date.now()
+        });
 
       }
 

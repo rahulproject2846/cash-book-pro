@@ -9,6 +9,8 @@
  * - Liskov Substitution: Services are interchangeable
  * - Interface Segregation: Focused interfaces
  * - Dependency Inversion: Depends on abstractions
+ * 
+ * 🏛️ PATHOR STANDARD: Uses SovereignPlatform abstraction for 100% platform-agnostic operation
  */
 
 import { ModeController } from '../../system/ModeController';
@@ -23,6 +25,8 @@ import { PullService } from '../services/PullService';
 import { RiskManager, LicenseVault } from '../security';
 import { getVaultStore } from '../store/storeHelper';
 import { SyncGuard } from '../guards/SyncGuard';
+import { getPlatform } from '@/lib/platform';
+import type { SovereignPlatform, VaultUpdatedDetail } from '@/lib/platform';
 
 /**
  * 🚀 REFACTORED SYNC ORCHESTRATOR - Clean Architecture Implementation
@@ -41,6 +45,10 @@ export class SyncOrchestratorRefactored {
   private lastRefreshTime: number = 0;
   private syncDebounceTimeout: NodeJS.Timeout | null = null;
   private pendingSyncOperations: Array<{ timestamp: number; source: string; changedCid?: string }> = [];
+  
+  // 🏛️ SOVEREIGN PLATFORM: Platform-agnostic abstraction
+  private platform: SovereignPlatform;
+  private platformCleanup: (() => void) | null = null;
 
   private syncServiceIdentities(userId: string): void {
     this.pushService?.setUserId(userId);
@@ -76,6 +84,9 @@ export class SyncOrchestratorRefactored {
   }
 
   constructor() {
+    // 🏛️ INITIALIZE SOVEREIGN PLATFORM: Platform-agnostic abstraction
+    this.platform = getPlatform();
+    
     this.hydrationController = HydrationController.getInstance();
     this.integrityService = new IntegrityService();
     this.maintenanceService = new MaintenanceService();
@@ -87,62 +98,61 @@ export class SyncOrchestratorRefactored {
 
     console.log('🔄 [ORCHESTRATOR] Initialized with immediate service creation');
 
-    // 🆕 REACTIVE SYNC: Listen for vault-updated events
-    if (typeof window !== 'undefined') {
-      window.addEventListener('vault-updated', (event: any) => {
-        const source = event.detail?.source || 'unknown';
-        const origin = event.detail?.origin || 'unknown';
-        const changedCid = event.detail?.changedCid || null;
+    // 🆕 REACTIVE SYNC: Listen for vault-updated events via SovereignPlatform
+    const cleanup = this.platform.events.listen('vault-updated', (detail: VaultUpdatedDetail) => {
+      const source = detail.source || 'unknown';
+      const origin = (detail as any).origin || 'unknown';
+      const changedCid = (detail as any).changedCid || null;
 
-        // 🛡️ IGNORE BACKGROUND SYNC: Only trigger for local user actions
-        if ((origin === 'local-mutation' || origin === 'batch-mutation') && source === 'HydrationController') {
-          // 🆕 PREVENT REFRESH SPAM: Only allow refreshBooks once per second
-          const now = Date.now();
-          if (now - this.lastRefreshTime < 1000) {
-            console.log('🛡️ [ORCHESTRATOR] RefreshBooks spam prevented, skipping');
-            return;
-          }
-          this.lastRefreshTime = now;
+      // 🛡️ IGNORE BACKGROUND SYNC: Only trigger for local user actions
+      if ((origin === 'local-mutation' || origin === 'batch-mutation' || !origin || origin === 'unknown') && source === 'HydrationController') {
+        console.log('🔄 [ORCHESTRATOR] Condition Met → Awakening Sync Engine...');
+        // 🆕 PREVENT REFRESH SPAM: Only allow refreshBooks once per second
+        const now = Date.now();
+        if (now - this.lastRefreshTime < 1000) {
+          console.log('🛡️ [ORCHESTRATOR] RefreshBooks spam prevented, skipping');
+          return;
+        }
+        this.lastRefreshTime = now;
 
-          console.log('📡 [ORCHESTRATOR] Vault update detected, queuing for debounced sync', { changedCid });
+        console.log('📡 [ORCHESTRATOR] Vault update detected, queuing for debounced sync', { changedCid });
 
-          // 🎯 ADD TO PENDING QUEUE: Track operation
+        // 🎯 ADD TO PENDING QUEUE: Track operation
+        this.pendingSyncOperations.push({ 
+          timestamp: Date.now(), 
+          source: 'batch-mutation',
+          changedCid
+        });
+
+        // DEBOUNCE: Clear existing timeout and set new 500ms delay
+        if (this.syncDebounceTimeout) {
+          clearTimeout(this.syncDebounceTimeout);
+        }
+
+        // 🚨 STORM SUPPRESSION: Check if push is already in-flight before scheduling
+        if (this.pushService?.isSyncing) {
+          console.log('🛡️ [ORCHESTRATOR] Push already in-flight, queueing for later');
           this.pendingSyncOperations.push({ 
             timestamp: Date.now(), 
-            source: 'batch-mutation',
-            changedCid // 🚨 SYNC TSUNAMI GUARD: Track specific CID
+            source: 'batch-mutation-queued',
+            changedCid 
           });
-
-          // DEBOUNCE: Clear existing timeout and set new 500ms delay
-          if (this.syncDebounceTimeout) {
-            clearTimeout(this.syncDebounceTimeout);
-          }
-
-          // 🚨 STORM SUPPRESSION: Check if push is already in-flight before scheduling
-          if (this.pushService?.isSyncing) {
-            console.log('🛡️ [ORCHESTRATOR] Push already in-flight, queueing for later');
-            // Queue the operation but don't trigger immediate push
-            this.pendingSyncOperations.push({ 
-              timestamp: Date.now(), 
-              source: 'batch-mutation-queued',
-              changedCid 
-            });
-            return;
-          }
-
-          this.syncDebounceTimeout = setTimeout(() => {
-            console.log(`[ORCHESTRATOR] Local mutation detected. Triggering PUSH only.`);
-            this.pendingSyncOperations = []; 
-            // 🚨 REMOVE OPTIONAL CHAINING: Services must exist
-            if (this.pushService) {
-              this.pushService.pushPendingData(changedCid);
-            } else {
-              console.error('🚨 [ORCHESTRATOR_FATAL] PushService object is missing during event dispatch!');
-            }
-          }, 800);
+          return;
         }
-      });
-    }
+
+        this.syncDebounceTimeout = setTimeout(() => {
+          console.log(`[ORCHESTRATOR] Local mutation detected. Triggering PUSH only.`);
+          this.pendingSyncOperations = []; 
+          if (this.pushService) {
+            this.pushService.pushPendingData(changedCid);
+          } else {
+            console.error('🚨 [ORCHESTRATOR_FATAL] PushService object is missing during event dispatch!');
+          }
+        }, 800);
+      }
+    });
+    
+    this.platformCleanup = cleanup;
   }
 
   /**
@@ -163,8 +173,9 @@ export class SyncOrchestratorRefactored {
    * 🚀 GATE-BASED INITIALIZATION - Sequential Chain of Command
    */
   private async performGateBasedInitialization(userId?: string): Promise<void> {
-    // 🚨 LOGIN PAGE GUARD: Prevent background sync during login
-    if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+    // 🚨 LOGIN PAGE GUARD: Prevent background sync during login using platform abstraction
+    const platformInfo = this.platform.info;
+    if (platformInfo && (platformInfo as any).pathname === '/login') {
       console.log('🚨 [ORCHESTRATOR] Login page detected - preventing background services');
       return;
     }
@@ -292,18 +303,13 @@ export class SyncOrchestratorRefactored {
             store.setBootStatus('READY'); // Allow boot to continue
             store.setSecurityErrorMessage('Security Key Missing - Running in local mode only');
             
-            // Show specialized toast
-            if (typeof window !== 'undefined') {
-              const toastEvent = new CustomEvent('show-toast', {
-                detail: {
-                  type: 'warning',
-                  title: 'Security Key Missing',
-                  message: 'Running in local mode only. Set VAULT_CLIENT_SECRET for full functionality.',
-                  duration: 5000
-                }
-              });
-              window.dispatchEvent(toastEvent);
-            }
+            // Show specialized toast via SovereignPlatform
+            this.platform.events.dispatch('show-toast', {
+              type: 'warning',
+              message: 'Security Key Missing - Running in local mode only. Set VAULT_CLIENT_SECRET for full functionality.',
+              duration: 5000,
+              timestamp: Date.now()
+            });
             return; // Continue boot without lockdown
           }
           
@@ -579,28 +585,25 @@ export class SyncOrchestratorRefactored {
   }
 
   /**
-   * 📡 NOTIFY UI - Origin-aware event dispatching
+   * 📡 NOTIFY UI - Origin-aware event dispatching via SovereignPlatform
    */
   private notifyUI(origin?: string): void {
-    if (typeof window !== 'undefined') {
-      // ✅ DISPATCH WITH tabId TO PREVENT SELF-LOOP
-      window.dispatchEvent(new CustomEvent('vault-updated', { 
-        detail: { 
-          source: origin || 'SyncOrchestrator',
-          origin: origin || 'SyncOrchestrator',
-          tabId: this.tabId
-        } 
-      }));
-      
-      // Only broadcast to other tabs if not self-originated
-      if (origin !== 'UI_REFRESH') {
-        this.getChannel().postMessage({ 
-          type: 'FORCE_REFRESH',
-          source: 'SyncOrchestrator',
-          origin: origin || 'SyncOrchestrator',
-          sourceTabId: this.tabId
-        });
-      }
+    // ✅ DISPATCH VIA PLATFORM to prevent self-loop
+    this.platform.events.dispatch('vault-updated', {
+      source: origin || 'SyncOrchestrator',
+      entityType: 'settings',
+      operation: 'update',
+      timestamp: Date.now()
+    });
+    
+    // Only broadcast to other tabs if not self-originated
+    if (origin !== 'UI_REFRESH') {
+      this.getChannel().postMessage({ 
+        type: 'FORCE_REFRESH',
+        source: 'SyncOrchestrator',
+        origin: origin || 'SyncOrchestrator',
+        sourceTabId: this.tabId
+      });
     }
   }
 
@@ -616,6 +619,12 @@ export class SyncOrchestratorRefactored {
     
     // Clear pending operations
     this.pendingSyncOperations = [];
+    
+    // Clean up platform event listener
+    if (this.platformCleanup) {
+      this.platformCleanup();
+      this.platformCleanup = null;
+    }
     
     // Close broadcast channel
     if (this.channel) {
