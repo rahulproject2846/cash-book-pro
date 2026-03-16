@@ -86,7 +86,7 @@ const BooksList = ({
 
         >
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-10 mt-2 px-5 md:mt-6 md:px-8 lg:px-10">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-10">
 
                 <AnimatePresence>
 

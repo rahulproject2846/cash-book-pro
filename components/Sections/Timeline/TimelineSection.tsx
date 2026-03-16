@@ -9,7 +9,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
-import { HubHeader } from '@/components/Layout/HubHeader';
 import { StatsGrid } from '@/components/Sovereign/Shared/StatsGrid';
 import { useModal } from '@/context/ModalContext';
 import { getVaultStore } from '@/lib/vault/store/storeHelper';
@@ -138,22 +137,7 @@ export const TimelineSection = ({ currentUser }: any) => {
     };
 
     return (
-        <div className="w-full max-w-[1440px] mx-auto pb-40">
-            
-            {/* --- ১. MASTER HUB HEADER (Consistent UI) --- */}
-            <HubHeader 
-                title={t('nav_timeline') || "LIFE LOG"} 
-                subtitle={`${toBn(filteredStats.count, language)} ${t('records_found') || "ENTRIES DISCOVERED"}`}
-                icon={History}
-                searchQuery={searchQuery}
-                onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
-            >
-            </HubHeader>
-
-            <div className={cn(
-                "px-[1.25rem] md:px-8 space-y-10 mt-6 transition-all duration-500",
-                isSwitchingPage && "opacity-20 blur-sm pointer-events-none"
-            )}>
+        <div className="w-full max-w-[1440px] mx-auto pb-40 px-[1.25rem] md:px-8 space-y-10 mt-6">
                 
                 {/* --- ২. DYNAMIC STATS GRID (Replacing TotalStats) --- */}
                 <StatsGrid 
@@ -193,11 +177,10 @@ export const TimelineSection = ({ currentUser }: any) => {
                     {entries.length === 0 && (
                         <div className="py-40 flex flex-col items-center justify-center opacity-20 gap-4 text-[var(--text-muted)]">
                             <Zap size={60} strokeWidth={1} />
-                            <p className="text-[10px] font-black     ">{t('empty_ledger')}</p>
+                            <p className="text-[10px] font-black">{t('empty_ledger')}</p>
                         </div>
                     )}
                 </div>
-            </div>
         </div>
     );
 };

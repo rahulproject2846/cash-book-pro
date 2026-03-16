@@ -32,8 +32,6 @@ import { cn, toBn } from '@/lib/utils/helpers';
 
 // --- 🧩 DOMAIN-DRIVEN COMPONENTS ---
 
-import { HubHeader } from '@/components/Layout/HubHeader';
-
 import { BooksList } from './BooksList';
 
 import { BookDetails } from './BookDetails';
@@ -311,50 +309,6 @@ export const BooksSection = ({ currentUser }: any) => {
                 ) : (
 
                     <motion.div key="content" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={royalGlide as any}>
-
-                        
-
-                        {/* --- 🧠 MASTER HUB HEADER --- */}
-
-                        <AnimatePresence>
-
-                            {!activeBook && (
-
-                                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-
-                                    <HubHeader 
-
-                                        title={t('ledger_hub') || "LEDGER HUB"} 
-
-                                        subtitle={`${toBn(filteredBooks.length, language)} ${t('active_protocols') || "PROTOCOLS ACTIVE"}`}
-
-                                        icon={Layout}
-
-                                        searchQuery={searchQuery}
-
-                                        onSearchChange={setSearchQuery}
-
-                                    >
-
-                                        <Tooltip text={t('tt_import_ledger')}>
-
-                                            <button onClick={() => fileInputRef.current?.click()} className="h-11 w-11 flex items-center justify-center bg-[var(--bg-card)] border border-[var(--border)] rounded-[20px] text-[var(--text-muted)] hover:text-orange-500 transition-all active:scale-90 shadow-sm outline-none">
-
-                                                <FileUp size={20} />
-
-                                            </button>
-
-                                        </Tooltip>
-
-                                    </HubHeader>
-
-                                </motion.div>
-
-                            )}
-
-                        </AnimatePresence>
-
-
 
                         {/* --- 🌩 SYNC WATCHMAN BAR --- */}
 

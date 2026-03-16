@@ -1,23 +1,19 @@
 "use client";
-import React, { useMemo, useEffect, Fragment } from 'react';
+import React, { Fragment, useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Inbox, GitCommit, Zap } from 'lucide-react';
+import { Inbox, GitCommit } from 'lucide-react';
 
 // Sub Components
 import { StatsGrid } from '@/components/Sovereign/Shared/StatsGrid'; 
 import { TransactionTable } from './TransactionTable';
+import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
 import { useVaultState, getVaultStore } from '@/lib/vault/store/storeHelper';
 import { Pagination } from '@/components/UI/Pagination';
-import { DetailsToolbar } from './DetailsToolbar';
-import { MobileFilterSheet } from './MobileFilterSheet';
-import MobileLedgerCards from '@/components/UI/MobileLedgerCards';
 
 // Global UI Components
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDeviceType } from '@/hooks/useDeviceType';
 import { cn, toBn } from '@/lib/utils/helpers';
 import { Tooltip } from '@/components/UI/Tooltip';
-import { groupEntriesByDate } from '@/lib/vault/core/VaultUtils';
 
 // 🚀 MEMOIZED TRANSACTION TABLE FOR PERFORMANCE
 const MemoizedTransactionTable = React.memo(TransactionTable);
@@ -46,10 +42,9 @@ export const BookDetails = ({
     onBack, onEdit, onDelete, onToggleStatus, onTogglePin,
     currentUser, bookStats
 }: BookDetailsProps) => {
+    // 🚀 HOOKS SECTION - ALL HOOKS DECLARED FIRST (Rule of Hooks)
     const { t, language } = useTranslation();
     const { saveEntry, deleteEntry } = getVaultStore();
-    const deviceType = useDeviceType();
-    const isMobile = deviceType === 'mobile';
     
     // 🚀 REACTIVE STORE CONNECTION
     const {
@@ -57,12 +52,38 @@ export const BookDetails = ({
         pendingDeletion, isInteractionLocked, activeBook
     } = useVaultState();
     
-    // Group entries by date for mobile view
-    const groupedEntries = useMemo(() => {
-        return groupEntriesByDate(processedEntries, language);
+    // 📱 MOBILE DETECTION
+    const [isMobile, setIsMobile] = useState(false);
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+    
+    // 📱 MOBILE GROUPING LOGIC (Mirrors TimelineSection) - useMemo after all hooks
+    const ITEMS_PER_PAGE = 10;
+    const { groupedEntries } = useMemo(() => {
+        // Sort by date descending with optional chaining safety
+        const sorted = [...(processedEntries || [])].sort((a: any, b: any) => 
+            new Date(b?.date || 0).getTime() - new Date(a?.date || 0).getTime()
+        );
+        
+        // Group by date with optional chaining safety
+        const groupedData: { [key: string]: any[] } = {};
+        sorted.forEach((entry: any) => {
+            if (!entry?.date) return; // Skip entries without valid date
+            const dateStr = new Date(entry.date).toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-GB', { 
+                day: '2-digit', month: 'short', year: 'numeric' 
+            });
+            if (!groupedData[dateStr]) groupedData[dateStr] = [];
+            groupedData[dateStr].push(entry);
+        });
+        
+        return { groupedEntries: groupedData };
     }, [processedEntries, language]);
     
-    // 🛡️ IRON GATE: Safety wall
+    // 🛡️ IRON GATE: Safety wall - AFTER ALL HOOKS
     if (!activeBook) {
       console.log('🛡️ [IRON GATE] No active book, preventing render');
       return null; 
@@ -70,23 +91,6 @@ export const BookDetails = ({
     
     const bookId = String(activeBook._id || activeBook.localId);
     const currencySymbol = activeBook?.currency?.match(/\(([^)]+)\)/)?.[1] || "৳";
-    
-    // Mobile handlers using store for Total Recall sync
-    const handleMobileEdit = (entry: any) => {
-        if (onEdit) {
-            onEdit(entry);
-        }
-    };
-    
-    const handleMobileDelete = (entry: any) => {
-        deleteEntry(entry);
-    };
-    
-    const handleMobileToggleStatus = (entry: any) => {
-        if (onToggleStatus) {
-            onToggleStatus(entry);
-        }
-    };
     
     // 🗑️ FADE-OUT LOGIC FOR DELETION
     const isThisBookBeingDeleted = pendingDeletion?.bookId === bookId;
@@ -116,10 +120,10 @@ export const BookDetails = ({
                     filter: shouldFadeOut ? 'blur(2px)' : 'none'
                 }}
                 transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }}
-                className="w-full px-[var(--app-padding,1.25rem)] md:px-[var(--app-padding,2.5rem)] pb-36 transition-all duration-500 will-change-transform"
+                className="w-full pb-36 transition-all duration-500 will-change-transform"
                 style={{ transform: 'translateZ(0)' }}
             >
-                <div className="md:px-8 lg:px-10 space-y-8 mt-2">
+                <div className="space-y-8">
 
                     {/* --- ১. DYNAMIC STATS GRID --- */}
                     <StatsGrid 
@@ -130,33 +134,12 @@ export const BookDetails = ({
                         currency={currentUser?.currency} 
                     />
 
-                    {/* --- ২. CONTROL HUB (Search & Filter) --- */}
-                    <div className="space-y-4">
-                        <DetailsToolbar />
-                        <MobileFilterSheet />
-                    </div>
-
-                    {/* --- ৩. MAIN LEDGER VIEW (The Apple Metal Container) --- min-h-[400px] transition-all duration-500",
-                        "md:bg-[var(--bg-card)] md:backdrop-blur-3xl md:rounded-[40px] md:border md:border-[var(--border)] md:shadow-2xl*/}
+                    {/* --- ২. MAIN LEDGER VIEW --- */}
                     <div className={cn(
-                        "relative  overflow-hidden duration-500"
+                        "relative overflow-hidden duration-500"
                     )}>
-                        
-                        {/* Mobile View: Swipe Cards with Date Grouping */}
-                        {isMobile && (
-                            <MobileLedgerCards
-                                groupedEntries={groupedEntries}
-                                isGrouped={true}
-                                onEdit={handleMobileEdit}
-                                onDelete={handleMobileDelete}
-                                onToggleStatus={handleMobileToggleStatus}
-                                currencySymbol={currencySymbol}
-                                deleteEntry={deleteEntry}
-                            />
-                        )}
-                        
-                        {/* Desktop View: Original Table (UNCHANGED) */}
-                        {!isMobile && (
+                        {/* Desktop View */}
+                        <div className="hidden md:block">
                             <MemoizedTransactionTable 
                                 items={processedEntries}
                                 onEdit={onEdit}
@@ -164,7 +147,20 @@ export const BookDetails = ({
                                 onToggleStatus={onToggleStatus}
                                 currencySymbol={currencySymbol}
                             />
-                        )}
+                        </div>
+                        
+                        {/* Mobile View */}
+                        <div className="block md:hidden">
+                            <MobileLedgerCards 
+                                isGrouped={true}
+                                groupedEntries={groupedEntries}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                                onToggleStatus={onToggleStatus}
+                                currencySymbol={currencySymbol}
+                                deleteEntry={deleteEntry}
+                            />
+                        </div>
                         
                         {/* Empty State Overlay */}
                         <AnimatePresence>

@@ -1,11 +1,9 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, BarChart3, Download, Fingerprint, Cpu } from 'lucide-react';
+import { Loader2, Download, Fingerprint, Cpu } from 'lucide-react';
 import { db } from '@/lib/offlineDB';
 import { useTranslation } from '@/hooks/useTranslation';
-import { HubHeader } from '@/components/Layout/HubHeader';
-import { TimeRangeSelector } from '@/components/TimeRangeSelector';
 import { StatsGrid } from '@/components/Sovereign/Shared/StatsGrid';
 import { toBn } from '@/lib/utils/helpers';
 import { getPlatform } from '@/lib/platform';
@@ -136,55 +134,44 @@ export const ReportsSection = ({ currentUser }: any) => {
     );
 
     return (
-        <div className="w-full max-w-[1440px] mx-auto pb-40">
-            <HubHeader 
-                title={t('nav_reports')} 
-                subtitle={`${toBn(processed.filtered.length, language)} ${t('records_analyzed')}`}
-                icon={BarChart3}
-                showSearch={false}
-            >
-                {/* রেসপন্সিভ বাটন গ্রুপ স্লটে ইনজেক্ট করা হলো */}
-                <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-            </HubHeader>
+        <div className="w-full max-w-[1440px] mx-auto pb-40 px-[var(--app-padding,1.25rem)] md:px-8 space-y-10 mt-6">
+            <StatsGrid 
+                income={processed.stats.totalIn} 
+                expense={processed.stats.totalOut} 
+                pending={processed.stats.totalPending}
+                surplus={processed.stats.net}
+                currency={currentUser?.currency} 
+                isReport={true}
+            />
 
-            <div className="px-[var(--app-padding,1.25rem)] md:px-8 space-y-10 mt-6">
-                <StatsGrid 
-        income={processed.stats.totalIn} 
-        expense={processed.stats.totalOut} 
-        pending={processed.stats.totalPending}
-        surplus={processed.stats.net}
-        currency={currentUser?.currency} 
-        isReport={true}
-    />
+            {/* আপনার ভিজ্যুয়াল কম্পোনেন্টগুলো */}
+            <AnalyticsVisuals 
+                areaData={processed.areaData} 
+                pieData={processed.pieData} 
+                viaData={processed.viaData} 
+                totalExpense={processed.stats.totalOut} 
+                symbol={currencySymbol} 
+            />
 
-    {/* আপনার ভিজ্যুয়াল কম্পোনেন্টগুলো */}
-    <AnalyticsVisuals 
-        areaData={processed.areaData} 
-        pieData={processed.pieData} 
-        viaData={processed.viaData} 
-        totalExpense={processed.stats.totalOut} 
-        symbol={currencySymbol} 
-    />
-                {/* Export Protocol Section */}
-                <div className="bg-orange-500 rounded-[32px] p-8 md:p-12 relative overflow-hidden shadow-2xl group">
-                    <div className="absolute -right-10 -top-10 opacity-[0.1] rotate-12 group-hover:scale-110 transition-transform duration-700">
-                        <Cpu size={300} strokeWidth={1} className="text-white" />
-                    </div>
-                    <div className="flex flex-col lg:flex-row items-center justify-between gap-8 relative z-10">
-                        <div className="flex items-center gap-6">
-                            <div className="p-4 bg-white/20 backdrop-blur-xl rounded-2xl border border-white/30 text-white shadow-xl">
-                                <Download size={28} />
-                            </div>
-                            <div className="text-center lg:text-left">
-                                <h3 className="text-2xl md:text-3xl font-black text-white   leading-none">{t('execute_report_title')}</h3>
-                                <p className="text-[10px] md:text-[12px] font-bold text-white/80    mt-3 opacity-80 max-w-xl">{t('execute_report_desc')}</p>
-                            </div>
+            {/* Export Protocol Section */}
+            <div className="bg-orange-500 rounded-[32px] p-8 md:p-12 relative overflow-hidden shadow-2xl group">
+                <div className="absolute -right-10 -top-10 opacity-[0.1] rotate-12 group-hover:scale-110 transition-transform duration-700">
+                    <Cpu size={300} strokeWidth={1} className="text-white" />
+                </div>
+                <div className="flex flex-col lg:flex-row items-center justify-between gap-8 relative z-10">
+                    <div className="flex items-center gap-6">
+                        <div className="p-4 bg-white/20 backdrop-blur-xl rounded-2xl border border-white/30 text-white shadow-xl">
+                            <Download size={28} />
                         </div>
-                        <button onClick={() => setShowExportModal(true)} className="w-full lg:w-auto px-12 h-16 bg-black text-white rounded-[24px] text-[11px] font-black    hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-4">
-                            <Fingerprint size={20} className="text-orange-500" strokeWidth={3} />
-                            {t('btn_execute_archive')}
-                        </button>
+                        <div className="text-center lg:text-left">
+                            <h3 className="text-2xl md:text-3xl font-black text-white leading-none">{t('execute_report_title')}</h3>
+                            <p className="text-[10px] md:text-[12px] font-bold text-white/80 mt-3 opacity-80 max-w-xl">{t('execute_report_desc')}</p>
+                        </div>
                     </div>
+                    <button onClick={() => setShowExportModal(true)} className="w-full lg:w-auto px-12 h-16 bg-black text-white rounded-[24px] text-[11px] font-black hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-4">
+                        <Fingerprint size={20} className="text-orange-500" strokeWidth={3} />
+                        {t('btn_execute_archive')}
+                    </button>
                 </div>
             </div>
 

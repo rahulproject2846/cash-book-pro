@@ -11,7 +11,6 @@ import { getOrchestrator } from '@/lib/vault/core/SyncOrchestrator';
 // Global Engine Hooks & Components
 import { useTranslation } from '@/hooks/useTranslation';
 import { Tooltip } from '@/components/UI/Tooltip';
-import { HubHeader } from '@/components/Layout/HubHeader';
 import { cn } from '@/lib/utils/helpers';
 import { useVaultStore } from '@/lib/vault/store';
 
@@ -81,35 +80,9 @@ export const ProfileSection = () => {
         <motion.div 
             initial={{ opacity: 0, y: 10 }} 
             animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-[1400px] mx-auto transition-all duration-500 pb-40 px-4 md:px-0"
+            className="w-full max-w-[1400px] mx-auto transition-all duration-500 pb-40 px-4 md:px-0 mt-8"
         >
-            {/* --- 1. MASTER IDENTITY HEADER --- */}
-            <HubHeader 
-                title={t('identity_hub_title') || "IDENTITY HUB"} 
-                subtitle={t('master_profile_protocol') || "ENCRYPTION ACTIVE"} 
-                icon={Fingerprint}
-                showSearch={false}
-            >
-                {/* 🛡️ SECURITY STATUS BADGE */}
-                <Tooltip text={`Integrity Level: ${systemRisk.systemHealth}`}>
-                    <div className={cn(
-                        "flex items-center gap-4 px-5 py-2.5 rounded-2xl border transition-all cursor-help shadow-sm",
-                        "bg-[var(--bg-card)] border-[var(--border)] hover:border-orange-500/30"
-                    )}>
-                        <div className="flex flex-col items-end">
-                            <span className="text-[7px] font-black text-[var(--text-muted)]      mb-0.5">ACCESS</span>
-                            <span className={cn("text-[10px] font-black     leading-none", securityBadge.color)}>
-                                {securityBadge.text}
-                            </span>
-                        </div>
-                        <div className={cn("p-2 rounded-xl", securityBadge.bg)}>
-                            <SecurityIcon size={16} className={cn(securityBadge.color, "animate-pulse")} fill="currentColor" strokeWidth={0} />
-                        </div>
-                    </div>
-                </Tooltip>
-            </HubHeader>
-
-            <div className="mt-8 space-y-[var(--app-gap,2.5rem)]">
+            <div className="space-y-[var(--app-gap,2.5rem)]">
                 
                 {/* --- 2. THE IDENTITY MATRIX GRID --- */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12 items-start">

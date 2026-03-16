@@ -61,7 +61,7 @@ export const DesktopSidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-[18px] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-orange-500/30">V</div>
           {!collapsed && (
-            <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }} className="text-xl font-black     text-[var(--text-main)]">
+            <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ type: "spring", stiffness: 300, damping: 35, mass: 1 }} className="text-[--text-xl] font-bold text-[var(--text-main)]">
               {t('vault_pro_split_1')}<span className="text-orange-500">{t('vault_pro_split_2')}</span>
             </motion.h1>
           )}
@@ -86,7 +86,7 @@ export const DesktopSidebar: React.FC<SidebarProps> = ({
               )}
             >
               <item.icon size={isCompact ? 18 : 22} strokeWidth={isActive ? 2.5 : 2} />
-              {!collapsed && <span className="text-[11px] font-black     ">{t(item.name)}</span>}
+              {!collapsed && <span className="text-[--text-sm] font-semibold     ">{t(item.name)}</span>}
               {isActive && collapsed && <div className="absolute left-2 w-1 h-6 bg-white rounded-full opacity-50" />}
             </button>
           );
@@ -97,7 +97,7 @@ export const DesktopSidebar: React.FC<SidebarProps> = ({
       <div className="p-6 border-t border-[var(--border)]">
         <button onClick={onLogout} className={cn("flex items-center h-12 text-red-500 hover:bg-red-500/10 rounded-2xl transition-all", collapsed ? "justify-center" : "px-4 gap-4 w-full")}>
           <LogOut size={20} strokeWidth={2.5} /> 
-          {!collapsed && <span className="text-[10px] font-black    ">{t('nav_signout')}</span>}
+          {!collapsed && <span className="text-[--text-xs] font-semibold    ">{t('nav_signout')}</span>}
         </button>
       </div>
     </motion.div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Fingerprint, ShieldCheck } from 'lucide-react';
+import { Fingerprint, ShieldCheck, Settings2 } from 'lucide-react';
 import { DynamicHeader } from '@/components/Layout/DynamicHeader';
 import { MobileBottomNav } from '@/components/Layout/MobileBottomNav';
 import { useVaultState } from '@/lib/vault/store/storeHelper';
@@ -112,9 +112,9 @@ export const MobileShell: React.FC<MobileShellProps> = ({ children }) => {
       {/* Main Content Area - Flexible middle */}
       <main
         ref={mainContainerRef}
-        className="flex-1 overflow-y-auto custom-scrollbar relative"
+        className="flex-1 overflow-y-auto custom-scrollbar relative px-4"
       >
-        <div className="p-4 pb-24">
+        <div className="">
           {children}
         </div>
       </main>
@@ -244,7 +244,7 @@ const NavButton: React.FC<NavButtonProps> = ({ id, isActive, onClick }) => {
     books: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
     reports: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
     timeline: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-    settings: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/></svg>,
+    settings: <Settings2 size={24} strokeWidth={2} />,
   };
 
   return (

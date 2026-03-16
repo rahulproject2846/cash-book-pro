@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils/helpers';
 import { useVaultStore } from '@/lib/vault/store/index';
 
 // 🏆 Modular Components (Holly Grill Standards)
-import { HubHeader } from '@/components/Layout/HubHeader';
 import { InterfaceEngine } from './InterfaceEngine';
 import { SystemRegistry } from './SystemRegistry';
 import { SystemMaintenance } from './SystemMaintenance';
@@ -68,36 +67,10 @@ export const SettingsSection = () => {
             transition={{ type: "spring", stiffness: 300, damping: 35 }}
             className={cn(
                 "w-full max-w-[1400px] mx-auto transition-all duration-500",
-                "pb-40 px-2 md:px-0"
+                "pb-40 px-2 md:px-0 mt-10"
             )}
         >
-            {/* --- 🛡️ 1. GLOBAL SYSTEM HEADER --- */}
-            <HubHeader 
-                title={t('nav_system') || "CONFIGURATION"} 
-                subtitle={t('governance_active') || "SYSTEM REGISTRY SECURED"} 
-                icon={Settings2}
-                showSearch={false}
-            >
-                {/* Real-time Node Status */}
-                <div className="flex items-center gap-3 px-5 py-2.5 apple-card rounded-2xl shadow-inner border border-[var(--border)]">
-                    <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                    <span className="text-[10px] font-black text-[var(--text-main)] uppercase tracking-widest">
-                        {t('node_online') || "CORE ACTIVE"}
-                    </span>
-                </div>
-                
-                {/* Sync Identity Tracker */}
-                <div className="flex items-center gap-3 px-5 py-2.5 apple-glass rounded-2xl border border-[var(--border)]">
-                    <Wifi size={14} className="text-[var(--accent)]" />
-                    <span className="text-[10px] font-black text-[var(--text-main)] opacity-70">
-                        LAST SYNCED: {lastSynced || 'NEVER'}
-                    </span>
-                </div>
-            </HubHeader>
-
-            <div className={cn("space-y-[var(--app-gap,2.5rem)] mt-10")}>
-                
-                {/* --- 🚀 ROW 1: INTERFACE COMMAND CENTER (Full Width) --- */}
+            {/* --- 🚀 ROW 1: INTERFACE COMMAND CENTER (Full Width) --- */}
                 <InterfaceEngine 
                     preferences={preferences} 
                     updatePreference={updatePreference} 
@@ -123,7 +96,6 @@ export const SettingsSection = () => {
                     clearLocalCache={clearLocalCache} 
                     isCleaning={isCleaning} 
                 />
-            </div>
 
             {/* --- 📜 SYSTEM BUILD FOOTER --- */}
             <div className="pt-24 pb-10 flex flex-col items-center">

@@ -1,9 +1,9 @@
 "use client";
 import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { 
-    Plus, BookOpen, Loader2, Zap, Wallet, Clock, ShieldCheck, ImageIcon, Edit3, Trash2, AlertCircle, Cloud, Check
+    Plus, BookOpen, Loader2, Wallet, Clock, ShieldCheck, ImageIcon, Edit3, Trash2, AlertCircle, CloudOff , CloudCheck 
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
@@ -75,6 +75,7 @@ const BookCard = React.memo<BookCardProps>(({
 
     const { activeBook, isGlobalAnimating } = useVaultState();
     const [isInternalAnimating, setIsInternalAnimating] = useState(false);
+    const [isCardHovered, setIsCardHovered] = useState(false);
 
     const isActive = useMemo(() => {
         if (!activeBook) return false;
@@ -89,8 +90,14 @@ const BookCard = React.memo<BookCardProps>(({
 
     const handleMouseEnter = useCallback(() => {
       getVaultStore().prefetchBookEntries(bookId);
+      setIsCardHovered(true);
       if (onMouseEnter) onMouseEnter();
     }, [bookId, onMouseEnter]);
+
+    const handleMouseLeave = useCallback(() => {
+      setIsCardHovered(false);
+      if (onMouseLeave) onMouseLeave();
+    }, [onMouseLeave]);
 
     const handleOpen = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -150,8 +157,8 @@ const BookCard = React.memo<BookCardProps>(({
             ref={elementRef}
             layoutId={`book-hero-${bookId}`}
             onClick={handleOpen}
-            onMouseEnter={onMouseEnter}
-            onMouseLeave={onMouseLeave}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
             initial={{ opacity: 0, y: 20 }}
             animate={{ 
                 opacity: isDimmed ? 0.35 : 1, 
@@ -178,15 +185,14 @@ const BookCard = React.memo<BookCardProps>(({
                 <div className="flex flex-col gap-1 md:gap-1.5 min-w-0">
                     <div className="flex items-center gap-2">
                         <span className={cn("font-black text-green-500 flex items-center gap-1.5 bg-green-500/5 rounded-lg border border-green-500/10 w-fit shrink-0", compactClasses.badge)}>
-                            <Zap size={isCompact ? 7 : 9} fill="currentColor" strokeWidth={0} className="animate-pulse" /> 
                             ID: {toBn(String(bookId).slice(-6).toUpperCase(), language)}
                         </span>
                         {reactiveBook.conflicted === 1 ? (
                             <AlertCircle size={isCompact ? 12 : 14} className="text-red-500 shrink-0" />
                         ) : reactiveBook.synced === 0 ? (
-                            <Cloud size={isCompact ? 12 : 14} className="text-orange-500 shrink-0" />
+                            <CloudOff  size={isCompact ? 12 : 14} className="text-orange-500 shrink-0" />
                         ) : (
-                            <Check size={isCompact ? 12 : 14} className="text-green-500 shrink-0" />
+                            <CloudCheck  size={isCompact ? 12 : 14} className="text-green-500 shrink-0" />
                         )}
                     </div>
                     <h3 className={cn("font-black text-[var(--text-main)] truncate group-hover:text-orange-500 transition-colors mt-0.5", compactClasses.title)}>
@@ -217,7 +223,7 @@ const BookCard = React.memo<BookCardProps>(({
                 </div>
             </div>
 
-            <div className={cn("pt-3 md:pt-5 border-t border-[var(--border)]/50 flex justify-between items-center relative z-10", compactClasses.gap)}>
+            <div className={cn("pt-3 mt-5 md:pt-5 border-t border-[var(--border)]/50 flex justify-between items-center relative z-10", compactClasses.gap)}>
                 <div className="flex flex-col gap-0.5 md:gap-1">
                     <span className={cn("font-black text-[var(--text-muted)] opacity-30", isCompact ? "text-[5px]" : "text-[6px] md:text-[7px]")}>
                         {t('label_last_updated')}
@@ -230,40 +236,62 @@ const BookCard = React.memo<BookCardProps>(({
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    {onEdit && (
-                        <Tooltip text={t('edit_book') || 'Edit Book'}>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onEdit(reactiveBook); }} 
-                                className={cn("bg-[var(--bg-app)] hover:bg-blue-500 border border-[var(--border)] hover:border-blue-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg", compactClasses.actionBtn)}
+                {/* Action buttons container - absolute positioned to not affect layout */}
+                <div className="absolute right-0 flex items-center gap-2">
+                    {/* Edit Button - Reveals second at 1.1s */}
+                    <AnimatePresence>
+                        {isCardHovered && onEdit && (
+                            <motion.div
+                                initial={{ opacity: 0, x: 40, scale: 0.5 }}
+                                animate={{ opacity: 1, x: 0, scale: 1 }}
+                                exit={{ opacity: 0, x: 40, scale: 0.5, transition: { duration: 0.2 } }}
+                                transition={{ delay: 1.1, type: "spring", stiffness: 400, damping: 30 }}
                             >
-                                <Edit3 size={isCompact ? 14 : 16} strokeWidth={2} />
-                            </button>
-                        </Tooltip>
-                    )}
-                    
-                    {onDelete && (
-                        <Tooltip text={t('delete_book') || 'Delete Book'}>
-                            <button 
-                                onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    if (reactiveBook.conflicted === 1) {
-                                        toast.error("Please resolve conflict before deleting");
-                                        return;
-                                    }
-                                    onDelete(reactiveBook); 
-                                }} 
-                                className={cn("bg-[var(--bg-app)] hover:bg-red-500 border border-[var(--border)] hover:border-red-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg", compactClasses.actionBtn)}
+                                <Tooltip text={t('edit_book') || 'Edit Book'}>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onEdit(reactiveBook); }} 
+                                        className={cn("bg-[var(--bg-card)] hover:bg-blue-500 border border-[var(--border)] hover:border-blue-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg", compactClasses.actionBtn)}
+                                    >
+                                        <Edit3 size={isCompact ? 14 : 16} strokeWidth={2} />
+                                    </button>
+                                </Tooltip>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Delete Button - Reveals first at 0.8s */}
+                    <AnimatePresence>
+                        {isCardHovered && onDelete && (
+                            <motion.div
+                                initial={{ opacity: 0, x: 20, scale: 0.5 }}
+                                animate={{ opacity: 1, x: 0, scale: 1 }}
+                                exit={{ opacity: 0, x: 20, scale: 0.5, transition: { duration: 0.2 } }}
+                                transition={{ delay: 0.8, type: "spring", stiffness: 400, damping: 30 }}
                             >
-                                <Trash2 size={isCompact ? 14 : 16} strokeWidth={2} />
-                            </button>
-                        </Tooltip>
-                    )}
-                    
+                                <Tooltip text={t('delete_book') || 'Delete Book'}>
+                                    <button 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            if (reactiveBook.conflicted === 1) {
+                                                toast.error("Please resolve conflict before deleting");
+                                                return;
+                                            }
+                                            onDelete(reactiveBook); 
+                                        }} 
+                                        className={cn("bg-[var(--bg-card)] hover:bg-red-500 border border-[var(--border)] hover:border-red-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg", compactClasses.actionBtn)}
+                                    >
+                                        <Trash2 size={isCompact ? 14 : 16} strokeWidth={2} />
+                                    </button>
+                                </Tooltip>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Quick Add - Always visible, static */}
                     <Tooltip text={t('tt_quick_add')}>
                         <button 
                             onClick={(e) => { e.stopPropagation(); onQuickAdd(reactiveBook); }} 
-                            className={cn("bg-[var(--bg-app)] hover:bg-orange-500 border border-[var(--border)] hover:border-orange-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg group/btn", compactClasses.quickAddBtn)}
+                            className={cn("bg-[var(--bg-card)] hover:bg-orange-500 border border-[var(--border)] hover:border-orange-500/50 apple-card flex items-center justify-center text-[var(--text-muted)] hover:text-white transition-all active:scale-90 shadow-lg group/btn", compactClasses.quickAddBtn)}
                         >
                             <Plus size={isCompact ? 16 : 20} strokeWidth={3.5} className="group-hover/btn:rotate-90 transition-transform" />
                         </button>

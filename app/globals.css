@@ -1,65 +1,87 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 @layer base {
-:root {
-  /* --- APPLE LIGHT (Glass & Calm) --- */
+  :root {
+    /* --- GOOGLE STUDIO + APPLE WEB HYBRID TYPOGRAPHY --- */
+    
+    /* Responsive Typography Scale */
+    --text-xs: 0.625rem;   /* Mobile 10px */
+    --text-sm: 0.75rem;    /* Mobile 12px */
+    --text-base: 0.875rem; /* Mobile 14px */
+    --text-lg: 1rem;       /* Mobile 16px */
+    --text-xl: 1.25rem;    /* Mobile 20px */
 
-  /* App background (never pure white) */
-  --bg-app: #F2F2F7;
+    /* Base Font Weight */
+    --font-weight-base: 400;
 
-  /* Glass cards */
-  --bg-card: rgba(255, 255, 255, 0.75);
+    /* --- APPLE LIGHT (Glass & Calm) --- */
 
-  /* Inputs / subtle fills */
-  --bg-input: rgba(0, 0, 0, 0.025);
+    /* App background (never pure white) */
+    --bg-app: #F2F2F7;
 
-  /* Text */
-  --text-main: #1D1D1F;
-  --text-muted: #6E6E73;
-  --text-placeholder: #8E8E93;
+    /* Glass cards */
+    --bg-card: rgba(255, 255, 255, 0.75);
 
-  /* Borders (Apple NEVER uses solid gray) */
-  --border-color: rgba(0, 0, 0, 0.06);
-  --border-soft: rgba(0, 0, 0, 0.03);
-  --border: rgba(0, 0, 0, 0.06);
+    /* Inputs / subtle fills */
+    --bg-input: rgba(0, 0, 0, 0.025);
 
-  /* Accent */
-  --accent: #F97316;
-  --accent-hover: #ea580c;
+    /* Text */
+    --text-main: #1D1D1F;
+    --text-muted: #6E6E73;
+    --text-placeholder: #8E8E93;
 
-  /* Glass */
-  --glass-blur: blur(20px);
+    /* Borders (Apple NEVER uses solid gray) */
+    --border-color: rgba(0, 0, 0, 0.06);
+    --border-soft: rgba(0, 0, 0, 0.03);
+    --border: rgba(0, 0, 0, 0.06);
 
-  /* Shadow = primary separator in white */
-  --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-  --dropdown-main: #F5F5F7;
+    /* Accent */
+    --accent: #F97316;
+    --accent-hover: #ea580c;
 
-  /* 🍎 Apple Design System Variables */
-  --apple-card-radius: 24px;
-  --apple-modal-radius: 32px;
-  --apple-sheet-radius: 40px;
-  --apple-btn-radius: 24px;
-  --apple-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  --apple-glass-blur: blur(20px) saturate(150%);
-  --apple-glass-heavy-blur: blur(30px) saturate(180%);
-  --apple-modal-max-width: 28rem;
+    /* Glass */
+    --glass-blur: blur(20px);
 
-  /* 🎯 Sidebar Variables - Native Apple Standard */
-  --sidebar-expanded: 280px;
-  --sidebar-collapsed: 90px;
-  --sidebar-mobile: 320px;
-}
+    /* Shadow = primary separator in white */
+    --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    --dropdown-main: #F5F5F7;
 
+    /* 🍎 Apple Design System Variables */
+    --apple-card-radius: 24px;
+    --apple-modal-radius: 32px;
+    --apple-sheet-radius: 40px;
+    --apple-btn-radius: 24px;
+    --apple-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --apple-glass-blur: blur(20px) saturate(150%);
+    --apple-glass-heavy-blur: blur(30px) saturate(180%);
+    --apple-modal-max-width: 28rem;
+
+    /* 🎯 Sidebar Variables - Native Apple Standard */
+    --sidebar-expanded: 280px;
+    --sidebar-collapsed: 90px;
+    --sidebar-mobile: 320px;
+  }
+
+  /* Desktop Typography Scale (768px+) */
+  @media (min-width: 768px) {
+    :root {
+      --text-xs: 0.6875rem;   /* 11px */
+      --text-sm: 0.8125rem;   /* 13px */
+      --text-base: 0.9375rem; /* 15px */
+      --text-lg: 1.125rem;    /* 18px */
+      --text-xl: 1.5rem;      /* 24px */
+    }
+  }
 
   .dark {
     /* --- STUDIO DARK (Pro Grey) --- */
-    --bg-app: #0C0C0C;
+    --bg-app: #191919;
     --bg-card: rgba(28, 28, 30, 1);
     --bg-input: rgba(255, 255, 255, 0.04);
     --text-main: #F5F5F7;
     --text-muted: #8E8E93;
-    --border: #1f1f1f; /* rgba(255, 255, 255, 0.1); একদম হালকা বর্ডার */
-    --border-color: rgba(255, 255, 255, 0.04); /* ডার্ক মোডে হালকা বর্ডার */
+    --border: #1f1f1f;
+    --border-color: rgba(255, 255, 255, 0.04);
     --dropdown-main: rgba(28, 28, 30, 1);
 
     /* 🍎 Apple Dark Mode Adjustments */
@@ -83,14 +105,36 @@
   }
 
   /* --- মিডনাইট মোডে স্ক্রলবার অ্যাডজাস্টমেন্ট */
-.midnight-mode ::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-.midnight-mode ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--accent);
+  .midnight-mode ::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  .midnight-mode ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--accent);
+  }
+
+  body {
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    font-family: 'Geist', 'Product Sans', -apple-system, system-ui, sans-serif;
+    font-weight: var(--font-weight-base);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.015em;
+  }
+
+  /* Weight Hardening: Use font-medium (500) for labels, font-semibold (600) only for headers */
+  label, .label-text, [role="label"] {
+    font-weight: 500;
+  }
+
+  h1, h2, h3, h4, h5, h6, .heading, .header-title {
+    font-weight: 600;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.015em;
+  }
 }
 
-
+@layer components {
   /* 🎯 ELITE UI HOVER EFFECTS */
   .book-grid:hover .book-card:not(:hover) { 
     opacity: 0.4; 
@@ -98,56 +142,33 @@
     filter: blur(1px); 
   }
 
-  body {
-    background-color: var(--bg-app);
-    color: var(--text-main);
-    font-family: 'Geist', -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.011em;
-  }
-}
-
-@layer components {
-  /* লগইন পেজের মত স্মার্ট ইনপুট স্টাইল */
-  .vault-glass-input {
-    @apply w-full h-15 pl-14 font-bold text-xs     rounded-3xl border transition-all outline-none;
-    background-color: var(--bg-input);
-    border-color: var(--border);
-    color: var(--text-main);
-  }
-
-  .vault-glass-input:focus {
-    border-color: rgba(249, 115, 22, 0.4);
-    background-color: rgba(255, 255, 255, 0.06);
-  }
-
-  /* এলিট বাটন */
-  .vault-btn-elite {
-    @apply w-full py-5 rounded-[24px] font-black text-[11px] transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-xl;
-  }
-
   /* 🍎 APPLE NATIVE DESIGN SYSTEM */
-  
-  /* Apple Card - Squircle border radius */
   .apple-card {
-    border-radius: var(--apple-card-radius, 24px);
+    border-radius: 28px;
     background-color: var(--bg-card);
-    border: 1px solid var(--border);
-    box-shadow: var(--apple-card-shadow, 0 8px 32px rgba(0, 0, 0, 0.12));
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 
+      0 2px 8px rgba(0, 0, 0, 0.04), 
+      0 20px 40px -12px rgba(0, 0, 0, 0.08);
+    border: 0.5px solid var(--border-color);
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    overflow: hidden;
   }
 
-  /* Apple Glass - Optimized backdrop blur */
+  .apple-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.06), 
+      0 30px 60px -12px rgba(0, 0, 0, 0.15);
+  }
+
   .apple-glass {
     background-color: var(--bg-card);
-    backdrop-filter: var(--apple-glass-blur, blur(20px) saturate(150%));
-    -webkit-backdrop-filter: var(--apple-glass-blur, blur(20px) saturate(150%));
-    border: 1px solid var(--border);
-    position: relative;
+    backdrop-filter: blur(25px) saturate(190%);
+    -webkit-backdrop-filter: blur(25px) saturate(190%);
+    border: 0.5px solid var(--border-color);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
 
-  /* Apple Glass Heavy (for modals) */
   .apple-glass-heavy {
     background-color: var(--bg-card);
     backdrop-filter: var(--apple-glass-heavy-blur, blur(30px) saturate(180%));
@@ -155,18 +176,16 @@
     border: 1px solid var(--border);
   }
 
-  /* Apple Modal Container */
   .apple-modal {
-    border-radius: var(--apple-modal-radius, 32px);
+    border-radius: 36px;
     background-color: var(--bg-card);
-    backdrop-filter: var(--apple-glass-heavy-blur, blur(30px) saturate(180%));
-    -webkit-backdrop-filter: var(--apple-glass-heavy-blur, blur(30px) saturate(180%));
-    border: 1px solid var(--border);
+    backdrop-filter: blur(40px) saturate(150%);
+    -webkit-backdrop-filter: blur(40px) saturate(150%);
+    border: 0.5px solid var(--border-color);
     max-width: var(--apple-modal-max-width, 28rem);
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.3);
   }
 
-  /* Apple Sheet (Mobile bottom sheet) */
   .apple-sheet {
     border-radius: var(--apple-sheet-radius, 40px) var(--apple-sheet-radius, 40px) 0 0;
     background-color: var(--bg-card);
@@ -176,18 +195,17 @@
     max-width: 100%;
   }
 
-  /* Apple Button Primary */
   .apple-btn-primary {
     background-color: var(--accent);
     color: white;
-    border-radius: var(--apple-btn-radius, 24px);
-    font-weight: 600;
-    font-size: 0.875rem;
-    padding: 0.75rem 1.5rem;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: -0.01em;
+    padding: 0.8rem 1.6rem;
     border: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+    box-shadow: 0 8px 20px -6px rgba(249, 115, 22, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .apple-btn-primary:hover {
@@ -197,11 +215,10 @@
   }
 
   .apple-btn-primary:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+    transform: scale(0.95);
+    filter: brightness(0.9);
   }
 
-  /* Apple Button Secondary */
   .apple-btn-secondary {
     background-color: var(--bg-input);
     color: var(--text-main);
@@ -228,10 +245,6 @@
   }
 }
 
-
-
-
-
 /* --- UTILITIES & OVERRIDES --- */
 
 /* Scrollbar Polish */
@@ -256,214 +269,145 @@ body:has(.modal-overlay) {
   z-index: 99999 !important;
 }
 
-  /* 🚀 TURBO MODE PERFORMANCE OPTIMIZATIONS */
-  .turbo-mode {
-    /* Disable all backdrop-blur effects including Apple Glass */
-    * {
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-    }
-    
-    /* Specifically target Apple Glass classes */
-    .apple-glass,
-    .apple-glass-heavy {
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-    }
-    
-    /* Faster transitions */
-    * {
-      transition-duration: 0.15s !important;
-      animation-duration: 0.2s !important;
-    }
-    
-    /* Disable heavy shadows */
-    .glass-effect,
-    .backdrop-blur {
-      box-shadow: none !important;
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-    }
-    
-    /* Optimize framer-motion */
-    .framer-motion {
-      transition: none !important;
-      animation: none !important;
-    }
-  }
+/* 🚀 TURBO MODE PERFORMANCE OPTIMIZATIONS */
+.turbo-mode * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition-duration: 0.15s !important;
+  animation-duration: 0.2s !important;
+}
 
+.turbo-mode .apple-glass,
+.turbo-mode .apple-glass-heavy {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.turbo-mode .glass-effect,
+.turbo-mode .backdrop-blur {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.turbo-mode .framer-motion {
+  transition: none !important;
+  animation: none !important;
+}
 
 /* ড্রপডাউন এবং মডালের জন্য সলিড গ্লাস ইফেক্ট */
 .glass-heavy {
   background-color: var(--bg-card) !important;
-  /* ডার্ক মোডে এটি যাতে বেশি ট্রান্সপারেন্ট না লাগে */
   backdrop-filter: blur(30px) saturate(150%);
   -webkit-backdrop-filter: blur(30px) saturate(150%);
   z-index: 9999 !important;
 }
 
-/* ড্রপডাউন ওপেন থাকলে যাতে পেছনের এলিমেন্ট ক্লিক না হয় */
+/* ড্রপডাউন ওপেন থাকলে যাতে পেছনের এলিমেন্ট ক্লিক না হয় */
 .select-layer-fix {
   position: relative;
   z-index: 1001;
 }
 
-
-  /* Hide scrollbar but keep scroll functionality */
+/* Hide scrollbar but keep scroll functionality */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 
 .no-scrollbar {
-  -ms-overflow-style: none;  /* IE & Edge */
-  scrollbar-width: none;     /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
- 
-
 
 input::placeholder,
 textarea::placeholder {
-  color: #8E8E93; /* Apple-style placeholder */
-  font-size: 0.775rem; /* 14px */
-  opacity: .8; /* Safari fix */
+  color: #8E8E93;
+  font-size: 0.775rem;
+  opacity: .8;
 }
-
 
 /* --- 📜 ELITE SCROLLBAR PROTOCOL (VAULT PRO V5.2) --- */
 
-/* ১. লেআউট শিফট চিরতরে বন্ধ করার মাস্টার ফিক্স */
 html {
-  /* এটি নিশ্চিত করে যে স্ক্রলবার আসুক বা না আসুক, উইন্ডোর উইডথ একই থাকবে */
   scrollbar-gutter: stable;
 }
 
-/* ২. গ্লোবাল স্ক্রলবার স্টাইলিং (Webkit Browsers: Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
-  width: 6px; /* ডেক্সটপে চিকন ও প্রিমিয়াম লুকের জন্য */
-  height: 6px; /* হরাইজন্টাল স্ক্রলবারের জন্য */
+  width: 6px;
+  height: 6px;
 }
 
-/* স্ক্রলবার ট্র্যাক (পিছনের অংশ) */
 ::-webkit-scrollbar-track {
-  background: transparent; /* ব্যাকগ্রাউন্ডের সাথে মিশে থাকবে */
+  background: transparent;
 }
 
-/* স্ক্রলবার থাম্ব (যেটি দিয়ে স্ক্রল করা হয়) */
 ::-webkit-scrollbar-thumb {
-  background: var(--border); /* আমাদের গ্লোবাল বর্ডার কালার মেনে চলবে */
+  background: var(--border);
   border-radius: 20px;
-  border: 2px solid transparent; /* থাম্ব এবং ট্র্যাকের মাঝে গ্যাপ তৈরি করবে */
+  border: 2px solid transparent;
   background-clip: content-box;
   transition: all 0.3s ease;
 }
 
-/* হোভার করলে থাম্ব হাইলাইট হবে */
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--accent); /* আমাদের সিগনেচার অরেঞ্জ কালার */
+  background-color: var(--accent);
 }
 
-/* ৩. ফায়ারফক্সের জন্য সাপোর্ট (Standard CSS) */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 
-/* ৪. স্পেশাল ইউটিলিটি: যেখানে স্ক্রলবার একেবারেই চাই না (যেমন: মোবাইল স্লাইডার) */
+/* ৪. স্পেশাল ইউটিলিটি: যেখানে স্ক্রলবার একেবারেই চাই না */
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
   .no-scrollbar {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
-  /* ৫. গ্লাস স্ক্রলবার (মডালের ভেতরের জন্য) */
+  /* গ্লাস স্ক্রলবার (মডালের ভেতরের জন্য) */
   .glass-scroll::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
   }
 }
 
-
-
 * {
   border-color: var(--border-color);
 }
 
-/*
-.tooltip {
-  position: absolute;
-  opacity: 0;
-  transform: translateY(2px);
-  transition: opacity .15s ease, transform .15s ease;
-}
-.tooltip-show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-
-*/
-
-
 /* 
- * 🚀 TURBO MODE PROTOCOL (VAULT PRO V10.0)
- * Logic: Disables heavy visual effects for extreme performance on low-end devices.
+ * 🚀 TURBO MODE PROTOL (VAULT PRO V10.0)
  */
 body.turbo-active *,
 body.turbo-active {
-  /* Stop all transitions and animations instantly */
   transition-duration: 0ms !important;
   transition-delay: 0ms !important;
   animation-duration: 0ms !important;
-  
-  /* Disable expensive GPU filters */
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  
-  /* Optional: Disable complex box shadows if needed for even more speed */
-  /* box-shadow: none !important; */
-}
-
-
-/* --- 🚀 TURBO MODE OPTIMIZATION (THE MAGIC) --- */
-body.turbo-active *, 
-body.turbo-active {
-  /* Disable heavy transitions */
-  transition-duration: 0ms !important;
-  transition-delay: 0ms !important;
-  animation-duration: 0ms !important;
-  
-  /* Disable expensive blurs */
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  
-  /* Simplify backgrounds - use solid colors instead of glass */
   background-attachment: scroll !important;
-  
-  /* Lighten shadows for GPU efficiency */
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02) !important;
 }
 
-/* Specific Turbo-active Overrides */
 body.turbo-active .full-blur, 
 body.turbo-active .glass-heavy {
   background-color: var(--bg-card) !important;
   backdrop-filter: none !important;
 }
 
-
-/* ৪. ইনপুট এবং ছোট বাটন ফিক্স (যাতে হিজিবিজি না লাগে) */
+/* ৪. ইনপুট এবং ছোট বাটন ফিক্স */
 input, .tag-item {
   box-shadow: none !important;
   border: 1px solid rgba(0, 0, 0, 0.04) !important;
   background: rgba(0, 0, 0, 0.02) !important;
 }
 
-
 [lang="bn"], 
-.font-bengali, /* তোমার প্রজেক্টে বাংলার জন্য যে ক্লাস আছে */
+.font-bengali,
 body:has([lang="bn"]) {
   letter-spacing: 0 !important;
 }
